@@ -49,6 +49,29 @@
     <span class="book-count" id="bookCount">0 books</span>
     <button class="refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
   </div>
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Sort by</label>
+      <select id="sortSelect">
+        <option value="createdAt_desc">Date Added ↓</option>
+        <option value="createdAt_asc">Date Added ↑</option>
+        <option value="title_asc">Title A → Z</option>
+        <option value="title_desc">Title Z → A</option>
+        <option value="author_asc">Author A → Z</option>
+        <option value="finishDate_desc">Date Finished ↓</option>
+        <option value="progress_desc">Progress ↓</option>
+        <option value="totalPages_desc">Pages ↓</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Format</label>
+      <select id="formatSelect">
+        <option value="all">All Formats</option>
+      </select>
+    </div>
+    <div class="filter-chips" id="activeFilters"></div>
+    <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
+  </div>
   <div class="book-grid" id="bookGrid">
     <div class="loading">Loading...</div>
   </div>
@@ -280,10 +303,10 @@
       <div class="reviews-list" id="reviewsList"></div>
 
       <!-- Write a review -->
-      <div class="write-review" id="writeReview">
+      <div class="write-review">
         <div class="write-review-title">✍️ Write a Review</div>
         <div class="review-form">
-          <input type="text" id="reviewerName" placeholder="Your name / nickname" maxlength="30" />
+          <input type="text" id="reviewerName" placeholder="Your name or nickname" maxlength="30" />
           <div class="star-picker" id="starPicker">
             <span class="star-pick" data-v="1">★</span>
             <span class="star-pick" data-v="2">★</span>
@@ -293,10 +316,8 @@
             <span class="star-pick-label" id="starPickLabel">Select rating</span>
           </div>
           <textarea id="reviewText" placeholder="Share your thoughts... (optional)" rows="3"></textarea>
-          <div class="review-read-pct">
-            <label>I've read <strong id="reviewPctDisplay">0</strong>% of this book</label>
-            <input type="range" id="reviewPct" min="0" max="100" value="0" />
-          </div>
+          <div class="review-read-info" id="reviewReadInfo"></div>
+          <input type="hidden" id="reviewPct" value="0" />
           <button class="btn-submit-review" id="submitReviewBtn">Submit Review</button>
         </div>
       </div>

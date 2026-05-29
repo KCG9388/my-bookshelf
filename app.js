@@ -5,7 +5,8 @@ const booksCol = db.collection("books");
 
 // ── State ──
 let allBooks = [];
-let currentFilter = { status: "all", year: "all", genre: "all", search: "" };
+let currentFilter = { status: "all", year: "all", genre: "all", search: "", format: "all" };
+let currentSort   = "createdAt_desc";
 let currentDetailId = null;
 const PAGE_SIZE = 24;
 let currentPage = 1;
@@ -23,22 +24,51 @@ const coverPreview   = document.getElementById("coverPreview");
 booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
   allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   rebuildSidebarFilters();
+  rebuildFormatFilter();
   renderGrid();
 });
 
 // ── Render ──
 function filterBooks() {
-  const { status, year, genre, search } = currentFilter;
-  return allBooks.filter(b => {
+  const { status, year, genre, search, format } = currentFilter;
+  let books = allBooks.filter(b => {
     if (status !== "all" && b.status !== status) return false;
     if (year !== "all" && String(b.startYear) !== year) return false;
     if (genre !== "all" && (b.genre || "").toLowerCase() !== genre.toLowerCase()) return false;
+    if (format !== "all" && (b.format || "").toLowerCase() !== format.toLowerCase()) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!(b.title || "").toLowerCase().includes(q) && !(b.author || "").toLowerCase().includes(q)) return false;
     }
     return true;
   });
+
+  // Sort
+  const [field, dir] = currentSort.split("_");
+  books.sort((a, b) => {
+    let va, vb;
+    if (field === "title" || field === "author") {
+      va = (a[field] || "").toLowerCase();
+      vb = (b[field] || "").toLowerCase();
+    } else if (field === "finishDate") {
+      va = a.finishDate || "";
+      vb = b.finishDate || "";
+    } else if (field === "progress") {
+      va = calcPct(a.currentPage, a.totalPages) ?? -1;
+      vb = calcPct(b.currentPage, b.totalPages) ?? -1;
+    } else if (field === "totalPages") {
+      va = a.totalPages || 0;
+      vb = b.totalPages || 0;
+    } else {
+      // createdAt
+      va = a.createdAt?.seconds || 0;
+      vb = b.createdAt?.seconds || 0;
+    }
+    if (va < vb) return dir === "asc" ? -1 : 1;
+    if (va > vb) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return books;
 }
 
 function renderGrid() {
@@ -169,6 +199,50 @@ searchInput.addEventListener("input", e => {
   currentPage = 1;
   renderGrid();
 });
+
+// ── Filter Bar ──
+document.getElementById("sortSelect").addEventListener("change", e => {
+  currentSort = e.target.value;
+  currentPage = 1;
+  renderGrid();
+});
+
+document.getElementById("formatSelect").addEventListener("change", e => {
+  currentFilter.format = e.target.value;
+  currentPage = 1;
+  renderGrid();
+  updateActiveFilters();
+});
+
+document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+  currentFilter = { ...currentFilter, status: "all", year: "all", genre: "all", format: "all", search: "" };
+  document.getElementById("searchInput").value = "";
+  document.getElementById("formatSelect").value = "all";
+  document.getElementById("sortSelect").value = "createdAt_desc";
+  currentSort = "createdAt_desc";
+  currentPage = 1;
+  document.querySelectorAll(".filter-list li").forEach(li => li.classList.remove("active"));
+  document.querySelectorAll("#statusFilter li[data-filter='all'], #yearFilter li[data-year='all'], #genreFilter li[data-genre='all']").forEach(li => li.classList.add("active"));
+  renderGrid();
+  updateActiveFilters();
+});
+
+function updateActiveFilters() {
+  const chips = document.getElementById("activeFilters");
+  const clearBtn = document.getElementById("clearFiltersBtn");
+  const active = [];
+  if (currentFilter.format !== "all") active.push(`Format: ${currentFilter.format}`);
+  chips.innerHTML = active.map(a => `<span class="filter-chip">${escHtml(a)}</span>`).join("");
+  clearBtn.style.display = (active.length || currentFilter.status !== "all" || currentFilter.year !== "all" || currentFilter.genre !== "all" || currentFilter.search) ? "" : "none";
+}
+
+function rebuildFormatFilter() {
+  const formats = [...new Set(allBooks.map(b => b.format).filter(Boolean))].sort();
+  const sel = document.getElementById("formatSelect");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="all">All Formats</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
+  if (formats.includes(cur)) sel.value = cur;
+}
 
 // ── Refresh Button ──
 document.getElementById("refreshBtn").addEventListener("click", async () => {
@@ -567,13 +641,17 @@ function openDetail(id) {
   // reset review form
   selectedRating = 0; highlightStars(0);
   document.getElementById("starPickLabel").textContent = "Select rating";
-  document.getElementById("reviewPct").value = "0";
-  document.getElementById("reviewPctDisplay").textContent = "0";
-  // pre-fill read % from book progress
-  const pct = calcPct(b.currentPage, b.totalPages);
-  if (pct !== null) {
-    document.getElementById("reviewPct").value = pct;
-    document.getElementById("reviewPctDisplay").textContent = pct;
+  document.getElementById("reviewerName").value = "";
+  document.getElementById("reviewText").value = "";
+
+  // auto read % from book progress
+  const pct = calcPct(b.currentPage, b.totalPages) ?? 0;
+  document.getElementById("reviewPct").value = pct;
+  const readInfoEl = document.getElementById("reviewReadInfo");
+  if (b.totalPages) {
+    readInfoEl.innerHTML = `📖 Based on your progress: <strong>${pct}%</strong> read (${b.currentPage || 0} / ${b.totalPages} pages)`;
+  } else {
+    readInfoEl.innerHTML = `📖 No page data — your progress will be shown as <strong>${pct}%</strong>`;
   }
 }
 
@@ -636,7 +714,7 @@ function renderReviews(reviews) {
   if (!reviews.length) {
     aggScore.textContent = "—"; aggStars.textContent = ""; aggCount.textContent = "No reviews yet";
     ratingBars.innerHTML = "";
-    reviewsList.innerHTML = `<div style="color:#9b9a97;font-size:13px;text-align:center;padding:16px 0">Be the first to review this book!</div>`;
+    reviewsList.innerHTML = `<div class="reviews-empty">📝 No reviews yet — be the first!</div>`;
     return;
   }
 
