@@ -172,7 +172,24 @@ async function fetchBookInfo() {
     } catch {}
   }
 
-  // 2. Open Library by title/author search
+  // 2. Google Books (with API key, good Chinese support)
+  try {
+    const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
+    const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&key=${GBOOKS_KEY}`);
+    const data = await res.json();
+    if (data.items && data.items.length > 0) {
+      const info = data.items[0].volumeInfo;
+      const cover = info.imageLinks
+        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://", "https://")
+        : "";
+      fillForm({ title: info.title || "", author: (info.authors || []).join(", "), genre: (info.categories || []).join(", "), totalPages: info.pageCount || "", cover });
+      fetchStatus.textContent = `Found: "${info.title}"`;
+      return;
+    }
+  } catch {}
+
+  // 3. Open Library by title/author search
   try {
     const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`);
     const data = await res.json();
