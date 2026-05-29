@@ -221,7 +221,7 @@ function openAddModal(prefill) {
 }
 function closeAddModal() { addModal.classList.remove("open"); }
 
-addModal.addEventListener("click", e => { if (e.target === addModal) closeAddModal(); });
+// Removed click-outside-to-close to prevent accidental dismissal while editing
 
 // ── Fetch book info ──
 document.getElementById("fetchBookBtn").addEventListener("click", fetchBookInfo);
@@ -565,6 +565,7 @@ function openDetail(id) {
 }
 
 document.getElementById("closeDetailModal").addEventListener("click", () => detailModal.classList.remove("open"));
+// Detail modal: click outside still closes (less critical, no text editing)
 detailModal.addEventListener("click", e => { if (e.target === detailModal) detailModal.classList.remove("open"); });
 
 document.getElementById("updatePageBtn").addEventListener("click", async () => {
