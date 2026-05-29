@@ -174,16 +174,39 @@ searchInput.addEventListener("input", e => {
 document.getElementById("refreshBtn").addEventListener("click", async () => {
   const btn = document.getElementById("refreshBtn");
   btn.classList.add("spinning");
-  // Queue all books missing covers
-  const missing = allBooks.filter(b => !b.cover);
+
+  // 1. Deduplicate: keep first occurrence of each title (case-insensitive)
+  const seen = new Map(); // normalised title → first doc id
+  const toDelete = [];
+  for (const b of allBooks) {
+    const key = b.title.trim().toLowerCase();
+    if (seen.has(key)) {
+      toDelete.push(b.id);
+    } else {
+      seen.set(key, b.id);
+    }
+  }
+
+  if (toDelete.length > 0) {
+    const ok = confirm(`Found ${toDelete.length} duplicate book${toDelete.length > 1 ? "s" : ""}. Remove them?`);
+    if (ok) {
+      for (const id of toDelete) {
+        await booksCol.doc(id).delete();
+      }
+    }
+  }
+
+  // 2. Queue cover fetch for books without covers
+  const missing = allBooks.filter(b => !b.cover && !toDelete.includes(b.id));
   if (missing.length) {
     queueCoverFetch(missing);
-  } else {
-    // just re-render
-    renderGrid();
-    rebuildSidebarFilters();
   }
-  setTimeout(() => btn.classList.remove("spinning"), 800);
+
+  btn.classList.remove("spinning");
+
+  if (toDelete.length === 0 && missing.length === 0) {
+    alert("✓ Library is up to date. No duplicates or missing covers found.");
+  }
 });
 
 // ── Add Modal ──
