@@ -645,13 +645,13 @@ function openDetail(id) {
   document.getElementById("reviewText").value = "";
 
   // auto read % from book progress
-  const pct = calcPct(b.currentPage, b.totalPages) ?? 0;
-  document.getElementById("reviewPct").value = pct;
+  const reviewPct = calcPct(b.currentPage, b.totalPages) ?? 0;
+  document.getElementById("reviewPct").value = reviewPct;
   const readInfoEl = document.getElementById("reviewReadInfo");
   if (b.totalPages) {
-    readInfoEl.innerHTML = `📖 Based on your progress: <strong>${pct}%</strong> read (${b.currentPage || 0} / ${b.totalPages} pages)`;
+    readInfoEl.innerHTML = `📖 Based on your progress: <strong>${reviewPct}%</strong> read (${b.currentPage || 0} / ${b.totalPages} pages)`;
   } else {
-    readInfoEl.innerHTML = `📖 No page data — your progress will be shown as <strong>${pct}%</strong>`;
+    readInfoEl.innerHTML = `📖 No page data — your progress will be shown as <strong>${reviewPct}%</strong>`;
   }
 }
 
