@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home Library</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- 側欄 -->
+<aside class="sidebar">
+  <div class="sidebar-title">📚 Home Library</div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Status</div>
+    <ul class="filter-list" id="statusFilter">
+      <li class="active" data-filter="all">⬜ All</li>
+      <li data-filter="Now Reading">⏳ Now Reading</li>
+      <li data-filter="TBR">⏭ TBR</li>
+      <li data-filter="Want to Read">📋 Want to Read</li>
+      <li data-filter="Finished">✅ Finished</li>
+      <li data-filter="DNF">🚫 DNF</li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Year</div>
+    <ul class="filter-list" id="yearFilter">
+      <li class="active" data-year="all">All Years</li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Genre</div>
+    <ul class="filter-list" id="genreFilter">
+      <li class="active" data-genre="all">All Genres</li>
+    </ul>
+  </div>
+
+  <button class="add-btn" id="openAddModal">+ New Book</button>
+</aside>
+
+<!-- 主內容 -->
+<main class="main">
+  <div class="top-bar">
+    <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
+    <span class="book-count" id="bookCount">0 books</span>
+  </div>
+  <div class="book-grid" id="bookGrid">
+    <div class="loading">Loading...</div>
+  </div>
+</main>
+
+<!-- 新增書籍 Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Book</h2>
+      <button class="modal-close" id="closeAddModal">✕</button>
+    </div>
+
+    <div class="search-book-row">
+      <input type="text" id="bookSearchInput" placeholder="Enter ISBN or book title..." />
+      <button id="fetchBookBtn">Search</button>
+    </div>
+    <div class="fetch-status" id="fetchStatus"></div>
+
+    <div class="modal-form">
+      <div class="form-row">
+        <div class="form-group cover-preview-group">
+          <label>Cover</label>
+          <div class="cover-preview" id="coverPreview">
+            <span>No Cover</span>
+          </div>
+          <input type="text" id="coverUrl" placeholder="Cover URL (auto-filled)" />
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" id="bookTitle" placeholder="Book title" />
+        </div>
+        <div class="form-group">
+          <label>Author *</label>
+          <input type="text" id="bookAuthor" placeholder="Author name" />
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Genre</label>
+          <input type="text" id="bookGenre" placeholder="e.g. Fantasy, Mystery" />
+        </div>
+        <div class="form-group">
+          <label>Total Pages</label>
+          <input type="number" id="bookTotalPages" placeholder="e.g. 400" min="1" />
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Status</label>
+          <select id="bookStatus">
+            <option value="Want to Read">Want to Read</option>
+            <option value="TBR">TBR</option>
+            <option value="Now Reading">Now Reading</option>
+            <option value="Finished">Finished</option>
+            <option value="DNF">DNF</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Current Page</label>
+          <input type="number" id="bookCurrentPage" placeholder="e.g. 120" min="0" />
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="bookStartDate" />
+        </div>
+        <div class="form-group">
+          <label>Finish Date</label>
+          <input type="date" id="bookFinishDate" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="bookNotes" placeholder="Your thoughts..." rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" id="cancelAdd">Cancel</button>
+      <button class="btn-save" id="saveBook">Save Book</button>
+    </div>
+  </div>
+</div>
+
+<!-- 書籍詳情 / 編輯 Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal modal-detail">
+    <div class="modal-header">
+      <h2 id="detailTitle">Book Detail</h2>
+      <button class="modal-close" id="closeDetailModal">✕</button>
+    </div>
+    <div class="detail-body">
+      <div class="detail-cover-col">
+        <img id="detailCover" src="" alt="cover" />
+      </div>
+      <div class="detail-info-col">
+        <div class="detail-author" id="detailAuthor"></div>
+        <div class="detail-genre" id="detailGenre"></div>
+        <div class="detail-status-badge" id="detailStatus"></div>
+
+        <div class="detail-progress-section">
+          <label>Progress</label>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="detailProgressBar"></div>
+          </div>
+          <div class="progress-text" id="detailProgressText"></div>
+        </div>
+
+        <div class="detail-page-edit">
+          <label>Update current page:</label>
+          <div class="page-edit-row">
+            <input type="number" id="detailCurrentPage" min="0" />
+            <span id="detailTotalPages"></span>
+            <button id="updatePageBtn">Update</button>
+          </div>
+        </div>
+
+        <div class="detail-dates" id="detailDates"></div>
+        <div class="detail-notes" id="detailNotes"></div>
+
+        <div class="detail-actions">
+          <button class="btn-edit" id="editBookBtn">Edit</button>
+          <button class="btn-delete" id="deleteBookBtn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
