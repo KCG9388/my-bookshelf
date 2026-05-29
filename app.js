@@ -154,23 +154,7 @@ async function fetchBookInfo() {
   const isISBN = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
   const cleanISBN = query.replace(/[\s\-]/g, "");
 
-  // 1. Try Google Books
-  try {
-    const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&langRestrict=`);
-    const data = await res.json();
-    if (data.items && data.items.length > 0) {
-      const info = data.items[0].volumeInfo;
-      const cover = info.imageLinks
-        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://","https://")
-        : "";
-      fillForm({ title: info.title || "", author: (info.authors||[]).join(", "), genre: (info.categories||[]).join(", "), totalPages: info.pageCount || "", cover });
-      fetchStatus.textContent = `Found: "${info.title}"`;
-      return;
-    }
-  } catch {}
-
-  // 2. Try Open Library (ISBN only)
+  // 1. Open Library by ISBN
   if (isISBN) {
     try {
       const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanISBN}&format=json&jscmd=data`);
@@ -180,7 +164,7 @@ async function fetchBookInfo() {
         const info = data[key];
         const cover = info.cover ? (info.cover.large || info.cover.medium || info.cover.small || "") : "";
         const authors = (info.authors || []).map(a => a.name).join(", ");
-        const subjects = (info.subjects || []).map(s => s.name || s).slice(0,2).join(", ");
+        const subjects = (info.subjects || []).map(s => s.name || s).slice(0, 2).join(", ");
         fillForm({ title: info.title || "", author: authors, genre: subjects, totalPages: info.number_of_pages || "", cover });
         fetchStatus.textContent = `Found: "${info.title}"`;
         return;
@@ -188,12 +172,23 @@ async function fetchBookInfo() {
     } catch {}
   }
 
-  // 3. Try Google Books by title (if ISBN failed)
-  if (isISBN) {
-    fetchStatus.textContent = "ISBN not found. Try searching by book title instead.";
-  } else {
-    fetchStatus.textContent = "No results found. Fill in manually.";
-  }
+  // 2. Open Library by title/author search
+  try {
+    const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`);
+    const data = await res.json();
+    if (data.docs && data.docs.length > 0) {
+      const doc = data.docs[0];
+      const coverId = doc.cover_i;
+      const cover = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : "";
+      const authors = (doc.author_name || []).slice(0, 2).join(", ");
+      const subjects = (doc.subject || []).slice(0, 2).join(", ");
+      fillForm({ title: doc.title || "", author: authors, genre: subjects, totalPages: doc.number_of_pages_median || "", cover });
+      fetchStatus.textContent = `Found: "${doc.title}"`;
+      return;
+    }
+  } catch {}
+
+  fetchStatus.textContent = "No results found. Fill in manually.";
 }
 
 function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {}) {
