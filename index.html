@@ -47,6 +47,7 @@
   <div class="top-bar">
     <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
     <span class="book-count" id="bookCount">0 books</span>
+    <button class="refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
   </div>
   <div class="book-grid" id="bookGrid">
     <div class="loading">Loading...</div>
@@ -85,7 +86,16 @@
           <div class="cover-preview" id="coverPreview">
             <span>No Cover</span>
           </div>
-          <input type="text" id="coverUrl" placeholder="Cover URL (auto-filled)" />
+          <div class="cover-url-row">
+            <input type="text" id="coverUrl" placeholder="Cover URL (auto-filled)" />
+            <button type="button" class="btn-refetch" id="refetchCoverBtn" title="Re-search cover">🔄</button>
+          </div>
+          <div class="cover-actions">
+            <label class="btn-upload-cover" title="Upload image from your device">
+              📁 Upload image
+              <input type="file" id="coverFileInput" accept="image/*" style="display:none" />
+            </label>
+          </div>
         </div>
       </div>
 

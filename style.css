@@ -100,6 +100,22 @@ body {
 
 .book-count { font-size: 12px; color: #9b9a97; white-space: nowrap; }
 
+.refresh-btn {
+  background: none;
+  border: 1px solid #e0e0de;
+  border-radius: 6px;
+  width: 30px; height: 30px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #6b6b68;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, transform .3s;
+  flex-shrink: 0;
+}
+.refresh-btn:hover { background: #ebebea; color: #37352f; }
+.refresh-btn.spinning { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .book-grid {
   flex: 1;
   overflow-y: auto;
@@ -310,7 +326,39 @@ body {
 .form-group select:focus,
 .form-group textarea:focus { border-color: #a8a8a6; }
 
-.cover-preview-group { gap: 8px; }
+.cover-preview-group { gap: 6px; }
+.cover-url-row { display: flex; gap: 6px; align-items: center; }
+.cover-url-row input { flex: 1; }
+.btn-refetch {
+  padding: 6px 8px;
+  background: #f7f7f5;
+  border: 1px solid #e0e0de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .12s;
+}
+.btn-refetch:hover { background: #ebebea; }
+.btn-refetch.loading { animation: spin .7s linear infinite; }
+
+.cover-actions { display: flex; gap: 8px; }
+.btn-upload-cover {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #f7f7f5;
+  border: 1px solid #e0e0de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: #37352f;
+  transition: background .12s;
+}
+.btn-upload-cover:hover { background: #ebebea; }
+
 .cover-preview {
   width: 80px;
   height: 120px;

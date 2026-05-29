@@ -166,7 +166,24 @@ document.getElementById("statusFilter").querySelectorAll("li").forEach(li => {
 
 searchInput.addEventListener("input", e => {
   currentFilter.search = e.target.value.trim();
+  currentPage = 1;
   renderGrid();
+});
+
+// ── Refresh Button ──
+document.getElementById("refreshBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("refreshBtn");
+  btn.classList.add("spinning");
+  // Queue all books missing covers
+  const missing = allBooks.filter(b => !b.cover);
+  if (missing.length) {
+    queueCoverFetch(missing);
+  } else {
+    // just re-render
+    renderGrid();
+    rebuildSidebarFilters();
+  }
+  setTimeout(() => btn.classList.remove("spinning"), 800);
 });
 
 // ── Add Modal ──
@@ -264,6 +281,38 @@ document.getElementById("coverUrl").addEventListener("input", e => {
   coverPreview.innerHTML = url
     ? `<img src="${escHtml(url)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`
     : `<span>No Cover</span>`;
+});
+
+// Re-fetch cover button
+document.getElementById("refetchCoverBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("refetchCoverBtn");
+  const title  = document.getElementById("bookTitle").value.trim();
+  const author = document.getElementById("bookAuthor").value.trim();
+  if (!title) { alert("Please enter a title first."); return; }
+  btn.classList.add("loading");
+  btn.disabled = true;
+  const cover = await fetchCoverUrl(title, author);
+  btn.classList.remove("loading");
+  btn.disabled = false;
+  if (cover) {
+    document.getElementById("coverUrl").value = cover;
+    coverPreview.innerHTML = `<img src="${escHtml(cover)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`;
+  } else {
+    alert("No cover found. Try editing the title/author and search again, or paste a URL manually.");
+  }
+});
+
+// Upload cover image
+document.getElementById("coverFileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
+    document.getElementById("coverUrl").value = dataUrl;
+    coverPreview.innerHTML = `<img src="${escHtml(dataUrl)}" alt="cover" />`;
+  };
+  reader.readAsDataURL(file);
 });
 
 function resetAddForm() {
@@ -637,31 +686,47 @@ startImportBtn.addEventListener("click", async () => {
   const logEl      = document.getElementById("importLog");
   progressEl.style.display = "";
 
-  let success = 0, failed = 0;
+  // Build existing title set for deduplication
+  const existingTitles = new Set(allBooks.map(b => b.title.trim().toLowerCase()));
+
+  let success = 0, skipped = 0, failed = 0;
   for (let i = 0; i < parsedBooks.length; i++) {
     const pct = Math.round(((i + 1) / parsedBooks.length) * 100);
     fillEl.style.width = pct + "%";
     labelEl.textContent = `Importing ${i + 1} / ${parsedBooks.length}...`;
+    const book = parsedBooks[i];
+
+    // Duplicate check
+    if (existingTitles.has(book.title.trim().toLowerCase())) {
+      skipped++;
+      const line = document.createElement("div");
+      line.style.color = "#9b9a97";
+      line.textContent = `— skipped (duplicate): ${book.title}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+      continue;
+    }
 
     try {
-      await booksCol.add(parsedBooks[i]);
+      await booksCol.add(book);
+      existingTitles.add(book.title.trim().toLowerCase());
       success++;
       const line = document.createElement("div");
       line.style.color = "#1a6632";
-      line.textContent = `✓ ${parsedBooks[i].title}`;
+      line.textContent = `✓ ${book.title}`;
       logEl.appendChild(line);
     } catch(e) {
       failed++;
       const line = document.createElement("div");
       line.style.color = "#c0392b";
-      line.textContent = `✗ ${parsedBooks[i].title}: ${e.message}`;
+      line.textContent = `✗ ${book.title}: ${e.message}`;
       logEl.appendChild(line);
     }
     logEl.scrollTop = logEl.scrollHeight;
     if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
   }
 
-  labelEl.textContent = `Done! ✓ ${success} imported${failed ? `, ✗ ${failed} failed` : ""}.`;
+  labelEl.textContent = `Done! ✓ ${success} imported${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ✗ ${failed} failed` : ""}.`;
   labelEl.style.color = "#1a6632";
   startImportBtn.textContent = "Close";
   startImportBtn.disabled = false;
