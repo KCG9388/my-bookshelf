@@ -293,17 +293,104 @@ function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {
   if (author)     document.getElementById("bookAuthor").value = author;
   if (genre)      document.getElementById("bookGenre").value = genre;
   if (totalPages) document.getElementById("bookTotalPages").value = totalPages;
-  if (cover) {
-    document.getElementById("coverUrl").value = cover;
-    coverPreview.innerHTML = `<img src="${escHtml(cover)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`;
+  if (cover)      setCover(cover);
+}
+
+// ── Cover Picker ──
+const GALLERY_GRADIENTS = [
+  "linear-gradient(135deg,#667eea,#764ba2)",
+  "linear-gradient(135deg,#f093fb,#f5576c)",
+  "linear-gradient(135deg,#4facfe,#00f2fe)",
+  "linear-gradient(135deg,#43e97b,#38f9d7)",
+  "linear-gradient(135deg,#fa709a,#fee140)",
+  "linear-gradient(135deg,#f7971e,#ffd200)",
+  "linear-gradient(135deg,#ff6b6b,#feca57)",
+  "linear-gradient(135deg,#a8edea,#fed6e3)",
+  "linear-gradient(135deg,#d299c2,#fef9d7)",
+  "linear-gradient(135deg,#0f0c29,#302b63,#24243e)",
+  "linear-gradient(135deg,#2d3436,#636e72)",
+  "linear-gradient(135deg,#11998e,#38ef7d)",
+  "linear-gradient(135deg,#ee0979,#ff6a00)",
+  "linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",
+  "linear-gradient(135deg,#fc5c7d,#6a3093)",
+  "linear-gradient(135deg,#c94b4b,#4b134f)",
+  "linear-gradient(135deg,#e0c3fc,#8ec5fc)",
+  "linear-gradient(135deg,#fddb92,#d1fdff)",
+];
+
+function setCover(value) {
+  document.getElementById("coverUrl").value = value;
+  if (!value) {
+    coverPreview.innerHTML = `<span>No Cover</span>`;
+    coverPreview.style.background = "";
+  } else if (value.startsWith("linear-gradient") || value.startsWith("#")) {
+    coverPreview.innerHTML = "";
+    coverPreview.style.background = value;
+  } else {
+    coverPreview.style.background = "";
+    coverPreview.innerHTML = `<img src="${escHtml(value)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`;
   }
 }
 
-document.getElementById("coverUrl").addEventListener("input", e => {
-  const url = e.target.value.trim();
-  coverPreview.innerHTML = url
-    ? `<img src="${escHtml(url)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`
-    : `<span>No Cover</span>`;
+// Build gallery swatches
+const galleryGrid = document.getElementById("galleryGrid");
+GALLERY_GRADIENTS.forEach(g => {
+  const sw = document.createElement("div");
+  sw.className = "gallery-swatch";
+  sw.style.background = g;
+  sw.title = "Use this gradient";
+  sw.addEventListener("click", () => { setCover(g); closePicker(); });
+  galleryGrid.appendChild(sw);
+});
+
+// Picker panel toggle
+const pickerPanel = document.getElementById("coverPickerPanel");
+document.getElementById("btnChangeCover").addEventListener("click", () => {
+  pickerPanel.style.display = pickerPanel.style.display === "none" ? "" : "none";
+});
+document.getElementById("pickerCloseBtn").addEventListener("click", closePicker);
+document.getElementById("pickerRemoveBtn").addEventListener("click", () => { setCover(""); closePicker(); });
+function closePicker() { pickerPanel.style.display = "none"; }
+
+// Picker tabs
+document.querySelectorAll(".picker-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".picker-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelectorAll(".picker-pane").forEach(p => p.style.display = "none");
+    document.getElementById("pane-" + tab.dataset.tab).style.display = "";
+  });
+});
+
+// Upload tab
+const coverDropZone = document.getElementById("coverDropZone");
+const coverFileInput = document.getElementById("coverFileInput");
+coverDropZone.addEventListener("dragover", e => { e.preventDefault(); coverDropZone.classList.add("drag-over"); });
+coverDropZone.addEventListener("dragleave", () => coverDropZone.classList.remove("drag-over"));
+coverDropZone.addEventListener("drop", e => { e.preventDefault(); coverDropZone.classList.remove("drag-over"); handleCoverFile(e.dataTransfer.files[0]); });
+coverFileInput.addEventListener("change", e => handleCoverFile(e.target.files[0]));
+
+function handleCoverFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const reader = new FileReader();
+  reader.onload = ev => { setCover(ev.target.result); closePicker(); };
+  reader.readAsDataURL(file);
+}
+
+// Paste image from clipboard
+document.addEventListener("paste", e => {
+  if (pickerPanel.style.display === "none") return;
+  const item = [...e.clipboardData.items].find(i => i.type.startsWith("image/"));
+  if (item) handleCoverFile(item.getAsFile());
+});
+
+// Link tab
+document.getElementById("coverLinkSubmit").addEventListener("click", () => {
+  const url = document.getElementById("coverLinkInput").value.trim();
+  if (url) { setCover(url); closePicker(); document.getElementById("coverLinkInput").value = ""; }
+});
+document.getElementById("coverLinkInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("coverLinkSubmit").click();
 });
 
 // Re-fetch cover button
@@ -312,38 +399,94 @@ document.getElementById("refetchCoverBtn").addEventListener("click", async () =>
   const title  = document.getElementById("bookTitle").value.trim();
   const author = document.getElementById("bookAuthor").value.trim();
   if (!title) { alert("Please enter a title first."); return; }
-  btn.classList.add("loading");
-  btn.disabled = true;
+  btn.classList.add("loading"); btn.disabled = true;
   const cover = await fetchCoverUrl(title, author);
-  btn.classList.remove("loading");
-  btn.disabled = false;
-  if (cover) {
-    document.getElementById("coverUrl").value = cover;
-    coverPreview.innerHTML = `<img src="${escHtml(cover)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`;
-  } else {
-    alert("No cover found. Try editing the title/author and search again, or paste a URL manually.");
+  btn.classList.remove("loading"); btn.disabled = false;
+  if (cover) { setCover(cover); }
+  else { alert("No cover found. Try a different title or use the Link / Upload tab."); }
+});
+
+// ── Screenshot Capture & Crop ──
+let cropStart = null, cropRect = null, screenshotImageData = null;
+const overlay    = document.getElementById("screenshotOverlay");
+const canvas     = document.getElementById("screenshotCanvas");
+const ctx        = canvas.getContext("2d");
+const selBox     = document.getElementById("screenshotSelection");
+const confirmBox = document.getElementById("screenshotConfirm");
+
+document.getElementById("startScreenshotBtn").addEventListener("click", async () => {
+  closePicker();
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: false });
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+    // grab one frame
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    stream.getTracks().forEach(t => t.stop());
+    screenshotImageData = canvas.toDataURL("image/png");
+    // show overlay
+    overlay.style.display = "flex";
+    selBox.style.display = "none";
+    confirmBox.style.display = "none";
+    cropStart = null; cropRect = null;
+  } catch (e) {
+    if (e.name !== "NotAllowedError") alert("Screenshot failed: " + e.message);
   }
 });
 
-// Upload cover image
-document.getElementById("coverFileInput").addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const dataUrl = ev.target.result;
-    document.getElementById("coverUrl").value = dataUrl;
-    coverPreview.innerHTML = `<img src="${escHtml(dataUrl)}" alt="cover" />`;
-  };
-  reader.readAsDataURL(file);
+document.getElementById("screenshotCancel").addEventListener("click", () => {
+  overlay.style.display = "none";
+});
+
+canvas.addEventListener("mousedown", e => {
+  const r = canvas.getBoundingClientRect();
+  cropStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+  selBox.style.display = "none";
+  confirmBox.style.display = "none";
+  cropRect = null;
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!cropStart) return;
+  const r = canvas.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const x = Math.min(cropStart.x, cx), y = Math.min(cropStart.y, cy);
+  const w = Math.abs(cx - cropStart.x), h = Math.abs(cy - cropStart.y);
+  selBox.style.cssText = `display:block;left:${r.left+x}px;top:${r.top+y}px;width:${w}px;height:${h}px;`;
+  cropRect = { x, y, w, h, scaleX: canvas.width/r.width, scaleY: canvas.height/r.height };
+});
+
+canvas.addEventListener("mouseup", () => {
+  if (!cropRect || cropRect.w < 10 || cropRect.h < 10) { cropStart = null; return; }
+  cropStart = null;
+  confirmBox.style.display = "flex";
+});
+
+document.getElementById("screenshotUse").addEventListener("click", () => {
+  const { x, y, w, h, scaleX, scaleY } = cropRect;
+  const tmp = document.createElement("canvas");
+  tmp.width = w * scaleX; tmp.height = h * scaleY;
+  tmp.getContext("2d").drawImage(canvas, x*scaleX, y*scaleY, w*scaleX, h*scaleY, 0, 0, tmp.width, tmp.height);
+  setCover(tmp.toDataURL("image/png"));
+  overlay.style.display = "none";
+});
+
+document.getElementById("screenshotRetry").addEventListener("click", () => {
+  selBox.style.display = "none";
+  confirmBox.style.display = "none";
+  cropRect = null; cropStart = null;
 });
 
 function resetAddForm() {
-  ["bookSearchInput","bookTitle","bookAuthor","bookGenre","bookCurrentPage","bookStartDate","bookFinishDate","bookNotes","coverUrl"]
+  ["bookSearchInput","bookTitle","bookAuthor","bookGenre","bookCurrentPage","bookStartDate","bookFinishDate","bookNotes"]
     .forEach(id => document.getElementById(id).value = "");
   document.getElementById("bookTotalPages").value = "";
   document.getElementById("bookStatus").value = "Want to Read";
-  coverPreview.innerHTML = `<span>No Cover</span>`;
+  setCover("");
+  closePicker();
   fetchStatus.textContent = "";
 }
 

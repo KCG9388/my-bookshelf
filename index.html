@@ -55,6 +55,20 @@
   <div class="pagination" id="pagination" style="display:none"></div>
 </main>
 
+<!-- Screenshot Crop Overlay -->
+<div class="screenshot-overlay" id="screenshotOverlay" style="display:none">
+  <div class="screenshot-toolbar">
+    <span>Drag to select the area you want as the cover</span>
+    <button id="screenshotCancel">✕ Cancel</button>
+  </div>
+  <canvas id="screenshotCanvas"></canvas>
+  <div class="screenshot-selection" id="screenshotSelection" style="display:none"></div>
+  <div class="screenshot-confirm" id="screenshotConfirm" style="display:none">
+    <button id="screenshotUse">✓ Use this area</button>
+    <button id="screenshotRetry">↺ Re-select</button>
+  </div>
+</div>
+
 <!-- Cover fetch toast -->
 <div class="cover-fetch-toast" id="coverFetchToast">
   <div class="toast-header">
@@ -81,20 +95,65 @@
 
     <div class="modal-form">
       <div class="form-row">
-        <div class="form-group cover-preview-group">
+        <div class="form-group cover-picker-group">
           <label>Cover</label>
-          <div class="cover-preview" id="coverPreview">
-            <span>No Cover</span>
+          <div class="cover-picker-wrap">
+            <!-- Preview -->
+            <div class="cover-preview" id="coverPreview">
+              <span>No Cover</span>
+            </div>
+            <!-- Hidden URL store -->
+            <input type="hidden" id="coverUrl" />
+            <!-- Change button -->
+            <button type="button" class="btn-change-cover" id="btnChangeCover">🖼 Change Cover</button>
+            <button type="button" class="btn-refetch" id="refetchCoverBtn" title="Re-search cover">🔄 Re-fetch</button>
           </div>
-          <div class="cover-url-row">
-            <input type="text" id="coverUrl" placeholder="Cover URL (auto-filled)" />
-            <button type="button" class="btn-refetch" id="refetchCoverBtn" title="Re-search cover">🔄</button>
-          </div>
-          <div class="cover-actions">
-            <label class="btn-upload-cover" title="Upload image from your device">
-              📁 Upload image
-              <input type="file" id="coverFileInput" accept="image/*" style="display:none" />
-            </label>
+
+          <!-- Cover Picker Panel -->
+          <div class="cover-picker-panel" id="coverPickerPanel" style="display:none">
+            <div class="picker-tabs">
+              <button class="picker-tab active" data-tab="gallery">🎨 Gallery</button>
+              <button class="picker-tab" data-tab="upload">📁 Upload</button>
+              <button class="picker-tab" data-tab="link">🔗 Link</button>
+              <button class="picker-tab" data-tab="screenshot">✂️ Screenshot</button>
+            </div>
+
+            <!-- Gallery -->
+            <div class="picker-pane" id="pane-gallery">
+              <div class="gallery-grid" id="galleryGrid"></div>
+            </div>
+
+            <!-- Upload -->
+            <div class="picker-pane" id="pane-upload" style="display:none">
+              <div class="upload-drop-zone" id="coverDropZone">
+                <div class="upload-icon">📂</div>
+                <div>Drag &amp; drop or <label style="color:#2383e2;cursor:pointer;text-decoration:underline">click to browse<input type="file" id="coverFileInput" accept="image/*" style="display:none"/></label></div>
+                <div style="font-size:11.5px;color:#9b9a97;margin-top:4px">or Ctrl+V to paste an image</div>
+              </div>
+            </div>
+
+            <!-- Link -->
+            <div class="picker-pane" id="pane-link" style="display:none">
+              <div class="link-pane">
+                <input type="text" id="coverLinkInput" placeholder="Paste an image URL..." />
+                <button id="coverLinkSubmit">Submit</button>
+              </div>
+              <div style="font-size:11.5px;color:#9b9a97;margin-top:6px">Works with any image URL from the web.</div>
+            </div>
+
+            <!-- Screenshot -->
+            <div class="picker-pane" id="pane-screenshot" style="display:none">
+              <div class="screenshot-pane">
+                <div class="screenshot-desc">Capture any area of your screen as a book cover.</div>
+                <button id="startScreenshotBtn">📸 Start Screen Capture</button>
+                <div class="screenshot-note">Your browser will ask which window/screen to share.<br/>After capture, drag to select the area you want.</div>
+              </div>
+            </div>
+
+            <div class="picker-footer">
+              <button class="picker-remove-btn" id="pickerRemoveBtn">🗑 Remove cover</button>
+              <button class="picker-close-btn" id="pickerCloseBtn">Close</button>
+            </div>
           </div>
         </div>
       </div>
