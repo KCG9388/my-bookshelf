@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>Import Notion Books</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; background: #f7f7f5; color: #37352f; }
+    h1 { font-size: 22px; }
+    #log { background: #fff; border: 1px solid #e0e0de; border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; font-size: 13px; font-family: monospace; white-space: pre-wrap; }
+    button { padding: 10px 24px; background: #37352f; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; margin-top: 16px; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    .done { color: #1a6632; font-weight: bold; }
+    .error { color: #c0392b; }
+    .info { color: #2383e2; }
+  </style>
+</head>
+<body>
+  <h1>📚 Import Notion Books to Firebase</h1>
+  <p>共 <strong>188</strong> 本書。點下方按鈕開始匯入，完成後可關閉此頁面。</p>
+  <div id="log">等待開始...</div>
+  <button id="startBtn" onclick="startImport()">開始匯入</button>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script>
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const booksCol = db.collection("books");
+
+    const log = document.getElementById("log");
+    function print(msg, cls) {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Clean Notion link: "Author Name (https://...)" → "Author Name"
+    function clean(str) {
+      if (!str) return "";
+      return str.replace(/\s*\(https?:\/\/[^)]+\)/g, "").trim();
+    }
+
+    // Parse "October 18, 2024" → "2024-10-18"
+    function parseDate(str) {
+      if (!str) return "";
+      const d = new Date(str);
+      if (isNaN(d)) return "";
+      return d.toISOString().split("T")[0];
+    }
+
+    // Parse star rating to number
+    function parseRating(str) {
+      if (!str) return 0;
+      const stars = (str.match(/★/g) || []).length;
+      return stars;
+    }
+
+    const rawBooks = [
+["The Spy Coast","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","400","October 18, 2024","Physical","100%","★★★☆☆","Finished","400"],
+["The Binding","Bridget Collins (https://app.notion.com/p/Bridget-Collins-1fb8252334488029b1f9e703dc65676d?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","448","October 7, 2024","Kobo","100%","★★★★☆","Finished","448"],
+["I Know a Secret","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","384","September 10, 2022","Physical","100%","★★★★☆","Finished","384"],
+["Emily Wilde's Encyclopaedia of Faeries","Heather Fawcett (https://app.notion.com/p/Heather-Fawcett-1fb825233448804f8b70d3ce8e2bb5ae?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","336","March 15, 2025","Kobo","100%","★★★★☆","Finished","336"],
+["Recursion","Blake Crouch (https://app.notion.com/p/Blake-Crouch-1fb825233448801f81eaea5a281c4189?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","384","September 12, 2022","Kobo","100%","★★★☆☆","Finished","384"],
+["Little Fires Everywhere","Celeste Ng (https://app.notion.com/p/Celeste-Ng-1fa8252334488071824fdb306f372257?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","802","May 27, 2026","Kobo","100%","★★★☆☆","Finished","802"],
+["Degrees of Guilt","H.S. Chandler (https://app.notion.com/p/H-S-Chandler-1fb8252334488015857bcada2dd59b5f?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","352","August 20, 2022","Kobo","100%","★★★★★","Finished","352"],
+["Piranesi","Susanna Clarke (https://app.notion.com/p/Susanna-Clarke-1fb825233448804f836ddeb7d47b2cc9?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","272","February 22, 2025","Kobo","100%","★★☆☆☆","Finished","272"],
+["The Fury","Alex Michaelid (https://app.notion.com/p/Alex-Michaelid-1fb825233448801d94f6dc7e55579f12?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","320","February 11, 2025","Kobo","100%","★☆☆☆☆","Finished","320"],
+["Playing with Fire","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","304","September 27, 2024","Physical","100%","★★★★☆","Finished","304"],
+["The Sword of Kaigen: A Theonite War Story","M. L. Wang (https://app.notion.com/p/M-L-Wang-1fa8252334488028a8d6c9d870355309?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","651","February 2, 2025","Physical","100%","★★★★★","Finished","651"],
+["Emily Wilde's Map of The Otherlands","Heather Fawcett (https://app.notion.com/p/Heather-Fawcett-1fb825233448804f8b70d3ce8e2bb5ae?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","352","April 1, 2025","Kobo","100%","★★★★☆","Finished","352"],
+["The Love Hypothesis","Ali Hazelwood (https://app.notion.com/p/Ali-Hazelwood-1fb82523344880bf8371ded085b1e853?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","336","April 10, 2025","Kobo","100%","★★★☆☆","Finished","336"],
+["The Song of Achilles","Madeline Miller (https://app.notion.com/p/Madeline-Miller-1fa8252334488022bb3ce529a678df0a?pvs=21)","Myth (https://app.notion.com/p/Myth-1fa82523344880249e96e2cda32c2dec?pvs=21)","416","March 28, 2025","Kobo","100%","","Finished","416"],
+["The Last Girl to Die","H.S. Chandler (https://app.notion.com/p/H-S-Chandler-1fb8252334488015857bcada2dd59b5f?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","384","March 10, 2025","Kobo","100%","★★★★☆","Finished","384"],
+["Justice","Michael Sandle (https://app.notion.com/p/Michael-Sandle-1fa8252334488033b0cdd3b8967913a9?pvs=21)","Philosophy (https://app.notion.com/p/Philosophy-1fa82523344881bd992bf33d40920f91?pvs=21)","464","March 10, 2025","Physical","100%","","Finished","464"],
+["Listen to Me","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","336","May 22, 2024","Physical","100%","★★★★☆","Finished","336"],
+["A Little Life","Hanya Yanagihara (https://app.notion.com/p/Hanya-Yanagihara-1fa8252334488087bb56e3de6bdead21?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","814","July 26, 2025","Kobo","100%","★★★★★","Finished","814"],
+["The Seven Year Slip","Ashley Poston (https://app.notion.com/p/Ashley-Poston-1fb825233448807a8068eb6e1f7a8cac?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","368","April 27, 2025","Physical","100%","★★★★★","Finished","368"],
+["The Very Secret Society of Irregular Witches","Sangu Mandanna (https://app.notion.com/p/Sangu-Mandanna-1fb8252334488084bad5f94c6c966d18?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","352","May 4, 2025","Kobo","100%","★★★★★","Finished","352"],
+["One Summer in Savannah","Terah Shelton Harris (https://app.notion.com/p/Terah-Shelton-Harris-1fc82523344880c2a697e6cd602e8c6b?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kobo","0%","","TBR",""],
+["Fourth Wing","Rebecca Yarros (https://app.notion.com/p/Rebecca-Yarros-1fa82523344880d097a7f8411721f94a?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","512","April 13, 2025","Physical","100%","★★★★☆","Finished","512"],
+["One Dark Window","Rachel Gillig (https://app.notion.com/p/Rachel-Gillig-1fa825233448807fa2abe4858c29657b?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","354","April 7, 2025","Kobo","100%","★★★★★","Finished","354"],
+["Iron Flame","Rebecca Yarros (https://app.notion.com/p/Rebecca-Yarros-1fa82523344880d097a7f8411721f94a?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","812","April 20, 2025","Kobo","100%","★★★★☆","Finished","812"],
+["The Serpent and the Wings of Night","Carissa Broadbent (https://app.notion.com/p/Carissa-Broadbent-1fc82523344880d4aa36c5a8b4d82b57?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","452","June 22, 2025","Physical","100%","★★☆☆☆","Finished","452"],
+["Six of Crows","Leigh Bardugo (https://app.notion.com/p/Leigh-Bardugo-1fa8252334488051ba2dcae7b8bebd63?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","744","May 24, 2025","Kobo","100%","★★★★★","Finished","744"],
+["Blood Over Bright Haven","M. L. Wang (https://app.notion.com/p/M-L-Wang-1fa8252334488028a8d6c9d870355309?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","417","May 14, 2025","Kobo","100%","★★★★★","Finished","417"],
+["Nettle & Bone","T. Kingfisher (https://app.notion.com/p/T-Kingfisher-1fc8252334488098850bdc1af15565a4?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR","503"],
+["Two Twisted Crowns","Rachel Gillig (https://app.notion.com/p/Rachel-Gillig-1fa825233448807fa2abe4858c29657b?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","365","April 24, 2025","Kobo","100%","★★★★★","Finished","365"],
+["Mistborn","Brandon Sanderson (https://app.notion.com/p/Brandon-Sanderson-1fc8252334488022bfdbc0d0284b829c?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","534","May 27, 2026","Kindle","100%","★★★★★","Finished","534"],
+["Once Upon a Broken Heart","Stephanie Garber (https://app.notion.com/p/Stephanie-Garber-1fa825233448806ea089f8d0b8b4e477?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","565","May 26, 2025","Kobo","100%","★★★★☆","Finished","565"],
+["Bride","Ali Hazelwood (https://app.notion.com/p/Ali-Hazelwood-1fb82523344880bf8371ded085b1e853?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","368","May 18, 2025","Kobo","100%","★★★☆☆","Finished","368"],
+["Poor Things","Alasdair Gray (https://app.notion.com/p/Alasdair-Gray-1fa8252334488083b501e67543cb9e64?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","244","May 27, 2025","Physical","100%","★★★☆☆","Finished","244"],
+["Harvest","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","496","January 17, 2022","Physical","100%","","Finished","496"],
+["The Vegetarian","Han Kang (https://app.notion.com/p/Han-Kang-1fa8252334488075a25ce183cb178217?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","60","","Physical","24.5%","","DNF","244"],
+["Le Petit Prince","Antoine de Saint-Exupéry (https://app.notion.com/p/Antoine-de-Saint-Exup-ry-1fb82523344880d7b92ac5d118190c44?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","160","May 6, 2025","Physical","100%","★★★★☆","Finished","160"],
+["The Puppet Show","M.W. Craven (https://app.notion.com/p/M-W-Craven-1fb82523344880aabfecfc54ed65d92e?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","368","May 22, 2024","Kobo","100%","★★★★☆","Finished","368"],
+["Book Lovers","Emily Henry (https://app.notion.com/p/Emily-Henry-1fb825233448809386b0dfdf962cfb7c?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","416","May 11, 2025","Kobo","100%","★★★★☆","Finished","416"],
+["White Nights","Fyodor Dostoyevsky (https://app.notion.com/p/Fyodor-Dostoyevsky-1fb8252334488067aaedfa56af832631?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","82","May 16, 2025","Physical","100%","★★★☆☆","Finished","82"],
+["A Witch's Guide to Magical Innkeeping","Sangu Mandanna (https://app.notion.com/p/Sangu-Mandanna-1fb8252334488084bad5f94c6c966d18?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR","461"],
+["Galatea","Madeline Miller (https://app.notion.com/p/Madeline-Miller-1fa8252334488022bb3ce529a678df0a?pvs=21)","Myth (https://app.notion.com/p/Myth-1fa82523344880249e96e2cda32c2dec?pvs=21)","64","May 8, 2025","Physical","100%","★★★★☆","Finished","64"],
+["Red Queen","Juan Goomez Jurado (https://app.notion.com/p/Juan-Goomez-Jurado-1fb825233448800391ebcb98df201c64?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","300","","Kobo","59.5%","★★☆☆☆","DNF","504"],
+["Black Summer","M.W. Craven (https://app.notion.com/p/M-W-Craven-1fb82523344880aabfecfc54ed65d92e?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","416","June 5, 2024","Kobo","100%","★★★★☆","Finished","416"],
+["The Guest List","Lucy Foley (https://app.notion.com/p/Lucy-Foley-1fb825233448809d9f57e9f7dbc18411?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","320","September 9, 2022","Kobo","100%","★★☆☆☆","Finished","320"],
+["Friends, Lovers, and the Big Terrible Thing","Matthew Perry (https://app.notion.com/p/Matthew-Perry-1fa82523344880f68801c330e601ead1?pvs=21)","Memoir (https://app.notion.com/p/Memoir-1fa82523344880c48e09eb9e5f4629f7?pvs=21)","100","October 26, 2024","Physical","100%","","Finished","100"],
+["We","Yevgeny Zamyatin (https://app.notion.com/p/Yevgeny-Zamyatin-1fb8252334488009860bdf5c77e134fa?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","256","August 17, 2022","Kindle","100%","★★★☆☆","Finished","256"],
+["The Midnight Library","Matt Haig (https://app.notion.com/p/Matt-Haig-1fb82523344880e9a509cc5093560f6e?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","304","October 2, 2022","Kobo","100%","★★★☆☆","Finished","304"],
+["Conversation With Friends","Sally Rooney (https://app.notion.com/p/Sally-Rooney-1fb82523344880aa8b1ef2c203f100ac?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","320","January 9, 2022","Kindle","100%","★★☆☆☆","Finished","320"],
+["Verity","Colleen Hoover (https://app.notion.com/p/Colleen-Hoover-1fb82523344880cbbee2f5c343774d2b?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","336","August 22, 2022","Kobo","100%","★☆☆☆☆","Finished","336"],
+["The Maidens","Alex Michaelid (https://app.notion.com/p/Alex-Michaelid-1fb825233448801d94f6dc7e55579f12?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","352","March 6, 2024","Physical","100%","★★★☆☆","Finished","352"],
+["A gentleman in Moscow","Amor Towles (https://app.notion.com/p/Amor-Towles-1fa825233448800a9daefeb7b8b360e0?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","488","August 29, 2022","Kobo","100%","★★★★★","Finished","488"],
+["Project Hail Mary","Andy Weir (https://app.notion.com/p/Andy-Weir-1fa825233448802aa709e4f5733f5d5b?pvs=21)","Sci-Fi (https://app.notion.com/p/Sci-Fi-1fa825233448800d8a8efa54611ffaa3?pvs=21)","592","September 6, 2022","Kobo","100%","","Finished","592"],
+["Kane & Abel","Jeffery Archer (https://app.notion.com/p/Jeffery-Archer-1fb825233448809888d7f31fbd7fde6b?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","544","September 4, 2022","Physical","100%","★★★★☆","Finished","544"],
+["Life Support","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","416","August 21, 2023","Physical","100%","★★★★☆","Finished","416"],
+["Circe","Madeline Miller (https://app.notion.com/p/Madeline-Miller-1fa8252334488022bb3ce529a678df0a?pvs=21)","Myth (https://app.notion.com/p/Myth-1fa82523344880249e96e2cda32c2dec?pvs=21)","320","September 18, 2022","Kobo","100%","","Finished","320"],
+["Eat the Buddha: Life and Death in a Tibetan Town","Barbara Demick (https://app.notion.com/p/Barbara-Demick-1fb825233448806f9f6af56427215169?pvs=21)","Historic (https://app.notion.com/p/Historic-1fa82523344881eeb58ef4e48c0bea73?pvs=21)","352","October 12, 2024","Kobo","100%","★★★★☆","Finished","352"],
+["Die again","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","368","August 21, 2022","Physical","100%","★★★☆☆","Finished","368"],
+["Pachinko","Min Jin Lee (https://app.notion.com/p/Min-Jin-Lee-1fb82523344880ad8fc9cc41eb5d4a62?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","512","September 1, 2022","Kobo","100%","★★★★★","Finished","512"],
+["Yellowface","R. F. Kuang (https://app.notion.com/p/R-F-Kuang-1fb82523344880d58abbd0be75d5edfd?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","323","September 22, 2024","Kobo","100%","★★☆☆☆","Finished","323"],
+["Choose Me","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","336","September 27, 2022","Physical","100%","★★★☆☆","Finished","336"],
+["The Defence","Steve Cavanagh (https://app.notion.com/p/Steve-Cavanagh-1fc825233448803a9ebbdb87c6ca3261?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","","","Kobo","0%","","TBR",""],
+["Quiet: The Power of Introverts in a World That Can't Stop Talking","Susan Cain (https://app.notion.com/p/Susan-Cain-1fb82523344880849553e98e320fecea?pvs=21)","Self Growth (https://app.notion.com/p/Self-Growth-1fa82523344881b29746fd417a118fef?pvs=21)","119","","Kobo","32.3%","★☆☆☆☆","DNF","368"],
+["Remarkably Bright Creatures","Shelby Van Pelt (https://app.notion.com/p/Shelby-Van-Pelt-1fa8252334488071bd36cee6c7ce8d74?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","691","May 29, 2025","Kobo","100%","","Finished","691"],
+["Onyx Storm","Rebecca Yarros (https://app.notion.com/p/Rebecca-Yarros-1fa82523344880d097a7f8411721f94a?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","777","April 22, 2026","Physical","100%","★★★☆☆","Finished","777"],
+["The House in the Cerulean Sea","TJ Klune (https://app.notion.com/p/TJ-Klune-1fb825233448809e972ad52c49096f4d?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","396","June 17, 2025","Borrowed","100%","★★★★☆","Finished","396"],
+["The Decagon House Murders","綾辻行人","Mystery","291","May 28, 2025","Borrowed","100%","★☆☆☆☆","Finished","291"],
+["The Lightning Thief","Rick Riordan (https://app.notion.com/p/Rick-Riordan-1fc82523344880a8882cfb13d9c594b5?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","377"],
+["A Good Girl's Guide to Murder","Holly Jackson (https://app.notion.com/p/Holly-Jackson-1fc825233448805d927ac2c774e6af13?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","","","Physical","0%","","TBR","432"],
+["Sapiens","Yuval Noah Harari (https://app.notion.com/p/Yuval-Noah-Harari-1fa82523344881d68a71e27f8c0ea7d0?pvs=21)","Anthropology (https://app.notion.com/p/Anthropology-1fa82523344881ae9b53ecc7486cf227?pvs=21)","38","","Kobo","4.3%","","DNF","879"],
+["Just for the Summer","Abby Jimenez (https://app.notion.com/p/Abby-Jimenez-1fc8252334488027904aca284efb71b5?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","549","July 31, 2025","Kobo","100%","★★★☆☆","Finished","549"],
+["Yours Truly","Abby Jimenez (https://app.notion.com/p/Abby-Jimenez-1fc8252334488027904aca284efb71b5?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","676","June 4, 2025","Kobo","100%","","Finished","676"],
+["The Death of Ivan Ilyich","Leo Tolstoy (https://app.notion.com/p/Leo-Tolstoy-1fc825233448803d9655e79e67134b99?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kobo","0%","","TBR",""],
+["Howl's Moving Castle","Diana Wynne Jones (https://app.notion.com/p/Diana-Wynne-Jones-1fc825233448802ebd83f25bc17e1d7a?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR","477"],
+["Funny Story","Emily Henry (https://app.notion.com/p/Emily-Henry-1fb825233448809386b0dfdf962cfb7c?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","669","June 10, 2025","Kobo","100%","★★★★☆","Finished","669"],
+["Warbreaker","Brandon Sanderson (https://app.notion.com/p/Brandon-Sanderson-1fc8252334488022bfdbc0d0284b829c?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["A Prayer for the Crown-Shy","Becky Chambers (https://app.notion.com/p/Becky-Chambers-1fc82523344880fc877ff386796dc1ff?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","149"],
+["A Psalm for the Wild-Built","Becky Chambers (https://app.notion.com/p/Becky-Chambers-1fc82523344880fc877ff386796dc1ff?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","147","August 29, 2025","Physical","100%","★★★☆☆","Finished","147"],
+["Divine Rivals","Rebecca Ross (https://app.notion.com/p/Rebecca-Ross-20c825233448806783abe911c1d437f2?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","789","June 8, 2025","Kobo","100%","★★★★★","Finished","789"],
+["Vera Wong's Unsolicited Advice for Murderers","Jess Q. Susanto (https://app.notion.com/p/Jess-Q-Susanto-1fc82523344880e1a61bc14d7c6ad611?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","","","Audiobook","0%","","Want to Read","338"],
+["The Will of the Many","James Islington (https://app.notion.com/p/James-Islington-1fc82523344880d9b265ea7811eccc56?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","620","November 24, 2025","Physical","100%","★★★★☆","Finished","620"],
+["The Curator","M.W. Craven (https://app.notion.com/p/M-W-Craven-1fb82523344880aabfecfc54ed65d92e?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","416","May 2, 2026","Kindle","100%","★★★☆☆","Finished","416"],
+["The Seven Husbands of Evelyn Hugo","Taylor Jenkins Reid (https://app.notion.com/p/Taylor-Jenkins-Reid-1fc82523344880fc9003dc7587195e14?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","385","December 12, 2025","Kindle","100%","★★★☆☆","Finished","385"],
+["The Night Circus","Erin Morgenstern (https://app.notion.com/p/Erin-Morgenstern-1fc825233448803489b4f78f5d3b69f1?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR",""],
+["Deep End","Ali Hazelwood (https://app.notion.com/p/Ali-Hazelwood-1fb82523344880bf8371ded085b1e853?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","121","","Kobo","14.8%","★★☆☆☆","DNF","813"],
+["The Prison Healer","Lynette Noni (https://app.notion.com/p/Lynette-Noni-1fd8252334488019a7ccc44988a18f89?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","871","December 22, 2025","Kobo","100%","★★★☆☆","Finished","871"],
+["Crooked Kingdom","Leigh Bardugo (https://app.notion.com/p/Leigh-Bardugo-1fa8252334488051ba2dcae7b8bebd63?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","568","July 15, 2025","Physical","100%","★★★★★","Finished","568"],
+["A Court of Thorns and Roses","Sarah J. Maas (https://app.notion.com/p/Sarah-J-Maas-1fd8252334488042a2f7ead10d7ae2e6?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["The Cruel Prince","Holly Black (https://app.notion.com/p/Holly-Black-1fe82523344880ef81a2db56af3afb4e?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Borrowed","0%","","Want to Read",""],
+["A Curse for True Love","Stephanie Garber (https://app.notion.com/p/Stephanie-Garber-1fa825233448806ea089f8d0b8b4e477?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","574","June 1, 2025","Kobo","100%","★★★★☆","Finished","574"],
+["The Ballad of Never After","Stephanie Garber (https://app.notion.com/p/Stephanie-Garber-1fa825233448806ea089f8d0b8b4e477?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","597","May 31, 2025","Kobo","100%","★★★★★","Finished","597"],
+["Paladin's Grace","T. Kingfisher (https://app.notion.com/p/T-Kingfisher-1fc8252334488098850bdc1af15565a4?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["All Systems Red","Martha Wells (https://app.notion.com/p/Martha-Wells-20582523344880a59ac8e88074139251?pvs=21)","Sci-Fi (https://app.notion.com/p/Sci-Fi-1fa825233448800d8a8efa54611ffaa3?pvs=21)","","","","0%","","Want to Read",""],
+["Throne in the Dark","A.K. Caggiano (https://app.notion.com/p/A-K-Caggiano-205825233448805e813fca5d3a854db9?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kindle Unlimited","0%","","Want to Read",""],
+["One For My Enemy","Olivie Blake (https://app.notion.com/p/Olivie-Blake-2058252334488016a724cf1cdebc9f29?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["Little Thieves","Margaret Owen (https://app.notion.com/p/Margaret-Owen-2088252334488057b4f2f33ac1180b28?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","500"],
+["A Man Called Ove","Fredrik Backman (https://app.notion.com/p/Fredrik-Backman-20a825233448808094dcfac14ba4af48?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","294","July 11, 2025","Physical","100%","★★★★★","Finished","294"],
+["The Knight and the Moth","Rachel Gillig (https://app.notion.com/p/Rachel-Gillig-1fa825233448807fa2abe4858c29657b?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR","600"],
+["The Invisible Life Of Addie Larue","V.E. Schwab (https://app.notion.com/p/V-E-Schwab-20a82523344880a2bba8fe4d57594946?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","541","June 16, 2025","Physical","100%","","Finished","541"],
+["Kill For Me Kill For You","Steve Cavanagh (https://app.notion.com/p/Steve-Cavanagh-1fc825233448803a9ebbdb87c6ca3261?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","353","June 20, 2025","Physical","100%","★★★☆☆","Finished","353"],
+["Promise Me Sunshine","Cara Bastone (https://app.notion.com/p/Cara-Bastone-21482523344880cba1bbd0bbec59179e?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","394","August 11, 2025","Physical","100%","★★★★☆","Finished","394"],
+["One Golden Summer","Carley Fortune (https://app.notion.com/p/Carley-Fortune-214825233448805d97fada7f32e1b86d?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","370","June 30, 2025","Physical","100%","★★★★★","Finished","370"],
+["Bury Our Bones in the Midnight Soil","V.E. Schwab (https://app.notion.com/p/V-E-Schwab-20a82523344880a2bba8fe4d57594946?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","533","July 6, 2025","Physical","100%","★★☆☆☆","Finished","533"],
+["To Kill a Kingdom","Alexandra Christo (https://app.notion.com/p/Alexandra-Christo-214825233448802095e3f8f861067f6c?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["Atmosphere","Taylor Jenkins Reid (https://app.notion.com/p/Taylor-Jenkins-Reid-1fc82523344880fc9003dc7587195e14?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","332","June 25, 2025","Physical","100%","★★★★★","Finished","332"],
+["Homeseeking","Karissa Chen (https://app.notion.com/p/Karissa-Chen-21982523344880018c21c68c7d92ef5f?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","","","Physical","0%","","TBR","488"],
+["The Spellshop","Sarah Beth Durst (https://app.notion.com/p/Sarah-Beth-Durst-219825233448806d9261d1a09d9ca798?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","374"],
+["Great Big Beautiful Life","Emily Henry (https://app.notion.com/p/Emily-Henry-1fb825233448809386b0dfdf962cfb7c?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","416","May 10, 2026","Physical","100%","★★☆☆☆","Finished","416"],
+["A Darker Shade of Magic","V.E. Schwab (https://app.notion.com/p/V-E-Schwab-20a82523344880a2bba8fe4d57594946?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","400"],
+["The Nightingale","Kristin Hannah (https://app.notion.com/p/Kristin-Hannah-21c82523344880c88d88c15eadf657c0?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","564","September 25, 2025","Physical","100%","★★★★☆","Finished","564"],
+["The Tainted Cup","Robert Jackson Bennett (https://app.notion.com/p/Robert-Jackson-Bennett-22282523344880f2b964efaf2bbb9e18?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Physical","0%","","TBR","406"],
+["Where the Crawdads Sing","Delia Owens (https://app.notion.com/p/Delia-Owens-2228252334488082883ede0ff5ba7b11?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR","368"],
+["Seven Days in June","Tia Williams (https://app.notion.com/p/Tia-Williams-224825233448801cacf0c8e44d9e21c8?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","325","July 21, 2025","Physical","100%","★★★★☆","Finished","325"],
+["Hamnet","Maggie O'Farrell (https://app.notion.com/p/Maggie-O-Farrell-22582523344880789e1edf8004c1df7a?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","367","May 8, 2026","Physical","100%","★★★★☆","Finished","367"],
+["Martyr!","Kaveh Akbar (https://app.notion.com/p/Kaveh-Akbar-225825233448807680f2cd04426ab6c1?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","331","July 18, 2025","Physical","100%","★★☆☆☆","Finished","331"],
+["Wild Love","Elsie Silver (https://app.notion.com/p/Elsie-Silver-2258252334488000a7acd0229b5aef1e?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","447","July 9, 2025","Physical","100%","★★★★☆","Finished","447"],
+["This Summer Will Be Different","Carley Fortune (https://app.notion.com/p/Carley-Fortune-214825233448805d97fada7f32e1b86d?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","333","September 13, 2025","Physical","100%","★★★★☆","Finished","333"],
+["His & Hers","Alice Feeney (https://app.notion.com/p/Alice-Feeney-2298252334488094a3c4f33281b508f0?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","695","November 28, 2025","Kobo","100%","★★★★★","Finished","695"],
+["Beg, Borrow, or Steal","Sarah Adams (https://app.notion.com/p/Sarah-Adams-23082523344880ebb05cf8c96123c18a?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","360","March 18, 2026","Physical","100%","★★★☆☆","Finished","360"],
+["My Friends","Fredrik Backman (https://app.notion.com/p/Fredrik-Backman-20a825233448808094dcfac14ba4af48?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","434","August 26, 2025","Physical","100%","","Finished","434"],
+["Anxious People","Fredrik Backman (https://app.notion.com/p/Fredrik-Backman-20a825233448808094dcfac14ba4af48?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","336","October 9, 2025","Physical","100%","★★★★★","Finished","336"],
+["None of This Is True","Lisa Jewell (https://app.notion.com/p/Lisa-Jewell-23082523344880ec998aecdb290e8c6d?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","","","","0%","","Want to Read",""],
+["Broken Country","Clare Leslie Hall (https://app.notion.com/p/Clare-Leslie-Hall-23082523344880b2a242f00722e1f6d9?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","303","August 19, 2025","Physical","100%","★★★☆☆","Finished","303"],
+["These Summer Storms","Sarah MacLean (https://app.notion.com/p/Sarah-MacLean-2308252334488055a9c1fa7562045f5d?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","380","September 17, 2025","Physical","100%","★★★☆☆","Finished","380"],
+["When the Moon Hatched","Sarah A. Parker (https://app.notion.com/p/Sarah-A-Parker-23182523344880a2a198f912a10b8d35?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kindle Unlimited","0%","","Want to Read",""],
+["The Rose Bargain","Sasha Peyton Smith (https://app.notion.com/p/Sasha-Peyton-Smith-23382523344880f0808be41eb8f0ac8e?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kobo","0%","","TBR","604"],
+["The Lying Life of Adults","Elena Ferrante (https://app.notion.com/p/Elena-Ferrante-2358252334488079b5affdcd6b0b107d?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kobo Plus","0%","","Want to Read",""],
+["The Summer Guests","Tess Gerristen (https://app.notion.com/p/Tess-Gerristen-1fa82523344880499830cdfc6086ccdc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","365","August 31, 2025","Physical","100%","★★★★☆","Finished","365"],
+["First Lie Wins","Ashley Elston (https://app.notion.com/p/Ashley-Elston-25a82523344880028b67cbf8d5787507?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","338","February 12, 2026","Physical","100%","★★★☆☆","Finished","338"],
+["The Ex Vows","Jessica Joyce (https://app.notion.com/p/Jessica-Joyce-25e825233448802ba514c549d741d436?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","542","October 18, 2025","Kobo","100%","★★★☆☆","Finished","542"],
+["James","Percival Everett (https://app.notion.com/p/Percival-Everett-25e825233448809dbb77d644c62b7b06?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","303","September 6, 2025","Physical","100%","★★★★☆","Finished","303"],
+["Better Than the Movies","Lynn Painter (https://app.notion.com/p/Lynn-Painter-25e82523344880078732fee077b089b3?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","349","September 27, 2025","Physical","100%","★★★☆☆","Finished","349"],
+["The Wedding People","Alison Espach (https://app.notion.com/p/Alison-Espach-25e8252334488089bf1acde928cd7566?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","363","September 9, 2025","Physical","100%","★★★★☆","Finished","363"],
+["Margo's Got Money Troubles","Rufi Thorpe (https://app.notion.com/p/Rufi-Thorpe-25f825233448800893b8ff731cece057?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR",""],
+["The Striker","Ana Huang (https://app.notion.com/p/Ana-Huang-26a82523344880ed8ceffe2a2620be63?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","577","October 7, 2025","Physical","100%","★★☆☆☆","Finished","577"],
+["Eleanor Oliphant Is Completely Fine","Gail Honeyman (https://app.notion.com/p/Gail-Honeyman-26a82523344880baacd4ce6870746b84?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR","325"],
+["Demon Copperhead","Barbara Kingsolver (https://app.notion.com/p/Barbara-Kingsolver-26d82523344880ada4f9d27a9810347c?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","546","April 23, 2026","Physical","100%","★★☆☆☆","Finished","546"],
+["Atomic Habits","James Clear (https://app.notion.com/p/James-Clear-27f82523344880dc9e14e6bac440a38f?pvs=21)","Self Growth (https://app.notion.com/p/Self-Growth-1fa82523344881b29746fd417a118fef?pvs=21)","484","April 17, 2026","Kobo","100%","★★★★☆","Finished","484"],
+["The Housemaid","Freida McFadden (https://app.notion.com/p/Freida-McFadden-281825233448808eb1e6f30cf51d94bc?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","329","October 6, 2025","Kindle Unlimited","100%","★★★☆☆","Finished","329"],
+["Rewind It Back","Liz Tomforde (https://app.notion.com/p/Liz-Tomforde-28482523344880ea8139de676e14f13d?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","378","October 23, 2025","Kindle Unlimited","100%","★★★★★","Finished","378"],
+["People We Meet on Vacation","Emily Henry (https://app.notion.com/p/Emily-Henry-1fb825233448809386b0dfdf962cfb7c?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","","","Kobo","0%","","DNF",""],
+["The Conditions of Will","Jessica Hastings (https://app.notion.com/p/Jessica-Hastings-28582523344880d5bbaec48b215bd4e3?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","459","February 8, 2026","Kindle","100%","★★☆☆☆","Finished","459"],
+["The Spear Cuts Through Water","Simon Jimenez (https://app.notion.com/p/Simon-Jimenez-29082523344880a78f4df2ec28cb150c?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kindle","0%","","TBR","516"],
+["Wild Dark Shore","Charlotte McConaghy (https://app.notion.com/p/Charlotte-McConaghy-290825233448806da2c8e3e987864b27?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","298","March 12, 2026","Kindle","100%","★★★☆☆","Finished","298"],
+["If It Makes You Happy","Julie Olivia (https://app.notion.com/p/Julie-Olivia-29082523344880e98b77d6532a690eea?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","490","November 10, 2025","Kindle","100%","★★★★★","Finished","490"],
+["Grave Situation","Louisa Masters (https://app.notion.com/p/Louisa-Masters-2958252334488014b4dde55cd4575a06?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","572","October 30, 2025","Kindle Unlimited","100%","★★★★☆","Finished","572"],
+["If We Were Villains","M. L. Rio (https://app.notion.com/p/M-L-Rio-29c8252334488074897ace1c0b792de2?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","366","November 6, 2025","Kindle","100%","★★★☆☆","Finished","366"],
+["Educated","Tara Westover (https://app.notion.com/p/Tara-Westover-29c82523344880fab829d7570f0a062f?pvs=21)","Memoir (https://app.notion.com/p/Memoir-1fa82523344880c48e09eb9e5f4629f7?pvs=21)","","","Physical","0%","","TBR",""],
+["The Safekeep","Yael van der Wouden (https://app.notion.com/p/Yael-van-der-Wouden-29c825233448801ba707e80812cca8ce?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR","258"],
+["Hot for Slayer","Ali Hazelwood (https://app.notion.com/p/Ali-Hazelwood-1fb82523344880bf8371ded085b1e853?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","88","October 31, 2025","Kindle Unlimited","100%","★★★☆☆","Finished","88"],
+["The Raven Scholar","Antonia Hodgson (https://app.notion.com/p/Antonia-Hodgson-29d825233448808a89ffdc26615ac649?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","","0%","","Want to Read",""],
+["The Ex Hex","Erin Sterling (https://app.notion.com/p/Erin-Sterling-29e825233448801db8f9cef6c04c3ef0?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","307","November 2, 2025","Kindle Unlimited","100%","★★★☆☆","Finished","307"],
+["A River Enchanted","Rebecca Ross (https://app.notion.com/p/Rebecca-Ross-20c825233448806783abe911c1d437f2?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kindle Unlimited","0%","","Want to Read","464"],
+["Before We Were Strangers","Renee Carlino (https://app.notion.com/p/Renee-Carlino-2a8825233448803fa6bdd15a2540e567?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","310","November 15, 2025","Kindle Unlimited","100%","★★★★☆","Finished","310"],
+["The God of the Woods","Liz Moore (https://app.notion.com/p/Liz-Moore-2a982523344880b1a3e9da1390f17d76?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","476","November 30, 2025","Kindle","100%","★★☆☆☆","Finished","476"],
+["A Song to Drown Rivers","Ann Liang (https://app.notion.com/p/Ann-Liang-2aa82523344880c892f9c07b06197fa9?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","322","December 6, 2025","Kindle","100%","★★★★☆","Finished","322"],
+["It's Different This Time","Joss Richard (https://app.notion.com/p/Joss-Richard-2b382523344880289473c42a842e1c40?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","416","November 28, 2025","Kindle","100%","★★★☆☆","Finished","416"],
+["Mate","Ali Hazelwood (https://app.notion.com/p/Ali-Hazelwood-1fb82523344880bf8371ded085b1e853?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","","","Kobo","0%","","TBR",""],
+["The Bodyguard","Katherine Center (https://app.notion.com/p/Katherine-Center-2bb825233448807ca7e9fddf31efa0f5?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","302","December 8, 2025","Kindle","100%","★★★☆☆","Finished","302"],
+["Pictures of You","Emma Grey (https://app.notion.com/p/Emma-Grey-2c78252334488019a5b3f6e023bc23a8?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","406","December 16, 2025","Kindle","100%","★★★☆☆","Finished","406"],
+["The Bright Years","Sarah Damoff (https://app.notion.com/p/Sarah-Damoff-2d1825233448809fb1edff3a38c7f809?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","271","December 28, 2025","Kindle","100%","★★★★☆","Finished","271"],
+["The Favorites","Layne Fargo (https://app.notion.com/p/Layne-Fargo-2d6825233448806fa86cca0b77235e4f?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","436","April 30, 2026","Kindle","100%","★★★☆☆","Finished","436"],
+["Tell Me Everything","Elizabeth Strout (https://app.notion.com/p/Elizabeth-Strout-2d6825233448809e9a52fae8a5d3a0df?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kindle","0%","","TBR","338"],
+["Heart the Lover","Lily King (https://app.notion.com/p/Lily-King-2da825233448805b9c38cd66fc2d2764?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","186","January 3, 2026","Kindle","100%","★★★☆☆","Finished","186"],
+["Cover Story","Mhairi McFarlane (https://app.notion.com/p/Mhairi-McFarlane-2e0825233448807b9636cb1587ea04a4?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","","","Kindle","0%","","TBR","378"],
+["Listen for the Lie","Amy Tintera (https://app.notion.com/p/Amy-Tintera-2e282523344880bda431cf3406fbf4b5?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","338","January 14, 2026","Audiobook","100%","★★★☆☆","Finished","338"],
+["The Correspondent","Virginia Evans (https://app.notion.com/p/Virginia-Evans-2eb8252334488001a89ec47c0a83ae10?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kindle","0%","","TBR","304"],
+["My Brilliant Friend","Elena Ferrante (https://app.notion.com/p/Elena-Ferrante-2358252334488079b5affdcd6b0b107d?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kindle","0%","","TBR","377"],
+["Small Things Like These","Claire Keegan (https://app.notion.com/p/Claire-Keegan-3288252334488018a092eb820562b363?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","110","May 12, 2026","Physical","100%","★★★★☆","Finished","110"],
+["The Emperor of Gladness","Ocean Vuong (https://app.notion.com/p/Ocean-Vuong-32982523344880109a4adf88d9303d40?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR",""],
+["國寶 青春篇","吉田修一","Literary Fiction","288","March 25, 2026","Physical","100%","★★★☆☆","Finished","288"],
+["國寶 花道篇","吉田修一","Literary Fiction","294","March 31, 2026","Physical","100%","★★★★☆","Finished","294"],
+["Crime and Punishment","Fyodor Dostoyevsky (https://app.notion.com/p/Fyodor-Dostoyevsky-1fb8252334488067aaedfa56af832631?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kindle","0%","","TBR",""],
+["The Road to Tender Hearts","Annie Hartnett (https://app.notion.com/p/Annie-Hartnett-347825233448809e9284daa504e9fed3?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","364","May 5, 2026","Kindle","100%","","Finished","364"],
+["How to Write a Love Story","Catherine Walsh (https://app.notion.com/p/Catherine-Walsh-34b8252334488050bc65e36fa8007013?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","316","April 27, 2026","Kindle","100%","★★★★☆","Finished","316"],
+["Lady Tan's Circle of Women","Lisa See (https://app.notion.com/p/Lisa-See-355825233448801fbd12e136e0e1a9db?pvs=21)","Historical Fiction (https://app.notion.com/p/Historical-Fiction-21d825233448808c9393c7c6a270d47f?pvs=21)","","","Kindle","0%","","TBR","339"],
+["The Borrowed Life of Frederick Fife","Anna Johnston (https://app.notion.com/p/Anna-Johnston-356825233448803c801ff52b1e21ca79?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Kindle","0%","","TBR",""],
+["Into the Blue","Emma Brodie (https://app.notion.com/p/Emma-Brodie-35b82523344880a1ae20c47e266c232e?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","427","May 14, 2026","Kindle","100%","★★★★★","Finished","427"],
+["The Devils","Joe Abercrombie (https://app.notion.com/p/Joe-Abercrombie-35e825233448804f8916e52fef0469a0?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","","","Kindle","0%","","TBR",""],
+["The Secret of Secrets","Dan Brown (https://app.notion.com/p/Dan-Brown-35e82523344880608ca0c0b5588f48d6?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","","","Physical","0%","","TBR",""],
+["1367","陳浩基","Mystery","176","","Borrowed","35.4%","","Now Reading","496"],
+["The Deep, Deep Snow","Brian Freeman (https://app.notion.com/p/Brian-Freeman-36282523344880e8b4b9c99caffc7336?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","777","May 17, 2026","Kobo Plus","100%","★★★☆☆","Finished","777"],
+["The Ursulina","Brian Freeman (https://app.notion.com/p/Brian-Freeman-36282523344880e8b4b9c99caffc7336?pvs=21)","Mystery (https://app.notion.com/p/Mystery-1fa82523344880babea4fbcb3ec31669?pvs=21)","776","May 18, 2026","Kobo Plus","100%","★★★★☆","Finished","776"],
+["臺灣漫遊錄","楊双子","Historical Fiction","","","Physical","0%","","TBR","364"],
+["Never Let Me Go","Kazuo Ishiguro (https://app.notion.com/p/Kazuo-Ishiguro-36c825233448803b940be837ffb736a2?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR","288"],
+["On Earth We're Briefly Gorgeous","Ocean Vuong (https://app.notion.com/p/Ocean-Vuong-32982523344880109a4adf88d9303d40?pvs=21)","Literary Fiction (https://app.notion.com/p/Literary-Fiction-1fa82523344881b185d5e8be9f39c069?pvs=21)","","","Physical","0%","","TBR","246"],
+["The Well of Ascension","Brandon Sanderson (https://app.notion.com/p/Brandon-Sanderson-1fc8252334488022bfdbc0d0284b829c?pvs=21)","Fantasy (https://app.notion.com/p/Fantasy-1fa825233448816ba435e776c5092e18?pvs=21)","16","","Kindle","2.6%","","Now Reading","598"],
+["The Someday Garden","Ashley Poston (https://app.notion.com/p/Ashley-Poston-1fb825233448807a8068eb6e1f7a8cac?pvs=21)","Romance (https://app.notion.com/p/Romance-1fa8252334488001ba19fb37fb0f723f?pvs=21)","","","Kindle","0%","","TBR",""],
+    ];
+
+    async function startImport() {
+      const btn = document.getElementById("startBtn");
+      btn.disabled = true;
+      log.innerHTML = "";
+      print(`Starting import of ${rawBooks.length} books...`, "info");
+
+      let success = 0, failed = 0;
+      for (let i = 0; i < rawBooks.length; i++) {
+        const r = rawBooks[i];
+        const title      = r[0].trim();
+        const author     = clean(r[1]);
+        const genre      = clean(r[2]);
+        const currentPage= parseInt(r[3]) || 0;
+        const finishDate = parseDate(r[4]);
+        const finishYear = finishDate ? new Date(finishDate).getFullYear() : null;
+        const totalPages = parseInt(r[9]) || 0;
+        const status     = r[8].trim() || "Want to Read";
+        const rating     = parseRating(r[7]);
+        const notes      = rating > 0 ? `Rating: ${"★".repeat(rating)}${"☆".repeat(5-rating)}` : "";
+
+        const book = {
+          title, author, genre,
+          currentPage, totalPages,
+          status,
+          finishDate,
+          startDate: "",
+          startYear: finishYear || new Date().getFullYear(),
+          cover: "",
+          notes,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        try {
+          await booksCol.add(book);
+          success++;
+          print(`[${i+1}/${rawBooks.length}] ✓ ${title}`);
+        } catch (e) {
+          failed++;
+          print(`[${i+1}/${rawBooks.length}] ✗ ${title}: ${e.message}`, "error");
+        }
+
+        // small delay to avoid rate limit
+        if (i % 10 === 9) await new Promise(r => setTimeout(r, 300));
+      }
+
+      print(`\nDone! ✓ ${success} imported, ✗ ${failed} failed.`, "done");
+      btn.textContent = "Done!";
+    }
+  </script>
+</body>
+</html>
