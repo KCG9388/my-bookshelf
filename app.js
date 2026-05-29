@@ -150,29 +150,49 @@ async function fetchBookInfo() {
   const query = document.getElementById("bookSearchInput").value.trim();
   if (!query) return;
   fetchStatus.textContent = "Searching...";
+
+  const isISBN = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
+  const cleanISBN = query.replace(/[\s\-]/g, "");
+
+  // 1. Try Google Books
   try {
-    const isISBN = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
-    const apiQuery = isISBN ? `isbn:${query.replace(/[\s\-]/g,"")}` : encodeURIComponent(query);
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1`);
+    const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&langRestrict=`);
     const data = await res.json();
-    if (!data.items || data.items.length === 0) {
-      fetchStatus.textContent = "No results found. Fill in manually.";
+    if (data.items && data.items.length > 0) {
+      const info = data.items[0].volumeInfo;
+      const cover = info.imageLinks
+        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://","https://")
+        : "";
+      fillForm({ title: info.title || "", author: (info.authors||[]).join(", "), genre: (info.categories||[]).join(", "), totalPages: info.pageCount || "", cover });
+      fetchStatus.textContent = `Found: "${info.title}"`;
       return;
     }
-    const info = data.items[0].volumeInfo;
-    const cover = info.imageLinks
-      ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://","https://")
-      : "";
-    fillForm({
-      title:      info.title || "",
-      author:     (info.authors || []).join(", "),
-      genre:      (info.categories || []).join(", "),
-      totalPages: info.pageCount || "",
-      cover,
-    });
-    fetchStatus.textContent = `Found: "${info.title}"`;
-  } catch {
-    fetchStatus.textContent = "Search failed. Fill in manually.";
+  } catch {}
+
+  // 2. Try Open Library (ISBN only)
+  if (isISBN) {
+    try {
+      const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanISBN}&format=json&jscmd=data`);
+      const data = await res.json();
+      const key = `ISBN:${cleanISBN}`;
+      if (data[key]) {
+        const info = data[key];
+        const cover = info.cover ? (info.cover.large || info.cover.medium || info.cover.small || "") : "";
+        const authors = (info.authors || []).map(a => a.name).join(", ");
+        const subjects = (info.subjects || []).map(s => s.name || s).slice(0,2).join(", ");
+        fillForm({ title: info.title || "", author: authors, genre: subjects, totalPages: info.number_of_pages || "", cover });
+        fetchStatus.textContent = `Found: "${info.title}"`;
+        return;
+      }
+    } catch {}
+  }
+
+  // 3. Try Google Books by title (if ISBN failed)
+  if (isISBN) {
+    fetchStatus.textContent = "ISBN not found. Try searching by book title instead.";
+  } else {
+    fetchStatus.textContent = "No results found. Fill in manually.";
   }
 }
 
