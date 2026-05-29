@@ -7,6 +7,8 @@ const booksCol = db.collection("books");
 let allBooks = [];
 let currentFilter = { status: "all", year: "all", genre: "all", search: "" };
 let currentDetailId = null;
+const PAGE_SIZE = 24;
+let currentPage = 1;
 
 // ── DOM ──
 const bookGrid       = document.getElementById("bookGrid");
@@ -25,9 +27,9 @@ booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
 });
 
 // ── Render ──
-function renderGrid() {
+function filterBooks() {
   const { status, year, genre, search } = currentFilter;
-  let books = allBooks.filter(b => {
+  return allBooks.filter(b => {
     if (status !== "all" && b.status !== status) return false;
     if (year !== "all" && String(b.startYear) !== year) return false;
     if (genre !== "all" && (b.genre || "").toLowerCase() !== genre.toLowerCase()) return false;
@@ -37,22 +39,30 @@ function renderGrid() {
     }
     return true;
   });
+}
 
+function renderGrid() {
+  const books = filterBooks();
   bookCountEl.textContent = `${books.length} book${books.length !== 1 ? "s" : ""}`;
 
   if (books.length === 0) {
     bookGrid.innerHTML = `<div class="empty-state">No books found.</div>`;
+    document.getElementById("pagination").style.display = "none";
     return;
   }
 
-  bookGrid.innerHTML = books.map(b => {
+  const totalPages = Math.ceil(books.length / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = 1;
+  const pageBooks = books.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  bookGrid.innerHTML = pageBooks.map(b => {
     const pct = calcPct(b.currentPage, b.totalPages);
     const coverHTML = b.cover
-      ? `<img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" onerror="this.parentElement.innerHTML='<div class=no-cover>📖</div>'" />`
-      : `<div class="no-cover">📖</div>`;
+      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" onerror="this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
+      : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title)}</div></div>`;
     return `
       <div class="book-card" data-id="${b.id}">
-        <div class="book-cover">${coverHTML}</div>
+        ${coverHTML}
         <div class="book-info">
           <div class="book-title">${escHtml(b.title)}</div>
           <div class="book-author">${escHtml(b.author || "")}</div>
@@ -70,6 +80,36 @@ function renderGrid() {
   bookGrid.querySelectorAll(".book-card").forEach(card => {
     card.addEventListener("click", () => openDetail(card.dataset.id));
   });
+
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  const pg = document.getElementById("pagination");
+  if (totalPages <= 1) { pg.style.display = "none"; return; }
+  pg.style.display = "flex";
+
+  const pages = [];
+  // always show first, last, current ±2
+  const show = new Set([1, totalPages, currentPage, currentPage-1, currentPage+1, currentPage-2, currentPage+2].filter(p => p >= 1 && p <= totalPages));
+  const sorted = [...show].sort((a,b) => a-b);
+
+  let html = `<button class="page-btn" ${currentPage===1?"disabled":""} onclick="goPage(${currentPage-1})">‹</button>`;
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) html += `<span class="page-info">…</span>`;
+    html += `<button class="page-btn ${p===currentPage?"active":""}" onclick="goPage(${p})">${p}</button>`;
+    prev = p;
+  }
+  html += `<button class="page-btn" ${currentPage===totalPages?"disabled":""} onclick="goPage(${currentPage+1})">›</button>`;
+  html += `<span class="page-info">${currentPage} / ${totalPages}</span>`;
+  pg.innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderGrid();
+  document.querySelector(".main").scrollTop = 0;
 }
 
 function calcPct(current, total) {
@@ -112,6 +152,7 @@ function rebuildSidebarFilters() {
 
 function setFilter(key, val) {
   currentFilter[key] = val;
+  currentPage = 1;
   renderGrid();
 }
 
@@ -174,7 +215,6 @@ async function fetchBookInfo() {
 
   // 2. Google Books (with API key, good Chinese support)
   try {
-    const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
     const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
     const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&key=${GBOOKS_KEY}`);
     const data = await res.json();
@@ -522,6 +562,69 @@ function showPreview(filename) {
   startImportBtn.disabled = false;
 }
 
+// ── Background Cover Fetcher ──
+const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
+let coverFetchQueue = [];
+let coverFetchRunning = false;
+
+const toast     = document.getElementById("coverFetchToast");
+const toastFill = document.getElementById("toastFill");
+const toastLabel= document.getElementById("toastLabel");
+document.getElementById("toastClose").addEventListener("click", () => toast.classList.remove("visible"));
+
+function queueCoverFetch(books) {
+  const noCover = books.filter(b => !b.cover && b.title);
+  if (!noCover.length) return;
+  coverFetchQueue.push(...noCover.map(b => ({ id: b.id, title: b.title, author: b.author || "" })));
+  if (!coverFetchRunning) runCoverFetch();
+}
+
+async function runCoverFetch() {
+  coverFetchRunning = true;
+  toast.classList.add("visible");
+  const total = coverFetchQueue.length;
+  let done = 0;
+
+  while (coverFetchQueue.length > 0) {
+    const item = coverFetchQueue.shift();
+    const book = allBooks.find(b => b.id === item.id);
+    if (book?.cover) { done++; continue; }
+
+    const cover = await fetchCoverUrl(item.title, item.author);
+    if (cover) await booksCol.doc(item.id).update({ cover });
+
+    done++;
+    const pct = Math.round((done / total) * 100);
+    toastFill.style.width = pct + "%";
+    toastLabel.textContent = `${done} / ${total} — ${item.title}`;
+    await new Promise(r => setTimeout(r, 350));
+  }
+
+  toastLabel.textContent = `✓ Finished updating covers!`;
+  toastFill.style.width = "100%";
+  setTimeout(() => toast.classList.remove("visible"), 3500);
+  coverFetchRunning = false;
+}
+
+async function fetchCoverUrl(title, author) {
+  try {
+    const q = encodeURIComponent(`${title} ${author}`.trim());
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
+    const data = await res.json();
+    if (data.items?.[0]?.volumeInfo?.imageLinks) {
+      const imgs = data.items[0].volumeInfo.imageLinks;
+      return (imgs.extraLarge || imgs.large || imgs.thumbnail || "").replace("http://", "https://");
+    }
+  } catch {}
+  try {
+    const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&limit=1`);
+    const data = await res.json();
+    const coverId = data.docs?.[0]?.cover_i;
+    if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
+  } catch {}
+  return "";
+}
+
 startImportBtn.addEventListener("click", async () => {
   if (!parsedBooks.length) return;
   startImportBtn.disabled = true;
@@ -562,5 +665,5 @@ startImportBtn.addEventListener("click", async () => {
   labelEl.style.color = "#1a6632";
   startImportBtn.textContent = "Close";
   startImportBtn.disabled = false;
-  startImportBtn.onclick = closeImport;
+  startImportBtn.onclick = () => { closeImport(); queueCoverFetch(allBooks); };
 });

@@ -51,7 +51,18 @@
   <div class="book-grid" id="bookGrid">
     <div class="loading">Loading...</div>
   </div>
+  <div class="pagination" id="pagination" style="display:none"></div>
 </main>
+
+<!-- Cover fetch toast -->
+<div class="cover-fetch-toast" id="coverFetchToast">
+  <div class="toast-header">
+    <span class="toast-title">🔍 Fetching covers...</span>
+    <button class="toast-close" id="toastClose">✕</button>
+  </div>
+  <div class="toast-progress-bar"><div class="toast-progress-fill" id="toastFill"></div></div>
+  <div class="toast-label" id="toastLabel"></div>
+</div>
 
 <!-- 新增書籍 Modal -->
 <div class="modal-overlay" id="addModal">
