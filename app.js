@@ -639,8 +639,8 @@ function openDetail(id) {
   loadReviews(id);
 
   // reset review form
-  selectedRating = 0; highlightStars(0);
-  document.getElementById("starPickLabel").textContent = "Select rating";
+  selectedRating = 0; renderStars(0); updateStarLabel(0, true);
+  updateStarLabel(0, true);
   document.getElementById("reviewerName").value = "";
   document.getElementById("reviewText").value = "";
 
@@ -670,30 +670,79 @@ detailModal.addEventListener("click", e => {
 let selectedRating = 0;
 let reviewsUnsub = null;
 
-document.querySelectorAll(".star-pick").forEach(s => {
-  s.addEventListener("mouseover", () => highlightStars(+s.dataset.v));
-  s.addEventListener("mouseleave", () => highlightStars(selectedRating));
-  s.addEventListener("click", () => {
-    selectedRating = +s.dataset.v;
-    highlightStars(selectedRating);
-    const labels = ["","★ Poor","★★ Fair","★★★ Good","★★★★ Great","★★★★★ Excellent"];
-    document.getElementById("starPickLabel").textContent = labels[selectedRating];
+// Build quarter-star picker
+(function buildStarPicker() {
+  const picker = document.getElementById("starPicker");
+  picker.innerHTML = "";
+  for (let i = 1; i <= 5; i++) {
+    const unit = document.createElement("span");
+    unit.className = "star-unit";
+    unit.dataset.star = i;
+    unit.innerHTML = `<span class="star-bg">★</span><span class="star-fg">★</span>`;
+    picker.appendChild(unit);
+  }
+
+  function ratingFromEvent(e) {
+    const rect = picker.getBoundingClientRect();
+    const x = Math.max(0, e.clientX - rect.left);
+    const starWidth = rect.width / 5;
+    const starIdx = Math.min(4, Math.floor(x / starWidth));       // 0-4
+    const fraction = (x - starIdx * starWidth) / starWidth;       // 0-1
+    const quarter = Math.ceil(fraction / 0.25) * 0.25 || 0.25;   // 0.25/0.5/0.75/1.0
+    return Math.min(5, +(starIdx + quarter).toFixed(2));
+  }
+
+  picker.addEventListener("mousemove", e => {
+    renderStars(ratingFromEvent(e));
+    updateStarLabel(ratingFromEvent(e), false);
   });
-});
+  picker.addEventListener("mouseleave", () => {
+    renderStars(selectedRating);
+    updateStarLabel(selectedRating, true);
+  });
+  picker.addEventListener("click", e => {
+    selectedRating = ratingFromEvent(e);
+    renderStars(selectedRating);
+    updateStarLabel(selectedRating, true);
+  });
+})();
 
-document.getElementById("reviewPct").addEventListener("input", e => {
-  document.getElementById("reviewPctDisplay").textContent = e.target.value;
-});
-
-function highlightStars(n) {
-  document.querySelectorAll(".star-pick").forEach(s => {
-    s.classList.toggle("selected", +s.dataset.v <= n);
+function renderStars(rating) {
+  document.querySelectorAll("#starPicker .star-unit").forEach((unit, i) => {
+    const fg = unit.querySelector(".star-fg");
+    const diff = rating - i;           // how much of this star is filled
+    if (diff >= 1)      fg.style.width = "100%";
+    else if (diff > 0)  fg.style.width = (diff * 100).toFixed(0) + "%";
+    else                fg.style.width = "0%";
   });
 }
 
+function updateStarLabel(rating, committed) {
+  const el = document.getElementById("starPickLabel");
+  if (!rating) { el.textContent = "Select rating"; el.style.color = "#9b9a97"; return; }
+  const label =
+    rating <= 1   ? "😞 Didn't like it" :
+    rating <= 2   ? "😐 It was ok"       :
+    rating <= 3   ? "🙂 Liked it"        :
+    rating <= 4   ? "😊 Really liked it" :
+                    "🤩 Amazing!";
+  el.textContent = `${rating} — ${label}`;
+  el.style.color = committed ? "#f0a500" : "#6b6b68";
+}
+
 function starsHTML(rating) {
-  const full = Math.round(rating);
-  return "★".repeat(full) + "☆".repeat(5 - full);
+  // render partial stars for display in review cards
+  if (!rating) return "";
+  let html = "";
+  for (let i = 1; i <= 5; i++) {
+    const diff = rating - (i - 1);
+    if (diff >= 1)         html += `<span style="color:#f0a500">★</span>`;
+    else if (diff >= 0.75) html += `<span style="color:#f0a500;opacity:.85">★</span>`;
+    else if (diff >= 0.5)  html += `<span style="color:#f0a500;opacity:.6">★</span>`;
+    else if (diff >= 0.25) html += `<span style="color:#f0a500;opacity:.35">★</span>`;
+    else                   html += `<span style="color:#ddd">★</span>`;
+  }
+  return html;
 }
 
 function loadReviews(bookId) {
@@ -742,7 +791,7 @@ function renderReviews(reviews) {
       <div class="review-top">
         <div class="reviewer-avatar">${escHtml(initials)}</div>
         <div class="reviewer-name">${escHtml(r.reviewerName||"Anonymous")}</div>
-        ${r.rating?`<div class="review-stars">${starsHTML(r.rating)}</div>`:""}
+        ${r.rating?`<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>`:""}
         ${r.readPercent!=null?`<div class="review-read-badge">Read ${r.readPercent}%</div>`:""}
       </div>
       ${r.text?`<div class="review-text">${escHtml(r.text)}</div>`:""}
@@ -779,8 +828,8 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
     document.getElementById("reviewText").value = "";
     document.getElementById("reviewPct").value = "0";
     document.getElementById("reviewPctDisplay").textContent = "0";
-    selectedRating = 0; highlightStars(0);
-    document.getElementById("starPickLabel").textContent = "Select rating";
+    selectedRating = 0; renderStars(0); updateStarLabel(0, true);
+    updateStarLabel(0, true);
   } catch(e) { alert("Failed: " + e.message); }
   btn.disabled = false; btn.textContent = "Submit Review";
 });

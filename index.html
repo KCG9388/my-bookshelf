@@ -307,12 +307,8 @@
         <div class="write-review-title">✍️ Write a Review</div>
         <div class="review-form">
           <input type="text" id="reviewerName" placeholder="Your name or nickname" maxlength="30" />
-          <div class="star-picker" id="starPicker">
-            <span class="star-pick" data-v="1">★</span>
-            <span class="star-pick" data-v="2">★</span>
-            <span class="star-pick" data-v="3">★</span>
-            <span class="star-pick" data-v="4">★</span>
-            <span class="star-pick" data-v="5">★</span>
+          <div class="star-picker-wrap">
+            <div class="star-picker-quarter" id="starPicker"></div>
             <span class="star-pick-label" id="starPickLabel">Select rating</span>
           </div>
           <textarea id="reviewText" placeholder="Share your thoughts... (optional)" rows="3"></textarea>
