@@ -265,6 +265,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Ratings & Reviews -->
+    <div class="reviews-section">
+      <div class="reviews-header">
+        <div class="reviews-aggregate" id="reviewsAggregate">
+          <div class="agg-score" id="aggScore">—</div>
+          <div class="agg-stars" id="aggStars"></div>
+          <div class="agg-count" id="aggCount">No reviews yet</div>
+        </div>
+        <div class="rating-bars" id="ratingBars"></div>
+      </div>
+
+      <div class="reviews-list" id="reviewsList"></div>
+
+      <!-- Write a review -->
+      <div class="write-review" id="writeReview">
+        <div class="write-review-title">✍️ Write a Review</div>
+        <div class="review-form">
+          <input type="text" id="reviewerName" placeholder="Your name / nickname" maxlength="30" />
+          <div class="star-picker" id="starPicker">
+            <span class="star-pick" data-v="1">★</span>
+            <span class="star-pick" data-v="2">★</span>
+            <span class="star-pick" data-v="3">★</span>
+            <span class="star-pick" data-v="4">★</span>
+            <span class="star-pick" data-v="5">★</span>
+            <span class="star-pick-label" id="starPickLabel">Select rating</span>
+          </div>
+          <textarea id="reviewText" placeholder="Share your thoughts... (optional)" rows="3"></textarea>
+          <div class="review-read-pct">
+            <label>I've read <strong id="reviewPctDisplay">0</strong>% of this book</label>
+            <input type="range" id="reviewPct" min="0" max="100" value="0" />
+          </div>
+          <button class="btn-submit-review" id="submitReviewBtn">Submit Review</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

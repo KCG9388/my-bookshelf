@@ -562,11 +562,150 @@ function openDetail(id) {
   document.getElementById("detailNotes").textContent = b.notes || "";
 
   detailModal.classList.add("open");
+  loadReviews(id);
+
+  // reset review form
+  selectedRating = 0; highlightStars(0);
+  document.getElementById("starPickLabel").textContent = "Select rating";
+  document.getElementById("reviewPct").value = "0";
+  document.getElementById("reviewPctDisplay").textContent = "0";
+  // pre-fill read % from book progress
+  const pct = calcPct(b.currentPage, b.totalPages);
+  if (pct !== null) {
+    document.getElementById("reviewPct").value = pct;
+    document.getElementById("reviewPctDisplay").textContent = pct;
+  }
 }
 
-document.getElementById("closeDetailModal").addEventListener("click", () => detailModal.classList.remove("open"));
-// Detail modal: click outside still closes (less critical, no text editing)
-detailModal.addEventListener("click", e => { if (e.target === detailModal) detailModal.classList.remove("open"); });
+document.getElementById("closeDetailModal").addEventListener("click", () => {
+  detailModal.classList.remove("open");
+  if (reviewsUnsub) { reviewsUnsub(); reviewsUnsub = null; }
+});
+detailModal.addEventListener("click", e => {
+  if (e.target === detailModal) {
+    detailModal.classList.remove("open");
+    if (reviewsUnsub) { reviewsUnsub(); reviewsUnsub = null; }
+  }
+});
+
+// ── Reviews ──
+let selectedRating = 0;
+let reviewsUnsub = null;
+
+document.querySelectorAll(".star-pick").forEach(s => {
+  s.addEventListener("mouseover", () => highlightStars(+s.dataset.v));
+  s.addEventListener("mouseleave", () => highlightStars(selectedRating));
+  s.addEventListener("click", () => {
+    selectedRating = +s.dataset.v;
+    highlightStars(selectedRating);
+    const labels = ["","★ Poor","★★ Fair","★★★ Good","★★★★ Great","★★★★★ Excellent"];
+    document.getElementById("starPickLabel").textContent = labels[selectedRating];
+  });
+});
+
+document.getElementById("reviewPct").addEventListener("input", e => {
+  document.getElementById("reviewPctDisplay").textContent = e.target.value;
+});
+
+function highlightStars(n) {
+  document.querySelectorAll(".star-pick").forEach(s => {
+    s.classList.toggle("selected", +s.dataset.v <= n);
+  });
+}
+
+function starsHTML(rating) {
+  const full = Math.round(rating);
+  return "★".repeat(full) + "☆".repeat(5 - full);
+}
+
+function loadReviews(bookId) {
+  if (reviewsUnsub) reviewsUnsub();
+  const reviewsCol = db.collection("books").doc(bookId).collection("reviews");
+  reviewsUnsub = reviewsCol.orderBy("createdAt","desc").onSnapshot(snap => {
+    renderReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+}
+
+function renderReviews(reviews) {
+  const aggScore  = document.getElementById("aggScore");
+  const aggStars  = document.getElementById("aggStars");
+  const aggCount  = document.getElementById("aggCount");
+  const ratingBars= document.getElementById("ratingBars");
+  const reviewsList = document.getElementById("reviewsList");
+
+  if (!reviews.length) {
+    aggScore.textContent = "—"; aggStars.textContent = ""; aggCount.textContent = "No reviews yet";
+    ratingBars.innerHTML = "";
+    reviewsList.innerHTML = `<div style="color:#9b9a97;font-size:13px;text-align:center;padding:16px 0">Be the first to review this book!</div>`;
+    return;
+  }
+
+  const withRating = reviews.filter(r => r.rating > 0);
+  const avg = withRating.length ? withRating.reduce((s,r) => s+r.rating,0) / withRating.length : 0;
+  aggScore.textContent = avg.toFixed(1);
+  aggStars.textContent = starsHTML(avg);
+  aggCount.textContent = `${reviews.length} review${reviews.length>1?"s":""}`;
+
+  const counts = [0,0,0,0,0,0];
+  withRating.forEach(r => counts[r.rating]++);
+  ratingBars.innerHTML = [5,4,3,2,1].map(n => {
+    const pct = withRating.length ? Math.round((counts[n]/withRating.length)*100) : 0;
+    return `<div class="rating-bar-row">
+      <span class="bar-label">${n}★</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <span class="bar-count">${counts[n]}</span>
+    </div>`;
+  }).join("");
+
+  reviewsList.innerHTML = reviews.map(r => {
+    const initials = (r.reviewerName||"?").slice(0,2).toUpperCase();
+    const date = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}) : "";
+    return `<div class="review-card">
+      <div class="review-top">
+        <div class="reviewer-avatar">${escHtml(initials)}</div>
+        <div class="reviewer-name">${escHtml(r.reviewerName||"Anonymous")}</div>
+        ${r.rating?`<div class="review-stars">${starsHTML(r.rating)}</div>`:""}
+        ${r.readPercent!=null?`<div class="review-read-badge">Read ${r.readPercent}%</div>`:""}
+      </div>
+      ${r.text?`<div class="review-text">${escHtml(r.text)}</div>`:""}
+      <div class="review-date">${date}</div>
+    </div>`;
+  }).join("");
+}
+
+// Also show avg rating on book cards
+function getBookRating(bookId) {
+  return db.collection("books").doc(bookId).collection("reviews")
+    .get().then(snap => {
+      const ratings = snap.docs.map(d=>d.data().rating).filter(Boolean);
+      return ratings.length ? (ratings.reduce((a,b)=>a+b,0)/ratings.length) : null;
+    });
+}
+
+document.getElementById("submitReviewBtn").addEventListener("click", async () => {
+  const name = document.getElementById("reviewerName").value.trim();
+  const text = document.getElementById("reviewText").value.trim();
+  const pct  = parseInt(document.getElementById("reviewPct").value);
+  if (!name)           { alert("Please enter your name or nickname."); return; }
+  if (!selectedRating) { alert("Please select a star rating."); return; }
+
+  const btn = document.getElementById("submitReviewBtn");
+  btn.disabled = true; btn.textContent = "Submitting...";
+  try {
+    await db.collection("books").doc(currentDetailId).collection("reviews").add({
+      reviewerName: name, rating: selectedRating, text,
+      readPercent: pct,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    document.getElementById("reviewerName").value = "";
+    document.getElementById("reviewText").value = "";
+    document.getElementById("reviewPct").value = "0";
+    document.getElementById("reviewPctDisplay").textContent = "0";
+    selectedRating = 0; highlightStars(0);
+    document.getElementById("starPickLabel").textContent = "Select rating";
+  } catch(e) { alert("Failed: " + e.message); }
+  btn.disabled = false; btn.textContent = "Submit Review";
+});
 
 document.getElementById("updatePageBtn").addEventListener("click", async () => {
   if (!currentDetailId) return;
