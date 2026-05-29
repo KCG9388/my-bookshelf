@@ -39,6 +39,7 @@
   </div>
 
   <button class="add-btn" id="openAddModal">+ New Book</button>
+  <button class="import-btn" id="openImportModal">⬆ Import from Notion</button>
 </aside>
 
 <!-- 主內容 -->
@@ -183,6 +184,63 @@
           <button class="btn-delete" id="deleteBookBtn">Delete</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal modal-import">
+    <div class="modal-header">
+      <h2>⬆ Import from Notion</h2>
+      <button class="modal-close" id="closeImportModal">✕</button>
+    </div>
+
+    <div class="import-body">
+      <!-- 說明 -->
+      <div class="import-instructions">
+        <div class="instruction-title">📋 How to export from Notion</div>
+        <ol>
+          <li>Open your book database page in Notion</li>
+          <li>Click <strong>⋯</strong> (top right) → <strong>Export</strong></li>
+          <li>Set Format to <strong>CSV</strong></li>
+          <li>Click <strong>Export</strong> and save the file</li>
+          <li>Upload the <code>.csv</code> file below</li>
+        </ol>
+        <div class="instruction-note">
+          ⚠️ Your Notion database must have these columns:<br/>
+          <code>Title</code>, <code>Author</code>, <code>Status</code>, <code>Total Pages</code>, <code>Current Page</code>, <code>Genre</code>, <code>Date Finished</code>
+        </div>
+      </div>
+
+      <!-- 上傳區 -->
+      <div class="import-upload-area" id="importDropZone">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text">Drag &amp; drop your CSV file here<br/><span>or click to browse</span></div>
+        <input type="file" id="importFileInput" accept=".csv" style="display:none" />
+      </div>
+
+      <!-- 預覽 -->
+      <div class="import-preview" id="importPreview" style="display:none">
+        <div class="preview-summary" id="previewSummary"></div>
+        <div class="preview-table-wrap">
+          <table class="preview-table" id="previewTable"></table>
+        </div>
+      </div>
+
+      <!-- 進度 -->
+      <div class="import-progress" id="importProgress" style="display:none">
+        <div class="progress-label" id="importProgressLabel">Importing...</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="importProgressFill" style="width:0%"></div>
+        </div>
+        <div class="import-log" id="importLog"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" id="cancelImport">Cancel</button>
+      <button class="btn-save" id="startImportBtn" disabled>Import Books</button>
     </div>
   </div>
 </div>

@@ -345,3 +345,222 @@ document.getElementById("deleteBookBtn").addEventListener("click", async () => {
   await booksCol.doc(currentDetailId).delete();
   detailModal.classList.remove("open");
 });
+
+// ── Import Modal ──
+const importModal   = document.getElementById("importModal");
+const importFileInput = document.getElementById("importFileInput");
+const importDropZone  = document.getElementById("importDropZone");
+const startImportBtn  = document.getElementById("startImportBtn");
+let parsedBooks = [];
+
+document.getElementById("openImportModal").addEventListener("click", () => {
+  resetImport();
+  importModal.classList.add("open");
+});
+document.getElementById("closeImportModal").addEventListener("click", closeImport);
+document.getElementById("cancelImport").addEventListener("click", closeImport);
+importModal.addEventListener("click", e => { if (e.target === importModal) closeImport(); });
+
+function closeImport() { importModal.classList.remove("open"); resetImport(); }
+
+function resetImport() {
+  parsedBooks = [];
+  importFileInput.value = "";
+  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("importProgress").style.display = "none";
+  document.getElementById("importDropZone").style.display = "";
+  importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">Drag &amp; drop your CSV file here<br/><span>or click to browse</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
+  bindFileInput();
+  startImportBtn.disabled = true;
+  startImportBtn.textContent = "Import Books";
+}
+
+function bindFileInput() {
+  const fi = document.getElementById("importFileInput");
+  importDropZone.addEventListener("click", () => fi.click());
+  fi.addEventListener("change", e => handleFile(e.target.files[0]));
+  importDropZone.addEventListener("dragover", e => { e.preventDefault(); importDropZone.classList.add("drag-over"); });
+  importDropZone.addEventListener("dragleave", () => importDropZone.classList.remove("drag-over"));
+  importDropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    importDropZone.classList.remove("drag-over");
+    handleFile(e.dataTransfer.files[0]);
+  });
+}
+bindFileInput();
+
+function handleFile(file) {
+  if (!file || !file.name.endsWith(".csv")) {
+    alert("Please upload a .csv file exported from Notion.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => parseNotionCSV(e.target.result, file.name);
+  reader.readAsText(file, "UTF-8");
+}
+
+function parseNotionCSV(text, filename) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { alert("CSV appears empty."); return; }
+
+  const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
+
+  // flexible column mapping
+  const col = name => {
+    const aliases = {
+      title:       ["title"],
+      author:      ["author", " author"],
+      genre:       ["genre"],
+      status:      ["status"],
+      currentpage: ["current page", "currentpage", "current_page"],
+      totalpages:  ["total pages", "totalpages", "total_pages"],
+      finishdate:  ["date finished", "finish date", "finishdate", "date_finished"],
+      startdate:   ["date started", "start date", "startdate", "date_started"],
+      rating:      ["rate", "rating"],
+    };
+    const list = aliases[name] || [name];
+    for (const a of list) {
+      const i = headers.indexOf(a);
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+
+  if (col("title") === -1) {
+    alert("Could not find a 'Title' column. Make sure you exported the correct Notion database.");
+    return;
+  }
+
+  parsedBooks = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCSVRow(lines[i]);
+    const get = name => (cells[col(name)] || "").trim();
+
+    const title = cleanNotionCell(get("title"));
+    if (!title) continue;
+
+    const finishDate = parseNotionDate(cleanNotionCell(get("finishdate")));
+    const startDate  = parseNotionDate(cleanNotionCell(get("startdate")));
+    const finishYear = finishDate ? new Date(finishDate).getFullYear() : null;
+    const startYear  = startDate  ? new Date(startDate).getFullYear()  : null;
+    const ratingRaw  = cleanNotionCell(get("rating"));
+    const stars      = (ratingRaw.match(/★/g) || []).length;
+    const notes      = stars > 0 ? `Rating: ${"★".repeat(stars)}${"☆".repeat(5-stars)}` : "";
+
+    parsedBooks.push({
+      title,
+      author:      cleanNotionCell(get("author")),
+      genre:       cleanNotionCell(get("genre")),
+      status:      cleanNotionCell(get("status")) || "Want to Read",
+      currentPage: parseInt(cleanNotionCell(get("currentpage"))) || 0,
+      totalPages:  parseInt(cleanNotionCell(get("totalpages"))) || 0,
+      finishDate,
+      startDate,
+      startYear:   startYear || finishYear || new Date().getFullYear(),
+      cover:       "",
+      notes,
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  showPreview(filename);
+}
+
+function cleanNotionCell(str) {
+  if (!str) return "";
+  // Remove Notion internal links: "Text (https://app.notion.com/...)"
+  return str.replace(/\s*\(https?:\/\/[^)]+\)/g, "").trim();
+}
+
+function parseNotionDate(str) {
+  if (!str) return "";
+  const d = new Date(str);
+  if (isNaN(d)) return "";
+  return d.toISOString().split("T")[0];
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let cur = "", inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur); cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function showPreview(filename) {
+  importDropZone.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><div class="upload-filename">${filename}</div><span style="color:#6b6b68;text-decoration:none">Click to change file</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
+  bindFileInput();
+
+  const preview = document.getElementById("importPreview");
+  document.getElementById("previewSummary").textContent = `Found ${parsedBooks.length} books ready to import.`;
+
+  const sample = parsedBooks.slice(0, 5);
+  const table = document.getElementById("previewTable");
+  table.innerHTML = `
+    <thead><tr><th>Title</th><th>Author</th><th>Genre</th><th>Status</th><th>Pages</th></tr></thead>
+    <tbody>${sample.map(b => `<tr>
+      <td title="${b.title}">${b.title}</td>
+      <td title="${b.author}">${b.author}</td>
+      <td>${b.genre}</td>
+      <td>${b.status}</td>
+      <td>${b.totalPages || "—"}</td>
+    </tr>`).join("")}
+    ${parsedBooks.length > 5 ? `<tr><td colspan="5" style="color:#9b9a97;text-align:center">... and ${parsedBooks.length - 5} more</td></tr>` : ""}
+    </tbody>`;
+
+  preview.style.display = "";
+  startImportBtn.disabled = false;
+}
+
+startImportBtn.addEventListener("click", async () => {
+  if (!parsedBooks.length) return;
+  startImportBtn.disabled = true;
+  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("importDropZone").style.display = "none";
+
+  const progressEl = document.getElementById("importProgress");
+  const fillEl     = document.getElementById("importProgressFill");
+  const labelEl    = document.getElementById("importProgressLabel");
+  const logEl      = document.getElementById("importLog");
+  progressEl.style.display = "";
+
+  let success = 0, failed = 0;
+  for (let i = 0; i < parsedBooks.length; i++) {
+    const pct = Math.round(((i + 1) / parsedBooks.length) * 100);
+    fillEl.style.width = pct + "%";
+    labelEl.textContent = `Importing ${i + 1} / ${parsedBooks.length}...`;
+
+    try {
+      await booksCol.add(parsedBooks[i]);
+      success++;
+      const line = document.createElement("div");
+      line.style.color = "#1a6632";
+      line.textContent = `✓ ${parsedBooks[i].title}`;
+      logEl.appendChild(line);
+    } catch(e) {
+      failed++;
+      const line = document.createElement("div");
+      line.style.color = "#c0392b";
+      line.textContent = `✗ ${parsedBooks[i].title}: ${e.message}`;
+      logEl.appendChild(line);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+    if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
+  }
+
+  labelEl.textContent = `Done! ✓ ${success} imported${failed ? `, ✗ ${failed} failed` : ""}.`;
+  labelEl.style.color = "#1a6632";
+  startImportBtn.textContent = "Close";
+  startImportBtn.disabled = false;
+  startImportBtn.onclick = closeImport;
+});
