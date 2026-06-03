@@ -1,10 +1,13 @@
 // ── Firebase Init ──
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const booksCol = db.collection("books");
+const db   = firebase.firestore();
+const auth = firebase.auth();
 
 // ── State ──
 let allBooks = [];
+let currentUser  = null;
+let booksCol     = null;
+let booksUnsub   = null;
 let currentFilter = { status: "all", year: "all", genre: "all", search: "", format: "all" };
 let currentSort   = "createdAt_desc";
 let currentDetailId = null;
@@ -12,29 +15,238 @@ const PAGE_SIZE = 24;
 let currentPage = 1;
 
 // ── DOM ──
-const bookGrid       = document.getElementById("bookGrid");
-const bookCountEl    = document.getElementById("bookCount");
-const searchInput    = document.getElementById("searchInput");
-const addModal       = document.getElementById("addModal");
-const detailModal    = document.getElementById("detailModal");
-const fetchStatus    = document.getElementById("fetchStatus");
-const coverPreview   = document.getElementById("coverPreview");
+const bookGrid      = document.getElementById("bookGrid");
+const bookCountEl   = document.getElementById("bookCount");
+const searchInput   = document.getElementById("searchInput");
+const addModal      = document.getElementById("addModal");
+const detailModal   = document.getElementById("detailModal");
+const fetchStatus   = document.getElementById("fetchStatus");
+const coverPreview  = document.getElementById("coverPreview");
+const authModal     = document.getElementById("authModal");
 
-// ── Realtime listener ──
-booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
-  allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  rebuildSidebarFilters();
-  rebuildFormatFilter();
-  renderGrid();
+// ══════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════
+
+auth.onAuthStateChanged(user => {
+  currentUser = user;
+  if (user) {
+    closeAuthModal();
+    showApp();
+    booksCol = db.collection("users").doc(user.uid).collection("books");
+    updateUserUI(user);
+    startBooksListener();
+    checkMigration(user.uid);
+  } else {
+    hideApp();
+    showAuthModal();
+    if (booksUnsub) { booksUnsub(); booksUnsub = null; }
+    allBooks = [];
+  }
 });
 
-// ── Render ──
+function showApp() {
+  document.getElementById("sidebar").style.display    = "";
+  document.getElementById("mainContent").style.display = "";
+}
+function hideApp() {
+  document.getElementById("sidebar").style.display    = "none";
+  document.getElementById("mainContent").style.display = "none";
+}
+function showAuthModal() { authModal.classList.add("open"); }
+function closeAuthModal() { authModal.classList.remove("open"); }
+
+function updateUserUI(user) {
+  const userInfo        = document.getElementById("userInfo");
+  const userDisplayName = document.getElementById("userDisplayName");
+  const userAvatarSm    = document.getElementById("userAvatarSm");
+
+  userInfo.style.display = "";
+  const name = user.displayName || user.email.split("@")[0];
+  userDisplayName.textContent = name;
+
+  if (user.photoURL) {
+    userAvatarSm.innerHTML = `<img src="${user.photoURL}" alt="${escHtml(name)}" />`;
+  } else {
+    userAvatarSm.textContent = name.slice(0, 2).toUpperCase();
+  }
+
+  // 自動填入評論者姓名
+  const reviewerNameEl = document.getElementById("reviewerName");
+  if (reviewerNameEl && !reviewerNameEl.value) {
+    reviewerNameEl.value = name;
+  }
+}
+
+// 開始監聽使用者書庫
+function startBooksListener() {
+  if (booksUnsub) booksUnsub();
+  booksUnsub = booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
+    allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    rebuildSidebarFilters();
+    rebuildFormatFilter();
+    renderGrid();
+  });
+}
+
+// ── 舊資料遷移（第一次登入時）──
+async function checkMigration(uid) {
+  try {
+    const userSnap = await db.collection("users").doc(uid).collection("books").limit(1).get();
+    if (!userSnap.empty) return; // 已有資料
+
+    const oldSnap = await db.collection("books").get();
+    if (oldSnap.empty) return; // 沒有舊資料
+
+    const count = oldSnap.size;
+    const ok = confirm(
+      `👋 歡迎！\n\n發現舊書庫有 ${count} 本書。\n是否將它們匯入到你的帳號？`
+    );
+    if (!ok) return;
+
+    // 分批寫入（Firestore 每批上限 499）
+    const BATCH_SIZE = 499;
+    const docs = oldSnap.docs;
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      const batch = db.batch();
+      docs.slice(i, i + BATCH_SIZE).forEach(doc => {
+        const ref = db.collection("users").doc(uid).collection("books").doc(doc.id);
+        batch.set(ref, { ...doc.data(), userId: uid });
+      });
+      await batch.commit();
+    }
+    alert(`✓ 成功將 ${count} 本書匯入到你的帳號！`);
+  } catch (e) {
+    console.error("Migration failed:", e);
+  }
+}
+
+// ── Sign Out ──
+document.getElementById("signOutBtn").addEventListener("click", () => {
+  if (confirm("確定要登出嗎？")) auth.signOut();
+});
+
+// ── Auth Modal 邏輯 ──
+let authMode = "signin";
+
+document.querySelectorAll(".auth-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    authMode = tab.dataset.mode;
+    document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+
+    const isSignup = authMode === "signup";
+    document.getElementById("authConfirmWrap").style.display    = isSignup ? "" : "none";
+    document.getElementById("authDisplayNameWrap").style.display = isSignup ? "" : "none";
+    document.getElementById("authSubmitBtn").textContent         = isSignup ? "Create Account" : "Sign In";
+    document.getElementById("forgotPasswordBtn").style.display   = isSignup ? "none" : "";
+    document.getElementById("authPassword").autocomplete = isSignup ? "new-password" : "current-password";
+    clearAuthError();
+  });
+});
+
+// Google 登入
+document.getElementById("googleSignInBtn").addEventListener("click", async () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await auth.signInWithPopup(provider);
+  } catch (e) {
+    if (e.code !== "auth/popup-closed-by-user") {
+      showAuthError(getAuthErrorMessage(e.code));
+    }
+  }
+});
+
+// Email 登入 / 註冊
+document.getElementById("authSubmitBtn").addEventListener("click", handleAuthSubmit);
+["authEmail","authPassword","authConfirmPassword","authDisplayName"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("keydown", e => { if (e.key === "Enter") handleAuthSubmit(); });
+});
+
+async function handleAuthSubmit() {
+  const email    = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+  clearAuthError();
+
+  if (!email || !password) { showAuthError("Please enter email and password."); return; }
+
+  const btn = document.getElementById("authSubmitBtn");
+  btn.disabled = true;
+  btn.textContent = "...";
+
+  try {
+    if (authMode === "signup") {
+      const confirmPw    = document.getElementById("authConfirmPassword").value;
+      const displayName  = document.getElementById("authDisplayName").value.trim();
+      if (password !== confirmPw) {
+        showAuthError("Passwords do not match.");
+        btn.disabled = false; btn.textContent = "Create Account"; return;
+      }
+      if (password.length < 6) {
+        showAuthError("Password must be at least 6 characters.");
+        btn.disabled = false; btn.textContent = "Create Account"; return;
+      }
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      if (displayName) await cred.user.updateProfile({ displayName });
+    } else {
+      await auth.signInWithEmailAndPassword(email, password);
+    }
+  } catch (e) {
+    showAuthError(getAuthErrorMessage(e.code));
+    btn.disabled = false;
+    btn.textContent = authMode === "signup" ? "Create Account" : "Sign In";
+  }
+}
+
+// 忘記密碼
+document.getElementById("forgotPasswordBtn").addEventListener("click", async () => {
+  const email = document.getElementById("authEmail").value.trim();
+  if (!email) { showAuthError("Enter your email address first."); return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showAuthError("✓ Password reset email sent! Check your inbox.", true);
+  } catch (e) {
+    showAuthError(getAuthErrorMessage(e.code));
+  }
+});
+
+function showAuthError(msg, isSuccess = false) {
+  const el = document.getElementById("authError");
+  el.textContent = msg;
+  el.style.display = "";
+  el.style.background = isSuccess ? "#d4edda" : "#fde8e8";
+  el.style.color      = isSuccess ? "#1a6632" : "#c0392b";
+}
+function clearAuthError() {
+  const el = document.getElementById("authError");
+  el.style.display = "none";
+  el.textContent = "";
+}
+function getAuthErrorMessage(code) {
+  const msgs = {
+    "auth/user-not-found":        "No account found with this email.",
+    "auth/wrong-password":        "Incorrect password.",
+    "auth/invalid-credential":    "Incorrect email or password.",
+    "auth/email-already-in-use":  "This email is already registered.",
+    "auth/invalid-email":         "Invalid email address.",
+    "auth/weak-password":         "Password must be at least 6 characters.",
+    "auth/too-many-requests":     "Too many attempts. Please try again later.",
+    "auth/network-request-failed":"Network error. Check your connection.",
+  };
+  return msgs[code] || "An error occurred. Please try again.";
+}
+
+// ══════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════
+
 function filterBooks() {
   const { status, year, genre, search, format } = currentFilter;
   let books = allBooks.filter(b => {
     if (status !== "all" && b.status !== status) return false;
-    if (year !== "all" && String(b.startYear) !== year) return false;
-    if (genre !== "all" && (b.genre || "").toLowerCase() !== genre.toLowerCase()) return false;
+    if (year   !== "all" && String(b.startYear) !== year) return false;
+    if (genre  !== "all" && (b.genre || "").toLowerCase() !== genre.toLowerCase()) return false;
     if (format !== "all" && (b.format || "").toLowerCase() !== format.toLowerCase()) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -43,29 +255,23 @@ function filterBooks() {
     return true;
   });
 
-  // Sort
   const [field, dir] = currentSort.split("_");
   books.sort((a, b) => {
     let va, vb;
     if (field === "title" || field === "author") {
-      va = (a[field] || "").toLowerCase();
-      vb = (b[field] || "").toLowerCase();
+      va = (a[field] || "").toLowerCase(); vb = (b[field] || "").toLowerCase();
     } else if (field === "finishDate") {
-      va = a.finishDate || "";
-      vb = b.finishDate || "";
+      va = a.finishDate || ""; vb = b.finishDate || "";
     } else if (field === "progress") {
       va = calcPct(a.currentPage, a.totalPages) ?? -1;
       vb = calcPct(b.currentPage, b.totalPages) ?? -1;
     } else if (field === "totalPages") {
-      va = a.totalPages || 0;
-      vb = b.totalPages || 0;
+      va = a.totalPages || 0; vb = b.totalPages || 0;
     } else {
-      // createdAt
-      va = a.createdAt?.seconds || 0;
-      vb = b.createdAt?.seconds || 0;
+      va = a.createdAt?.seconds || 0; vb = b.createdAt?.seconds || 0;
     }
     if (va < vb) return dir === "asc" ? -1 : 1;
-    if (va > vb) return dir === "asc" ? 1 : -1;
+    if (va > vb) return dir === "asc" ? 1  : -1;
     return 0;
   });
   return books;
@@ -119,9 +325,7 @@ function renderPagination(totalPages) {
   if (totalPages <= 1) { pg.style.display = "none"; return; }
   pg.style.display = "flex";
 
-  const pages = [];
-  // always show first, last, current ±2
-  const show = new Set([1, totalPages, currentPage, currentPage-1, currentPage+1, currentPage-2, currentPage+2].filter(p => p >= 1 && p <= totalPages));
+  const show   = new Set([1, totalPages, currentPage, currentPage-1, currentPage+1, currentPage-2, currentPage+2].filter(p => p >= 1 && p <= totalPages));
   const sorted = [...show].sort((a,b) => a-b);
 
   let html = `<button class="page-btn" ${currentPage===1?"disabled":""} onclick="goPage(${currentPage-1})">‹</button>`;
@@ -154,7 +358,7 @@ function escHtml(str) {
 
 // ── Sidebar filters ──
 function rebuildSidebarFilters() {
-  const years = [...new Set(allBooks.map(b => b.startYear).filter(Boolean))].sort((a,b) => b-a);
+  const years  = [...new Set(allBooks.map(b => b.startYear).filter(Boolean))].sort((a,b) => b-a);
   const genres = [...new Set(allBooks.map(b => b.genre).filter(Boolean))].sort();
 
   const yearFilter = document.getElementById("yearFilter");
@@ -228,9 +432,9 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
 });
 
 function updateActiveFilters() {
-  const chips = document.getElementById("activeFilters");
+  const chips    = document.getElementById("activeFilters");
   const clearBtn = document.getElementById("clearFiltersBtn");
-  const active = [];
+  const active   = [];
   if (currentFilter.format !== "all") active.push(`Format: ${currentFilter.format}`);
   chips.innerHTML = active.map(a => `<span class="filter-chip">${escHtml(a)}</span>`).join("");
   clearBtn.style.display = (active.length || currentFilter.status !== "all" || currentFilter.year !== "all" || currentFilter.genre !== "all" || currentFilter.search) ? "" : "none";
@@ -246,44 +450,38 @@ function rebuildFormatFilter() {
 
 // ── Refresh Button ──
 document.getElementById("refreshBtn").addEventListener("click", async () => {
+  if (!booksCol) return;
   const btn = document.getElementById("refreshBtn");
   btn.classList.add("spinning");
 
-  // 1. Deduplicate: keep first occurrence of each title (case-insensitive)
-  const seen = new Map(); // normalised title → first doc id
+  const seen = new Map();
   const toDelete = [];
   for (const b of allBooks) {
     const key = b.title.trim().toLowerCase();
-    if (seen.has(key)) {
-      toDelete.push(b.id);
-    } else {
-      seen.set(key, b.id);
-    }
+    if (seen.has(key)) toDelete.push(b.id);
+    else seen.set(key, b.id);
   }
 
   if (toDelete.length > 0) {
     const ok = confirm(`Found ${toDelete.length} duplicate book${toDelete.length > 1 ? "s" : ""}. Remove them?`);
     if (ok) {
-      for (const id of toDelete) {
-        await booksCol.doc(id).delete();
-      }
+      for (const id of toDelete) await booksCol.doc(id).delete();
     }
   }
 
-  // 2. Queue cover fetch for books without covers
   const missing = allBooks.filter(b => !b.cover && !toDelete.includes(b.id));
-  if (missing.length) {
-    queueCoverFetch(missing);
-  }
+  if (missing.length) queueCoverFetch(missing);
 
   btn.classList.remove("spinning");
-
   if (toDelete.length === 0 && missing.length === 0) {
     alert("✓ Library is up to date. No duplicates or missing covers found.");
   }
 });
 
-// ── Add Modal ──
+// ══════════════════════════════════════════
+//  ADD / EDIT MODAL
+// ══════════════════════════════════════════
+
 document.getElementById("openAddModal").addEventListener("click", () => openAddModal());
 document.getElementById("closeAddModal").addEventListener("click", closeAddModal);
 document.getElementById("cancelAdd").addEventListener("click", closeAddModal);
@@ -295,8 +493,6 @@ function openAddModal(prefill) {
 }
 function closeAddModal() { addModal.classList.remove("open"); }
 
-// Removed click-outside-to-close to prevent accidental dismissal while editing
-
 // ── Fetch book info ──
 document.getElementById("fetchBookBtn").addEventListener("click", fetchBookInfo);
 document.getElementById("bookSearchInput").addEventListener("keydown", e => { if (e.key === "Enter") fetchBookInfo(); });
@@ -306,20 +502,20 @@ async function fetchBookInfo() {
   if (!query) return;
   fetchStatus.textContent = "Searching...";
 
-  const isISBN = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
+  const isISBN  = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
   const cleanISBN = query.replace(/[\s\-]/g, "");
 
   // 1. Open Library by ISBN
   if (isISBN) {
     try {
-      const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanISBN}&format=json&jscmd=data`);
+      const res  = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanISBN}&format=json&jscmd=data`);
       const data = await res.json();
-      const key = `ISBN:${cleanISBN}`;
+      const key  = `ISBN:${cleanISBN}`;
       if (data[key]) {
-        const info = data[key];
-        const cover = info.cover ? (info.cover.large || info.cover.medium || info.cover.small || "") : "";
+        const info    = data[key];
+        const cover   = info.cover ? (info.cover.large || info.cover.medium || info.cover.small || "") : "";
         const authors = (info.authors || []).map(a => a.name).join(", ");
-        const subjects = (info.subjects || []).map(s => s.name || s).slice(0, 2).join(", ");
+        const subjects= (info.subjects || []).map(s => s.name || s).slice(0, 2).join(", ");
         fillForm({ title: info.title || "", author: authors, genre: subjects, totalPages: info.number_of_pages || "", cover });
         fetchStatus.textContent = `Found: "${info.title}"`;
         return;
@@ -327,15 +523,15 @@ async function fetchBookInfo() {
     } catch {}
   }
 
-  // 2. Google Books (with API key, good Chinese support)
+  // 2. Google Books
   try {
     const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&key=${GBOOKS_KEY}`);
+    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&key=${GBOOKS_KEY}`);
     const data = await res.json();
     if (data.items && data.items.length > 0) {
-      const info = data.items[0].volumeInfo;
+      const info  = data.items[0].volumeInfo;
       const cover = info.imageLinks
-        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://", "https://")
+        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://","https://")
         : "";
       fillForm({ title: info.title || "", author: (info.authors || []).join(", "), genre: (info.categories || []).join(", "), totalPages: info.pageCount || "", cover });
       fetchStatus.textContent = `Found: "${info.title}"`;
@@ -343,16 +539,16 @@ async function fetchBookInfo() {
     }
   } catch {}
 
-  // 3. Open Library by title/author search
+  // 3. Open Library by title search
   try {
-    const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`);
+    const res  = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`);
     const data = await res.json();
     if (data.docs && data.docs.length > 0) {
-      const doc = data.docs[0];
+      const doc     = data.docs[0];
       const coverId = doc.cover_i;
-      const cover = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : "";
+      const cover   = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : "";
       const authors = (doc.author_name || []).slice(0, 2).join(", ");
-      const subjects = (doc.subject || []).slice(0, 2).join(", ");
+      const subjects= (doc.subject || []).slice(0, 2).join(", ");
       fillForm({ title: doc.title || "", author: authors, genre: subjects, totalPages: doc.number_of_pages_median || "", cover });
       fetchStatus.textContent = `Found: "${doc.title}"`;
       return;
@@ -363,9 +559,9 @@ async function fetchBookInfo() {
 }
 
 function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {}) {
-  if (title)      document.getElementById("bookTitle").value = title;
-  if (author)     document.getElementById("bookAuthor").value = author;
-  if (genre)      document.getElementById("bookGenre").value = genre;
+  if (title)      document.getElementById("bookTitle").value      = title;
+  if (author)     document.getElementById("bookAuthor").value     = author;
+  if (genre)      document.getElementById("bookGenre").value      = genre;
   if (totalPages) document.getElementById("bookTotalPages").value = totalPages;
   if (cover)      setCover(cover);
 }
@@ -406,7 +602,6 @@ function setCover(value) {
   }
 }
 
-// Build gallery swatches
 const galleryGrid = document.getElementById("galleryGrid");
 GALLERY_GRADIENTS.forEach(g => {
   const sw = document.createElement("div");
@@ -417,7 +612,6 @@ GALLERY_GRADIENTS.forEach(g => {
   galleryGrid.appendChild(sw);
 });
 
-// Picker panel toggle
 const pickerPanel = document.getElementById("coverPickerPanel");
 document.getElementById("btnChangeCover").addEventListener("click", () => {
   pickerPanel.style.display = pickerPanel.style.display === "none" ? "" : "none";
@@ -426,7 +620,6 @@ document.getElementById("pickerCloseBtn").addEventListener("click", closePicker)
 document.getElementById("pickerRemoveBtn").addEventListener("click", () => { setCover(""); closePicker(); });
 function closePicker() { pickerPanel.style.display = "none"; }
 
-// Picker tabs
 document.querySelectorAll(".picker-tab").forEach(tab => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".picker-tab").forEach(t => t.classList.remove("active"));
@@ -436,13 +629,12 @@ document.querySelectorAll(".picker-tab").forEach(tab => {
   });
 });
 
-// Upload tab
-const coverDropZone = document.getElementById("coverDropZone");
+const coverDropZone  = document.getElementById("coverDropZone");
 const coverFileInput = document.getElementById("coverFileInput");
-coverDropZone.addEventListener("dragover", e => { e.preventDefault(); coverDropZone.classList.add("drag-over"); });
+coverDropZone.addEventListener("dragover",  e => { e.preventDefault(); coverDropZone.classList.add("drag-over"); });
 coverDropZone.addEventListener("dragleave", () => coverDropZone.classList.remove("drag-over"));
-coverDropZone.addEventListener("drop", e => { e.preventDefault(); coverDropZone.classList.remove("drag-over"); handleCoverFile(e.dataTransfer.files[0]); });
-coverFileInput.addEventListener("change", e => handleCoverFile(e.target.files[0]));
+coverDropZone.addEventListener("drop",      e => { e.preventDefault(); coverDropZone.classList.remove("drag-over"); handleCoverFile(e.dataTransfer.files[0]); });
+coverFileInput.addEventListener("change",   e => handleCoverFile(e.target.files[0]));
 
 function handleCoverFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
@@ -451,14 +643,12 @@ function handleCoverFile(file) {
   reader.readAsDataURL(file);
 }
 
-// Paste image from clipboard
 document.addEventListener("paste", e => {
   if (pickerPanel.style.display === "none") return;
   const item = [...e.clipboardData.items].find(i => i.type.startsWith("image/"));
   if (item) handleCoverFile(item.getAsFile());
 });
 
-// Link tab
 document.getElementById("coverLinkSubmit").addEventListener("click", () => {
   const url = document.getElementById("coverLinkInput").value.trim();
   if (url) { setCover(url); closePicker(); document.getElementById("coverLinkInput").value = ""; }
@@ -467,17 +657,16 @@ document.getElementById("coverLinkInput").addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("coverLinkSubmit").click();
 });
 
-// Re-fetch cover button
 document.getElementById("refetchCoverBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("refetchCoverBtn");
+  const btn    = document.getElementById("refetchCoverBtn");
   const title  = document.getElementById("bookTitle").value.trim();
   const author = document.getElementById("bookAuthor").value.trim();
   if (!title) { alert("Please enter a title first."); return; }
   btn.classList.add("loading"); btn.disabled = true;
   const cover = await fetchCoverUrl(title, author);
   btn.classList.remove("loading"); btn.disabled = false;
-  if (cover) { setCover(cover); }
-  else { alert("No cover found. Try a different title or use the Link / Upload tab."); }
+  if (cover) setCover(cover);
+  else alert("No cover found. Try a different title or use the Link / Upload tab.");
 });
 
 // ── Screenshot Capture & Crop ──
@@ -492,16 +681,14 @@ document.getElementById("startScreenshotBtn").addEventListener("click", async ()
   closePicker();
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: false });
-    const video = document.createElement("video");
+    const video  = document.createElement("video");
     video.srcObject = stream;
     await video.play();
-    // grab one frame
     canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
     stream.getTracks().forEach(t => t.stop());
     screenshotImageData = canvas.toDataURL("image/png");
-    // show overlay
     overlay.style.display = "flex";
     selBox.style.display = "none";
     confirmBox.style.display = "none";
@@ -511,9 +698,7 @@ document.getElementById("startScreenshotBtn").addEventListener("click", async ()
   }
 });
 
-document.getElementById("screenshotCancel").addEventListener("click", () => {
-  overlay.style.display = "none";
-});
+document.getElementById("screenshotCancel").addEventListener("click", () => { overlay.style.display = "none"; });
 
 canvas.addEventListener("mousedown", e => {
   const r = canvas.getBoundingClientRect();
@@ -522,17 +707,15 @@ canvas.addEventListener("mousedown", e => {
   confirmBox.style.display = "none";
   cropRect = null;
 });
-
 canvas.addEventListener("mousemove", e => {
   if (!cropStart) return;
-  const r = canvas.getBoundingClientRect();
+  const r  = canvas.getBoundingClientRect();
   const cx = e.clientX - r.left, cy = e.clientY - r.top;
-  const x = Math.min(cropStart.x, cx), y = Math.min(cropStart.y, cy);
-  const w = Math.abs(cx - cropStart.x), h = Math.abs(cy - cropStart.y);
+  const x  = Math.min(cropStart.x, cx), y = Math.min(cropStart.y, cy);
+  const w  = Math.abs(cx - cropStart.x), h = Math.abs(cy - cropStart.y);
   selBox.style.cssText = `display:block;left:${r.left+x}px;top:${r.top+y}px;width:${w}px;height:${h}px;`;
   cropRect = { x, y, w, h, scaleX: canvas.width/r.width, scaleY: canvas.height/r.height };
 });
-
 canvas.addEventListener("mouseup", () => {
   if (!cropRect || cropRect.w < 10 || cropRect.h < 10) { cropStart = null; return; }
   cropStart = null;
@@ -542,12 +725,11 @@ canvas.addEventListener("mouseup", () => {
 document.getElementById("screenshotUse").addEventListener("click", () => {
   const { x, y, w, h, scaleX, scaleY } = cropRect;
   const tmp = document.createElement("canvas");
-  tmp.width = w * scaleX; tmp.height = h * scaleY;
+  tmp.width  = w * scaleX; tmp.height = h * scaleY;
   tmp.getContext("2d").drawImage(canvas, x*scaleX, y*scaleY, w*scaleX, h*scaleY, 0, 0, tmp.width, tmp.height);
   setCover(tmp.toDataURL("image/png"));
   overlay.style.display = "none";
 });
-
 document.getElementById("screenshotRetry").addEventListener("click", () => {
   selBox.style.display = "none";
   confirmBox.style.display = "none";
@@ -559,13 +741,13 @@ function resetAddForm() {
     .forEach(id => document.getElementById(id).value = "");
   document.getElementById("bookTotalPages").value = "";
   document.getElementById("bookStatus").value = "Want to Read";
-  setCover("");
-  closePicker();
+  setCover(""); closePicker();
   fetchStatus.textContent = "";
 }
 
-// ── Save book ──
+// ── Save Book ──
 document.getElementById("saveBook").addEventListener("click", async () => {
+  if (!booksCol) { alert("Please sign in first."); return; }
   const title = document.getElementById("bookTitle").value.trim();
   if (!title) { alert("Title is required."); return; }
 
@@ -582,6 +764,7 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     finishDate:  document.getElementById("bookFinishDate").value,
     notes:       document.getElementById("bookNotes").value.trim(),
     startYear:   startDate ? new Date(startDate).getFullYear() : new Date().getFullYear(),
+    userId:      currentUser?.uid || null,
     createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
   };
 
@@ -597,27 +780,30 @@ document.getElementById("saveBook").addEventListener("click", async () => {
   }
 });
 
-// ── Detail Modal ──
+// ══════════════════════════════════════════
+//  DETAIL MODAL
+// ══════════════════════════════════════════
+
 function openDetail(id) {
   currentDetailId = id;
   const b = allBooks.find(x => x.id === id);
   if (!b) return;
 
-  document.getElementById("detailTitle").textContent = b.title;
+  document.getElementById("detailTitle").textContent  = b.title;
   document.getElementById("detailAuthor").textContent = b.author || "";
-  document.getElementById("detailGenre").textContent = b.genre || "";
+  document.getElementById("detailGenre").textContent  = b.genre  || "";
 
   const statusEl = document.getElementById("detailStatus");
   statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(b.status)}</span>`;
 
   const pct = calcPct(b.currentPage, b.totalPages);
-  document.getElementById("detailProgressBar").style.width = pct !== null ? pct + "%" : "0%";
+  document.getElementById("detailProgressBar").style.width  = pct !== null ? pct + "%" : "0%";
   document.getElementById("detailProgressText").textContent = pct !== null
     ? `${b.currentPage || 0} / ${b.totalPages} pages (${pct}%)`
     : "No page info";
 
-  document.getElementById("detailCurrentPage").value = b.currentPage || 0;
-  document.getElementById("detailTotalPages").textContent = `/ ${b.totalPages || "?"} pages`;
+  document.getElementById("detailCurrentPage").value         = b.currentPage || 0;
+  document.getElementById("detailTotalPages").textContent    = `/ ${b.totalPages || "?"} pages`;
 
   const coverEl = document.getElementById("detailCover");
   if (b.cover) {
@@ -632,19 +818,24 @@ function openDetail(id) {
   if (b.startDate)  dates.push(`Started: ${b.startDate}`);
   if (b.finishDate) dates.push(`Finished: ${b.finishDate}`);
   document.getElementById("detailDates").textContent = dates.join("  ·  ");
-
   document.getElementById("detailNotes").textContent = b.notes || "";
 
   detailModal.classList.add("open");
   loadReviews(id);
 
-  // reset review form
-  selectedRating = 0; renderStars(0); updateStarLabel(0, true);
+  // Reset review form
+  selectedRating = 0;
+  renderStars(0);
   updateStarLabel(0, true);
-  document.getElementById("reviewerName").value = "";
   document.getElementById("reviewText").value = "";
 
-  // auto read % from book progress
+  // Auto-fill reviewer name from current user
+  if (currentUser) {
+    const name = currentUser.displayName || currentUser.email.split("@")[0];
+    document.getElementById("reviewerName").value = name;
+  }
+
+  // Auto read %
   const reviewPct = calcPct(b.currentPage, b.totalPages) ?? 0;
   document.getElementById("reviewPct").value = reviewPct;
   const readInfoEl = document.getElementById("reviewReadInfo");
@@ -666,9 +857,12 @@ detailModal.addEventListener("click", e => {
   }
 });
 
-// ── Reviews ──
+// ══════════════════════════════════════════
+//  REVIEWS
+// ══════════════════════════════════════════
+
 let selectedRating = 0;
-let reviewsUnsub = null;
+let reviewsUnsub   = null;
 
 // Build quarter-star picker
 (function buildStarPicker() {
@@ -676,31 +870,25 @@ let reviewsUnsub = null;
   picker.innerHTML = "";
   for (let i = 1; i <= 5; i++) {
     const unit = document.createElement("span");
-    unit.className = "star-unit";
+    unit.className    = "star-unit";
     unit.dataset.star = i;
-    unit.innerHTML = `<span class="star-bg">★</span><span class="star-fg">★</span>`;
+    unit.innerHTML    = `<span class="star-bg">★</span><span class="star-fg">★</span>`;
     picker.appendChild(unit);
   }
 
   function ratingFromEvent(e) {
-    const rect = picker.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left);
+    const rect      = picker.getBoundingClientRect();
+    const x         = Math.max(0, e.clientX - rect.left);
     const starWidth = rect.width / 5;
-    const starIdx = Math.min(4, Math.floor(x / starWidth));       // 0-4
-    const fraction = (x - starIdx * starWidth) / starWidth;       // 0-1
-    const quarter = Math.ceil(fraction / 0.25) * 0.25 || 0.25;   // 0.25/0.5/0.75/1.0
+    const starIdx   = Math.min(4, Math.floor(x / starWidth));
+    const fraction  = (x - starIdx * starWidth) / starWidth;
+    const quarter   = Math.ceil(fraction / 0.25) * 0.25 || 0.25;
     return Math.min(5, +(starIdx + quarter).toFixed(2));
   }
 
-  picker.addEventListener("mousemove", e => {
-    renderStars(ratingFromEvent(e));
-    updateStarLabel(ratingFromEvent(e), false);
-  });
-  picker.addEventListener("mouseleave", () => {
-    renderStars(selectedRating);
-    updateStarLabel(selectedRating, true);
-  });
-  picker.addEventListener("click", e => {
+  picker.addEventListener("mousemove",  e => { renderStars(ratingFromEvent(e)); updateStarLabel(ratingFromEvent(e), false); });
+  picker.addEventListener("mouseleave", () => { renderStars(selectedRating); updateStarLabel(selectedRating, true); });
+  picker.addEventListener("click",      e => {
     selectedRating = ratingFromEvent(e);
     renderStars(selectedRating);
     updateStarLabel(selectedRating, true);
@@ -709,11 +897,11 @@ let reviewsUnsub = null;
 
 function renderStars(rating) {
   document.querySelectorAll("#starPicker .star-unit").forEach((unit, i) => {
-    const fg = unit.querySelector(".star-fg");
-    const diff = rating - i;           // how much of this star is filled
-    if (diff >= 1)      fg.style.width = "100%";
-    else if (diff > 0)  fg.style.width = (diff * 100).toFixed(0) + "%";
-    else                fg.style.width = "0%";
+    const fg   = unit.querySelector(".star-fg");
+    const diff = rating - i;
+    if (diff >= 1)     fg.style.width = "100%";
+    else if (diff > 0) fg.style.width = (diff * 100).toFixed(0) + "%";
+    else               fg.style.width = "0%";
   });
 }
 
@@ -721,22 +909,21 @@ function updateStarLabel(rating, committed) {
   const el = document.getElementById("starPickLabel");
   if (!rating) { el.textContent = "Select rating"; el.style.color = "#9b9a97"; return; }
   const label =
-    rating <= 1   ? "😞 Didn't like it" :
-    rating <= 2   ? "😐 It was ok"       :
-    rating <= 3   ? "🙂 Liked it"        :
-    rating <= 4   ? "😊 Really liked it" :
-                    "🤩 Amazing!";
+    rating <= 1 ? "😞 Didn't like it" :
+    rating <= 2 ? "😐 It was ok"       :
+    rating <= 3 ? "🙂 Liked it"        :
+    rating <= 4 ? "😊 Really liked it" :
+                  "🤩 Amazing!";
   el.textContent = `${rating} — ${label}`;
   el.style.color = committed ? "#f0a500" : "#6b6b68";
 }
 
 function starsHTML(rating) {
-  // render partial stars for display in review cards
   if (!rating) return "";
   let html = "";
   for (let i = 1; i <= 5; i++) {
     const diff = rating - (i - 1);
-    if (diff >= 1)         html += `<span style="color:#f0a500">★</span>`;
+    if      (diff >= 1)    html += `<span style="color:#f0a500">★</span>`;
     else if (diff >= 0.75) html += `<span style="color:#f0a500;opacity:.85">★</span>`;
     else if (diff >= 0.5)  html += `<span style="color:#f0a500;opacity:.6">★</span>`;
     else if (diff >= 0.25) html += `<span style="color:#f0a500;opacity:.35">★</span>`;
@@ -747,34 +934,34 @@ function starsHTML(rating) {
 
 function loadReviews(bookId) {
   if (reviewsUnsub) reviewsUnsub();
-  const reviewsCol = db.collection("books").doc(bookId).collection("reviews");
-  reviewsUnsub = reviewsCol.orderBy("createdAt","desc").onSnapshot(snap => {
+  const reviewsCol = booksCol.doc(bookId).collection("reviews");
+  reviewsUnsub = reviewsCol.orderBy("createdAt", "desc").onSnapshot(snap => {
     renderReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   });
 }
 
 function renderReviews(reviews) {
-  const aggScore  = document.getElementById("aggScore");
-  const aggStars  = document.getElementById("aggStars");
-  const aggCount  = document.getElementById("aggCount");
-  const ratingBars= document.getElementById("ratingBars");
+  const aggScore    = document.getElementById("aggScore");
+  const aggStars    = document.getElementById("aggStars");
+  const aggCount    = document.getElementById("aggCount");
+  const ratingBars  = document.getElementById("ratingBars");
   const reviewsList = document.getElementById("reviewsList");
 
   if (!reviews.length) {
-    aggScore.textContent = "—"; aggStars.textContent = ""; aggCount.textContent = "No reviews yet";
+    aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = "No reviews yet";
     ratingBars.innerHTML = "";
     reviewsList.innerHTML = `<div class="reviews-empty">📝 No reviews yet — be the first!</div>`;
     return;
   }
 
   const withRating = reviews.filter(r => r.rating > 0);
-  const avg = withRating.length ? withRating.reduce((s,r) => s+r.rating,0) / withRating.length : 0;
+  const avg = withRating.length ? withRating.reduce((s,r) => s+r.rating, 0) / withRating.length : 0;
   aggScore.textContent = avg.toFixed(1);
-  aggStars.textContent = starsHTML(avg);
-  aggCount.textContent = `${reviews.length} review${reviews.length>1?"s":""}`;
+  aggStars.innerHTML   = starsHTML(avg);
+  aggCount.textContent = `${reviews.length} review${reviews.length > 1 ? "s" : ""}`;
 
   const counts = [0,0,0,0,0,0];
-  withRating.forEach(r => counts[r.rating]++);
+  withRating.forEach(r => { const n = Math.round(r.rating); if (n >= 1 && n <= 5) counts[n]++; });
   ratingBars.innerHTML = [5,4,3,2,1].map(n => {
     const pct = withRating.length ? Math.round((counts[n]/withRating.length)*100) : 0;
     return `<div class="rating-bar-row">
@@ -785,31 +972,37 @@ function renderReviews(reviews) {
   }).join("");
 
   reviewsList.innerHTML = reviews.map(r => {
-    const initials = (r.reviewerName||"?").slice(0,2).toUpperCase();
-    const date = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}) : "";
+    const isOwn    = currentUser && r.userId === currentUser.uid;
+    const initials = (r.reviewerName || "?").slice(0, 2).toUpperCase();
+    const date     = r.createdAt?.toDate
+      ? r.createdAt.toDate().toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" })
+      : "";
     return `<div class="review-card">
       <div class="review-top">
         <div class="reviewer-avatar">${escHtml(initials)}</div>
-        <div class="reviewer-name">${escHtml(r.reviewerName||"Anonymous")}</div>
-        ${r.rating?`<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>`:""}
-        ${r.readPercent!=null?`<div class="review-read-badge">Read ${r.readPercent}%</div>`:""}
+        <div class="reviewer-name">${escHtml(r.reviewerName || "Anonymous")}</div>
+        ${r.rating ? `<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>` : ""}
+        ${r.readPercent != null ? `<div class="review-read-badge">Read ${r.readPercent}%</div>` : ""}
+        ${isOwn ? `<button class="btn-delete-review" data-id="${r.id}" title="Delete your review">🗑</button>` : ""}
       </div>
-      ${r.text?`<div class="review-text">${escHtml(r.text)}</div>`:""}
+      ${r.text ? `<div class="review-text">${escHtml(r.text)}</div>` : ""}
       <div class="review-date">${date}</div>
     </div>`;
   }).join("");
-}
 
-// Also show avg rating on book cards
-function getBookRating(bookId) {
-  return db.collection("books").doc(bookId).collection("reviews")
-    .get().then(snap => {
-      const ratings = snap.docs.map(d=>d.data().rating).filter(Boolean);
-      return ratings.length ? (ratings.reduce((a,b)=>a+b,0)/ratings.length) : null;
+  // Bind delete buttons
+  reviewsList.querySelectorAll(".btn-delete-review").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete your review?")) return;
+      try {
+        await booksCol.doc(currentDetailId).collection("reviews").doc(btn.dataset.id).delete();
+      } catch(e) { alert("Failed to delete: " + e.message); }
     });
+  });
 }
 
 document.getElementById("submitReviewBtn").addEventListener("click", async () => {
+  if (!booksCol) { alert("Please sign in first."); return; }
   const name = document.getElementById("reviewerName").value.trim();
   const text = document.getElementById("reviewText").value.trim();
   const pct  = parseInt(document.getElementById("reviewPct").value);
@@ -819,23 +1012,22 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
   const btn = document.getElementById("submitReviewBtn");
   btn.disabled = true; btn.textContent = "Submitting...";
   try {
-    await db.collection("books").doc(currentDetailId).collection("reviews").add({
-      reviewerName: name, rating: selectedRating, text,
-      readPercent: pct,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    await booksCol.doc(currentDetailId).collection("reviews").add({
+      reviewerName: name,
+      rating:       selectedRating,
+      text,
+      readPercent:  pct,
+      userId:       currentUser?.uid || null,
+      createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
-    document.getElementById("reviewerName").value = "";
     document.getElementById("reviewText").value = "";
-    document.getElementById("reviewPct").value = "0";
-    document.getElementById("reviewPctDisplay").textContent = "0";
     selectedRating = 0; renderStars(0); updateStarLabel(0, true);
-    updateStarLabel(0, true);
   } catch(e) { alert("Failed: " + e.message); }
   btn.disabled = false; btn.textContent = "Submit Review";
 });
 
 document.getElementById("updatePageBtn").addEventListener("click", async () => {
-  if (!currentDetailId) return;
+  if (!currentDetailId || !booksCol) return;
   const newPage = parseInt(document.getElementById("detailCurrentPage").value) || 0;
   const b = allBooks.find(x => x.id === currentDetailId);
   const updates = { currentPage: newPage };
@@ -849,36 +1041,33 @@ document.getElementById("editBookBtn").addEventListener("click", () => {
   if (!b) return;
   detailModal.classList.remove("open");
   addModal.dataset.mode = "edit";
-  openAddModal({
-    title: b.title, author: b.author, genre: b.genre,
-    totalPages: b.totalPages, cover: b.cover,
-  });
-  document.getElementById("bookCurrentPage").value  = b.currentPage || 0;
-  document.getElementById("bookStatus").value        = b.status || "Want to Read";
-  document.getElementById("bookStartDate").value     = b.startDate || "";
-  document.getElementById("bookFinishDate").value    = b.finishDate || "";
-  document.getElementById("bookNotes").value         = b.notes || "";
+  openAddModal({ title: b.title, author: b.author, genre: b.genre, totalPages: b.totalPages, cover: b.cover });
+  document.getElementById("bookCurrentPage").value = b.currentPage || 0;
+  document.getElementById("bookStatus").value       = b.status || "Want to Read";
+  document.getElementById("bookStartDate").value    = b.startDate || "";
+  document.getElementById("bookFinishDate").value   = b.finishDate || "";
+  document.getElementById("bookNotes").value        = b.notes || "";
   document.querySelector("#addModal .modal-header h2").textContent = "Edit Book";
 });
 
 document.getElementById("deleteBookBtn").addEventListener("click", async () => {
-  if (!currentDetailId) return;
+  if (!currentDetailId || !booksCol) return;
   if (!confirm("Delete this book?")) return;
   await booksCol.doc(currentDetailId).delete();
   detailModal.classList.remove("open");
 });
 
-// ── Import Modal ──
-const importModal   = document.getElementById("importModal");
+// ══════════════════════════════════════════
+//  IMPORT MODAL
+// ══════════════════════════════════════════
+
+const importModal     = document.getElementById("importModal");
 const importFileInput = document.getElementById("importFileInput");
 const importDropZone  = document.getElementById("importDropZone");
 const startImportBtn  = document.getElementById("startImportBtn");
 let parsedBooks = [];
 
-document.getElementById("openImportModal").addEventListener("click", () => {
-  resetImport();
-  importModal.classList.add("open");
-});
+document.getElementById("openImportModal").addEventListener("click", () => { resetImport(); importModal.classList.add("open"); });
 document.getElementById("closeImportModal").addEventListener("click", closeImport);
 document.getElementById("cancelImport").addEventListener("click", closeImport);
 importModal.addEventListener("click", e => { if (e.target === importModal) closeImport(); });
@@ -888,34 +1077,27 @@ function closeImport() { importModal.classList.remove("open"); resetImport(); }
 function resetImport() {
   parsedBooks = [];
   importFileInput.value = "";
-  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("importPreview").style.display  = "none";
   document.getElementById("importProgress").style.display = "none";
   document.getElementById("importDropZone").style.display = "";
   importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">Drag &amp; drop your CSV file here<br/><span>or click to browse</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
   bindFileInput();
-  startImportBtn.disabled = true;
+  startImportBtn.disabled  = true;
   startImportBtn.textContent = "Import Books";
 }
 
 function bindFileInput() {
   const fi = document.getElementById("importFileInput");
-  importDropZone.addEventListener("click", () => fi.click());
-  fi.addEventListener("change", e => handleFile(e.target.files[0]));
-  importDropZone.addEventListener("dragover", e => { e.preventDefault(); importDropZone.classList.add("drag-over"); });
-  importDropZone.addEventListener("dragleave", () => importDropZone.classList.remove("drag-over"));
-  importDropZone.addEventListener("drop", e => {
-    e.preventDefault();
-    importDropZone.classList.remove("drag-over");
-    handleFile(e.dataTransfer.files[0]);
-  });
+  importDropZone.addEventListener("click",    () => fi.click());
+  fi.addEventListener("change",               e  => handleFile(e.target.files[0]));
+  importDropZone.addEventListener("dragover", e  => { e.preventDefault(); importDropZone.classList.add("drag-over"); });
+  importDropZone.addEventListener("dragleave",() => importDropZone.classList.remove("drag-over"));
+  importDropZone.addEventListener("drop",     e  => { e.preventDefault(); importDropZone.classList.remove("drag-over"); handleFile(e.dataTransfer.files[0]); });
 }
 bindFileInput();
 
 function handleFile(file) {
-  if (!file || !file.name.endsWith(".csv")) {
-    alert("Please upload a .csv file exported from Notion.");
-    return;
-  }
+  if (!file || !file.name.endsWith(".csv")) { alert("Please upload a .csv file exported from Notion."); return; }
   const reader = new FileReader();
   reader.onload = e => parseNotionCSV(e.target.result, file.name);
   reader.readAsText(file, "UTF-8");
@@ -924,39 +1106,31 @@ function handleFile(file) {
 function parseNotionCSV(text, filename) {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) { alert("CSV appears empty."); return; }
-
   const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
 
-  // flexible column mapping
   const col = name => {
     const aliases = {
       title:       ["title"],
       author:      ["author", " author"],
       genre:       ["genre"],
       status:      ["status"],
-      currentpage: ["current page", "currentpage", "current_page"],
-      totalpages:  ["total pages", "totalpages", "total_pages"],
-      finishdate:  ["date finished", "finish date", "finishdate", "date_finished"],
-      startdate:   ["date started", "start date", "startdate", "date_started"],
-      rating:      ["rate", "rating"],
+      currentpage: ["current page","currentpage","current_page"],
+      totalpages:  ["total pages","totalpages","total_pages"],
+      finishdate:  ["date finished","finish date","finishdate","date_finished"],
+      startdate:   ["date started","start date","startdate","date_started"],
+      rating:      ["rate","rating"],
     };
     const list = aliases[name] || [name];
-    for (const a of list) {
-      const i = headers.indexOf(a);
-      if (i !== -1) return i;
-    }
+    for (const a of list) { const i = headers.indexOf(a); if (i !== -1) return i; }
     return -1;
   };
 
-  if (col("title") === -1) {
-    alert("Could not find a 'Title' column. Make sure you exported the correct Notion database.");
-    return;
-  }
+  if (col("title") === -1) { alert("Could not find a 'Title' column."); return; }
 
   parsedBooks = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCSVRow(lines[i]);
-    const get = name => (cells[col(name)] || "").trim();
+    const get   = name => (cells[col(name)] || "").trim();
 
     const title = cleanNotionCell(get("title"));
     if (!title) continue;
@@ -976,44 +1150,33 @@ function parseNotionCSV(text, filename) {
       status:      cleanNotionCell(get("status")) || "Want to Read",
       currentPage: parseInt(cleanNotionCell(get("currentpage"))) || 0,
       totalPages:  parseInt(cleanNotionCell(get("totalpages"))) || 0,
-      finishDate,
-      startDate,
+      finishDate, startDate,
       startYear:   startYear || finishYear || new Date().getFullYear(),
-      cover:       "",
-      notes,
-      createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+      cover: "", notes,
+      userId:    currentUser?.uid || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
   }
-
   showPreview(filename);
 }
 
 function cleanNotionCell(str) {
   if (!str) return "";
-  // Remove Notion internal links: "Text (https://app.notion.com/...)"
   return str.replace(/\s*\(https?:\/\/[^)]+\)/g, "").trim();
 }
-
 function parseNotionDate(str) {
   if (!str) return "";
   const d = new Date(str);
   if (isNaN(d)) return "";
   return d.toISOString().split("T")[0];
 }
-
 function parseCSVRow(line) {
-  const result = [];
-  let cur = "", inQuote = false;
+  const result = []; let cur = "", inQuote = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') {
-      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
-      else inQuote = !inQuote;
-    } else if (ch === ',' && !inQuote) {
-      result.push(cur); cur = "";
-    } else {
-      cur += ch;
-    }
+    if (ch === '"') { if (inQuote && line[i+1] === '"') { cur += '"'; i++; } else inQuote = !inQuote; }
+    else if (ch === ',' && !inQuote) { result.push(cur); cur = ""; }
+    else cur += ch;
   }
   result.push(cur);
   return result;
@@ -1027,31 +1190,33 @@ function showPreview(filename) {
   document.getElementById("previewSummary").textContent = `Found ${parsedBooks.length} books ready to import.`;
 
   const sample = parsedBooks.slice(0, 5);
-  const table = document.getElementById("previewTable");
+  const table  = document.getElementById("previewTable");
   table.innerHTML = `
     <thead><tr><th>Title</th><th>Author</th><th>Genre</th><th>Status</th><th>Pages</th></tr></thead>
     <tbody>${sample.map(b => `<tr>
       <td title="${b.title}">${b.title}</td>
       <td title="${b.author}">${b.author}</td>
-      <td>${b.genre}</td>
-      <td>${b.status}</td>
+      <td>${b.genre}</td><td>${b.status}</td>
       <td>${b.totalPages || "—"}</td>
     </tr>`).join("")}
     ${parsedBooks.length > 5 ? `<tr><td colspan="5" style="color:#9b9a97;text-align:center">... and ${parsedBooks.length - 5} more</td></tr>` : ""}
     </tbody>`;
 
-  preview.style.display = "";
+  preview.style.display   = "";
   startImportBtn.disabled = false;
 }
 
-// ── Background Cover Fetcher ──
+// ══════════════════════════════════════════
+//  BACKGROUND COVER FETCHER
+// ══════════════════════════════════════════
+
 const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
-let coverFetchQueue = [];
+let coverFetchQueue   = [];
 let coverFetchRunning = false;
 
-const toast     = document.getElementById("coverFetchToast");
-const toastFill = document.getElementById("toastFill");
-const toastLabel= document.getElementById("toastLabel");
+const toast      = document.getElementById("coverFetchToast");
+const toastFill  = document.getElementById("toastFill");
+const toastLabel = document.getElementById("toastLabel");
 document.getElementById("toastClose").addEventListener("click", () => toast.classList.remove("visible"));
 
 function queueCoverFetch(books) {
@@ -1062,6 +1227,7 @@ function queueCoverFetch(books) {
 }
 
 async function runCoverFetch() {
+  if (!booksCol) return;
   coverFetchRunning = true;
   toast.classList.add("visible");
   const total = coverFetchQueue.length;
@@ -1077,21 +1243,21 @@ async function runCoverFetch() {
 
     done++;
     const pct = Math.round((done / total) * 100);
-    toastFill.style.width = pct + "%";
+    toastFill.style.width  = pct + "%";
     toastLabel.textContent = `${done} / ${total} — ${item.title}`;
     await new Promise(r => setTimeout(r, 350));
   }
 
   toastLabel.textContent = `✓ Finished updating covers!`;
-  toastFill.style.width = "100%";
+  toastFill.style.width  = "100%";
   setTimeout(() => toast.classList.remove("visible"), 3500);
   coverFetchRunning = false;
 }
 
 async function fetchCoverUrl(title, author) {
   try {
-    const q = encodeURIComponent(`${title} ${author}`.trim());
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
+    const q    = encodeURIComponent(`${title} ${author}`.trim());
+    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
     const data = await res.json();
     if (data.items?.[0]?.volumeInfo?.imageLinks) {
       const imgs = data.items[0].volumeInfo.imageLinks;
@@ -1099,7 +1265,7 @@ async function fetchCoverUrl(title, author) {
     }
   } catch {}
   try {
-    const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&limit=1`);
+    const res  = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&limit=1`);
     const data = await res.json();
     const coverId = data.docs?.[0]?.cover_i;
     if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
@@ -1108,9 +1274,9 @@ async function fetchCoverUrl(title, author) {
 }
 
 startImportBtn.addEventListener("click", async () => {
-  if (!parsedBooks.length) return;
+  if (!parsedBooks.length || !booksCol) return;
   startImportBtn.disabled = true;
-  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("importPreview").style.display  = "none";
   document.getElementById("importDropZone").style.display = "none";
 
   const progressEl = document.getElementById("importProgress");
@@ -1119,22 +1285,20 @@ startImportBtn.addEventListener("click", async () => {
   const logEl      = document.getElementById("importLog");
   progressEl.style.display = "";
 
-  // Build existing title set for deduplication
   const existingTitles = new Set(allBooks.map(b => b.title.trim().toLowerCase()));
-
   let success = 0, skipped = 0, failed = 0;
+
   for (let i = 0; i < parsedBooks.length; i++) {
-    const pct = Math.round(((i + 1) / parsedBooks.length) * 100);
-    fillEl.style.width = pct + "%";
+    const pct  = Math.round(((i + 1) / parsedBooks.length) * 100);
+    fillEl.style.width  = pct + "%";
     labelEl.textContent = `Importing ${i + 1} / ${parsedBooks.length}...`;
     const book = parsedBooks[i];
 
-    // Duplicate check
     if (existingTitles.has(book.title.trim().toLowerCase())) {
       skipped++;
       const line = document.createElement("div");
-      line.style.color = "#9b9a97";
-      line.textContent = `— skipped (duplicate): ${book.title}`;
+      line.style.color  = "#9b9a97";
+      line.textContent  = `— skipped (duplicate): ${book.title}`;
       logEl.appendChild(line);
       logEl.scrollTop = logEl.scrollHeight;
       continue;
@@ -1162,6 +1326,6 @@ startImportBtn.addEventListener("click", async () => {
   labelEl.textContent = `Done! ✓ ${success} imported${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ✗ ${failed} failed` : ""}.`;
   labelEl.style.color = "#1a6632";
   startImportBtn.textContent = "Close";
-  startImportBtn.disabled = false;
-  startImportBtn.onclick = () => { closeImport(); queueCoverFetch(allBooks); };
+  startImportBtn.disabled    = false;
+  startImportBtn.onclick     = () => { closeImport(); queueCoverFetch(allBooks); };
 });

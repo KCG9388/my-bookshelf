@@ -1053,6 +1053,201 @@ body {
 .toast-progress-fill { height: 100%; background: #2383e2; border-radius: 3px; transition: width .3s; }
 .toast-label { font-size: 11.5px; color: #6b6b68; }
 
+/* ── User Info (top bar) ── */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.user-avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.user-avatar-sm img { width: 100%; height: 100%; object-fit: cover; }
+.user-display-name {
+  font-size: 13px;
+  color: #37352f;
+  font-weight: 500;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-signout {
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid #e0e0de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #6b6b68;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+.btn-signout:hover { background: #fde8e8; color: #c0392b; border-color: #f5c6c6; }
+
+/* ── Auth Modal ── */
+.modal-auth {
+  max-width: 420px;
+  padding: 36px 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: visible;
+  max-height: none;
+}
+
+.auth-brand {
+  text-align: center;
+  margin-bottom: 4px;
+}
+.auth-brand-icon { font-size: 40px; margin-bottom: 8px; line-height: 1; }
+.auth-brand-name { font-size: 22px; font-weight: 800; color: #37352f; }
+.auth-brand-sub  { font-size: 13.5px; color: #9b9a97; margin-top: 4px; }
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border: 1px solid #e0e0de;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  color: #37352f;
+  cursor: pointer;
+  transition: background .12s, box-shadow .12s;
+  width: 100%;
+}
+.btn-google:hover { background: #f7f7f5; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #9b9a97;
+  font-size: 12px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e8e8e6;
+}
+
+.auth-tabs {
+  display: flex;
+  border: 1px solid #e0e0de;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f7f7f5;
+  padding: 3px;
+  gap: 3px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 7px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: #6b6b68;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: background .12s, color .12s;
+}
+.auth-tab:hover { color: #37352f; }
+.auth-tab.active {
+  background: #fff;
+  color: #37352f;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+}
+
+.auth-form-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.auth-form-area input {
+  padding: 10px 14px;
+  border: 1px solid #e0e0de;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s;
+  font-family: inherit;
+  width: 100%;
+  background: #fafaf9;
+  color: #37352f;
+}
+.auth-form-area input:focus { border-color: #2383e2; background: #fff; }
+
+.auth-error {
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.btn-auth-submit {
+  padding: 11px;
+  background: #37352f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background .15s;
+  letter-spacing: .3px;
+  width: 100%;
+}
+.btn-auth-submit:hover { background: #555; }
+.btn-auth-submit:disabled { background: #b0b0ae; cursor: not-allowed; }
+
+.auth-reset-wrap { text-align: center; }
+.btn-auth-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: #9b9a97;
+  text-decoration: underline;
+  padding: 0;
+  font-family: inherit;
+}
+.btn-auth-link:hover { color: #37352f; }
+
+/* Delete review button */
+.btn-delete-review {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: .5;
+  transition: opacity .12s, background .12s;
+  margin-left: auto;
+}
+.btn-delete-review:hover { opacity: 1; background: #fde8e8; }
+
 /* ── Responsive ── */
 @media (max-width: 600px) {
   body { flex-direction: column; }
