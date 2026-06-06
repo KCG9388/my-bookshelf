@@ -1699,7 +1699,13 @@ async function cleanupRatingNotesOnce(uid) {
 
 // ── 看某使用者的公開書架(B3c)──
 async function loadPublicShelf(uid) {
-  switchView("explore");
+  // 直接切到探索容器(不走 switchView,避免它非同步載入 catalog 後覆蓋掉公開書架)
+  currentView = "explore";
+  document.querySelectorAll(".nav-tab").forEach(t => t.classList.toggle("active", t.dataset.view === "explore"));
+  document.querySelectorAll(".shelf-only").forEach(el => el.style.display = "none");
+  document.getElementById("shelfView").style.display   = "none";
+  document.getElementById("exploreView").style.display = "";
+  exploreLoaded = true;
   viewingPublicUid = uid;
   const grid   = document.getElementById("exploreGrid");
   const banner = document.getElementById("publicBanner");
