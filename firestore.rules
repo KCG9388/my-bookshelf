@@ -15,10 +15,12 @@ service cloud.firestore {
       allow read:  if true;
       allow write: if request.auth != null && request.auth.uid == uid;
 
-      // 私人書架：目前只有本人可讀寫。
-      //   （B3 會在此加上「若本人把 shelfPublic 設為 true，他人才可讀」的條件）
+      // 書架：本人永遠可讀寫；別人「只有當本人 shelfPublic=true」才可讀。
       match /books/{bookId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow write: if request.auth != null && request.auth.uid == uid;
+        allow read:  if (request.auth != null && request.auth.uid == uid)
+                     || (exists(/databases/$(database)/documents/users/$(uid))
+                         && get(/databases/$(database)/documents/users/$(uid)).data.shelfPublic == true);
 
         // 書架底下的舊「私人評論」子集合 — 維持本人專屬
         match /reviews/{rid} {

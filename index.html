@@ -12,7 +12,12 @@
 <aside class="sidebar" id="sidebar" style="display:none">
   <div class="sidebar-title">📚 Home Library</div>
 
-  <div class="sidebar-section">
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-view="shelf">📚 我的書架</button>
+    <button class="nav-tab" data-view="explore">🌐 探索</button>
+  </div>
+
+  <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Status</div>
     <ul class="filter-list" id="statusFilter">
       <li class="active" data-filter="all">⬜ All</li>
@@ -24,22 +29,23 @@
     </ul>
   </div>
 
-  <div class="sidebar-section">
+  <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Year</div>
     <ul class="filter-list" id="yearFilter">
       <li class="active" data-year="all">All Years</li>
     </ul>
   </div>
 
-  <div class="sidebar-section">
+  <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Genre</div>
     <ul class="filter-list" id="genreFilter">
       <li class="active" data-genre="all">All Genres</li>
     </ul>
   </div>
 
-  <button class="add-btn" id="openAddModal">+ New Book</button>
-  <button class="import-btn" id="openImportModal">⬆ Import from Notion</button>
+  <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
+  <button class="import-btn shelf-only" id="openImportModal">⬆ Import from Notion</button>
+  <button class="settings-btn" id="openPrivacyBtn">⚙ 隱私設定</button>
 </aside>
 
 <!-- 主內容 -->
@@ -55,33 +61,58 @@
       <button class="btn-signout" id="signOutBtn" title="Sign out">Sign out</button>
     </div>
   </div>
-  <div class="filter-bar">
-    <div class="filter-group">
-      <label>Sort by</label>
-      <select id="sortSelect">
-        <option value="createdAt_desc">Date Added ↓</option>
-        <option value="createdAt_asc">Date Added ↑</option>
-        <option value="title_asc">Title A → Z</option>
-        <option value="title_desc">Title Z → A</option>
-        <option value="author_asc">Author A → Z</option>
-        <option value="finishDate_desc">Date Finished ↓</option>
-        <option value="progress_desc">Progress ↓</option>
-        <option value="totalPages_desc">Pages ↓</option>
-      </select>
+  <!-- 我的書架(私人)-->
+  <div id="shelfView">
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Sort by</label>
+        <select id="sortSelect">
+          <option value="createdAt_desc">Date Added ↓</option>
+          <option value="createdAt_asc">Date Added ↑</option>
+          <option value="title_asc">Title A → Z</option>
+          <option value="title_desc">Title Z → A</option>
+          <option value="author_asc">Author A → Z</option>
+          <option value="finishDate_desc">Date Finished ↓</option>
+          <option value="progress_desc">Progress ↓</option>
+          <option value="totalPages_desc">Pages ↓</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Format</label>
+        <select id="formatSelect">
+          <option value="all">All Formats</option>
+        </select>
+      </div>
+      <div class="filter-chips" id="activeFilters"></div>
+      <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
     </div>
-    <div class="filter-group">
-      <label>Format</label>
-      <select id="formatSelect">
-        <option value="all">All Formats</option>
-      </select>
+    <div class="book-grid" id="bookGrid">
+      <div class="loading">Loading...</div>
     </div>
-    <div class="filter-chips" id="activeFilters"></div>
-    <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
+    <div class="pagination" id="pagination" style="display:none"></div>
   </div>
-  <div class="book-grid" id="bookGrid">
-    <div class="loading">Loading...</div>
+
+  <!-- 探索(共享書庫,公開)-->
+  <div id="exploreView" style="display:none">
+    <div class="public-banner" id="publicBanner">
+      <span class="pb-text"></span>
+      <button class="pb-back" id="publicBackBtn">← 回探索</button>
+    </div>
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Sort by</label>
+        <select id="exploreSortSelect">
+          <option value="rating">評分 ↓</option>
+          <option value="popular">熱度(評分人數)↓</option>
+          <option value="recent">最新加入</option>
+        </select>
+      </div>
+      <span class="book-count" id="exploreCount"></span>
+    </div>
+    <div class="book-grid" id="exploreGrid">
+      <div class="loading">Loading...</div>
+    </div>
   </div>
-  <div class="pagination" id="pagination" style="display:none"></div>
 </main>
 
 <!-- Screenshot Crop Overlay -->
@@ -268,7 +299,7 @@
         <div class="detail-genre" id="detailGenre"></div>
         <div class="detail-status-badge" id="detailStatus"></div>
 
-        <div class="detail-progress-section">
+        <div class="detail-progress-section detail-shelf-only">
           <label>Progress</label>
           <div class="progress-bar-wrap">
             <div class="progress-bar-fill" id="detailProgressBar"></div>
@@ -276,7 +307,7 @@
           <div class="progress-text" id="detailProgressText"></div>
         </div>
 
-        <div class="detail-page-edit">
+        <div class="detail-page-edit detail-shelf-only">
           <label>Update current page:</label>
           <div class="page-edit-row">
             <input type="number" id="detailCurrentPage" min="0" />
@@ -285,12 +316,13 @@
           </div>
         </div>
 
-        <div class="detail-dates" id="detailDates"></div>
-        <div class="detail-notes" id="detailNotes"></div>
+        <div class="detail-dates detail-shelf-only" id="detailDates"></div>
+        <div class="detail-notes detail-shelf-only" id="detailNotes"></div>
 
         <div class="detail-actions">
-          <button class="btn-edit" id="editBookBtn">Edit</button>
-          <button class="btn-delete" id="deleteBookBtn">Delete</button>
+          <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
+          <button class="btn-delete detail-shelf-only" id="deleteBookBtn">Delete</button>
+          <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ 加入我的書架</button>
         </div>
       </div>
     </div>
@@ -323,6 +355,41 @@
           <button class="btn-submit-review" id="submitReviewBtn">Submit Review</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 隱私設定 Modal -->
+<div class="modal-overlay" id="privacyModal">
+  <div class="modal modal-privacy">
+    <div class="modal-header">
+      <h2>⚙ 隱私設定</h2>
+      <button class="modal-close" id="closePrivacyModal">✕</button>
+    </div>
+    <div class="privacy-body">
+      <p class="privacy-intro">控制別人能不能看到你的書架。預設全部不公開。</p>
+
+      <label class="privacy-row">
+        <div class="privacy-text">
+          <div class="privacy-name">公開我的書庫</div>
+          <div class="privacy-desc">開啟後,別人可以瀏覽你讀過/在讀/想讀的書、狀態與閱讀進度。</div>
+        </div>
+        <input type="checkbox" id="prefShelfPublic" class="privacy-switch" />
+      </label>
+
+      <label class="privacy-row">
+        <div class="privacy-text">
+          <div class="privacy-name">顯示「正在閱讀」</div>
+          <div class="privacy-desc">在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。</div>
+        </div>
+        <input type="checkbox" id="prefShowReading" class="privacy-switch" />
+      </label>
+
+      <div class="privacy-note">📌 你的「公開評分/評論」一律公開,不受此設定影響——刪除評論才會消失。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="cancelPrivacy">Cancel</button>
+      <button class="btn-save" id="savePrivacyBtn">儲存</button>
     </div>
   </div>
 </div>

@@ -13,6 +13,13 @@ let currentSort   = "createdAt_desc";
 let currentDetailId = null;
 const PAGE_SIZE = 24;
 let currentPage = 1;
+// ── Phase B-3 狀態 ──
+let activeCatalogKey = null;
+let detailMode    = "shelf";   // "shelf" | "catalog"
+let currentView   = "shelf";   // "shelf" | "explore"
+let exploreBooks  = [];
+let exploreLoaded = false;
+let viewingPublicUid = null;
 
 // ── DOM ──
 const bookGrid      = document.getElementById("bookGrid");
@@ -38,7 +45,8 @@ auth.onAuthStateChanged(user => {
     startBooksListener();
     ensureProfile(user)
       .then(() => backfillCatalog(user.uid))
-      .then(() => migrateRatingsOnce(user.uid));
+      .then(() => migrateRatingsOnce(user.uid))
+      .then(() => cleanupRatingNotesOnce(user.uid));
   } else {
     hideApp();
     showAuthModal();
@@ -885,6 +893,14 @@ function openDetail(id) {
   const b = allBooks.find(x => x.id === id);
   if (!b) return;
 
+  // 書架模式:還原私人書架專屬區塊、隱藏「加入書架」鈕
+  detailMode = "shelf";
+  activeCatalogKey = b.catalogKey || catalogKeyFor(b.title, b.author);
+  document.querySelectorAll(".detail-shelf-only").forEach(el => el.style.display = "");
+  const addShelfBtn = document.getElementById("addToShelfBtn");
+  if (addShelfBtn) addShelfBtn.style.display = "none";
+  document.getElementById("detailCover").style.display = "";
+
   document.getElementById("detailTitle").textContent  = b.title;
   document.getElementById("detailAuthor").textContent = b.author || "";
   document.getElementById("detailGenre").textContent  = b.genre  || "";
@@ -1028,12 +1044,8 @@ function starsHTML(rating) {
   return html;
 }
 
-// 取得目前詳情書對應的 catalog 鑰匙
-function currentCatalogKey() {
-  const b = allBooks.find(x => x.id === currentDetailId);
-  if (!b) return null;
-  return b.catalogKey || catalogKeyFor(b.title, b.author);
-}
+// 目前詳情 Modal 對應的 catalog 鑰匙(書架模式與探索模式共用)
+function currentCatalogKey() { return activeCatalogKey; }
 
 // 新增/編輯公開評論（一人一書一則：用 uid 當文件 id），並用交易同步更新平均分
 async function applyReviewToCatalog(catalogKey, uid, reviewData) {
@@ -1131,7 +1143,7 @@ function renderReviews(reviews) {
     return `<div class="review-card">
       <div class="review-top">
         <div class="reviewer-avatar">${escHtml(initials)}</div>
-        <div class="reviewer-name">${escHtml(r.reviewerName || "Anonymous")}</div>
+        <div class="reviewer-name clickable" data-uid="${escHtml(r.uid || r.id || "")}">${escHtml(r.reviewerName || "Anonymous")}</div>
         ${r.rating ? `<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>` : ""}
         ${r.readPercent != null ? `<div class="review-read-badge">Read ${r.readPercent}%</div>` : ""}
         ${isOwn ? `<button class="btn-delete-review" data-id="${r.id}" title="Delete your review">🗑</button>` : ""}
@@ -1148,6 +1160,14 @@ function renderReviews(reviews) {
       try {
         await removeReviewFromCatalog(currentCatalogKey(), currentUser.uid);
       } catch(e) { alert("Failed to delete: " + e.message); }
+    });
+  });
+
+  // Bind 評論者名稱 → 看對方公開書架
+  reviewsList.querySelectorAll(".reviewer-name.clickable").forEach(el => {
+    el.addEventListener("click", () => {
+      const uid = el.dataset.uid;
+      if (uid) { detailModal.classList.remove("open"); loadPublicShelf(uid); }
     });
   });
 }
@@ -1485,4 +1505,254 @@ startImportBtn.addEventListener("click", async () => {
   startImportBtn.textContent = "Close";
   startImportBtn.disabled    = false;
   startImportBtn.onclick     = () => { closeImport(); queueCoverFetch(allBooks); };
+});
+
+// ══════════════════════════════════════════
+//  PHASE B-3 — 探索頁 / 隱私設定 / 公開書架
+// ══════════════════════════════════════════
+
+// ── 頁面切換:我的書架 / 探索 ──
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll(".nav-tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.view === view));
+  document.querySelectorAll(".shelf-only").forEach(el =>
+    el.style.display = view === "shelf" ? "" : "none");
+  document.getElementById("shelfView").style.display   = view === "shelf"   ? "" : "none";
+  document.getElementById("exploreView").style.display = view === "explore" ? "" : "none";
+  if (view === "explore") {
+    document.getElementById("publicBanner").style.display = "none";
+    if (!exploreLoaded || viewingPublicUid) { viewingPublicUid = null; loadExplore(); }
+    exploreLoaded = true;
+  }
+}
+document.querySelectorAll(".nav-tab").forEach(tab =>
+  tab.addEventListener("click", () => switchView(tab.dataset.view)));
+document.getElementById("exploreSortSelect").addEventListener("change", renderExplore);
+
+// ── 共享書庫平均分 ──
+function avgOf(c) {
+  const n = c.ratingCount || 0;
+  return n > 0 ? (c.ratingSum || 0) / n : 0;
+}
+
+// ── 載入共享書庫 ──
+async function loadExplore() {
+  const grid = document.getElementById("exploreGrid");
+  grid.innerHTML = `<div class="loading">Loading...</div>`;
+  try {
+    const snap = await db.collection("catalog").get();
+    exploreBooks = snap.docs.map(d => ({ key: d.id, ...d.data() }));
+    renderExplore();
+  } catch (e) {
+    grid.innerHTML = `<div class="loading">載入失敗:${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderExplore() {
+  const grid = document.getElementById("exploreGrid");
+  const sort = document.getElementById("exploreSortSelect").value;
+  let list = [...exploreBooks];
+  if (sort === "rating")        list.sort((a,b) => avgOf(b) - avgOf(a) || (b.ratingCount||0) - (a.ratingCount||0));
+  else if (sort === "popular")  list.sort((a,b) => (b.ratingCount||0) - (a.ratingCount||0));
+  else                          list.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+
+  document.getElementById("exploreCount").textContent = `${list.length} books`;
+  if (!list.length) { grid.innerHTML = `<div class="loading">共享書庫還沒有書</div>`; return; }
+
+  grid.innerHTML = list.map(c => {
+    const avg   = avgOf(c);
+    const cover = c.cover
+      ? `<div class="book-cover"><img src="${escHtml(c.cover)}" alt="" loading="lazy" /></div>`
+      : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(c.title||"")}</div></div>`;
+    const rating = c.ratingCount
+      ? `<div class="card-rating"><span class="cr-star">${starsHTML(avg)}</span><span>${avg.toFixed(1)}</span><span class="cr-count">(${c.ratingCount})</span></div>`
+      : `<div class="card-rating cr-empty">尚無評分</div>`;
+    return `<div class="book-card" data-key="${escHtml(c.key)}">
+      ${cover}
+      <div class="book-info">
+        <div class="book-title">${escHtml(c.title||"")}</div>
+        <div class="book-author">${escHtml(c.author||"")}</div>
+        ${rating}
+      </div>
+    </div>`;
+  }).join("");
+
+  grid.querySelectorAll(".book-card").forEach(card =>
+    card.addEventListener("click", () => {
+      const c = exploreBooks.find(x => x.key === card.dataset.key);
+      if (c) openCatalogDetail(c);
+    }));
+}
+
+// ── 開啟共享書(探索)詳情:重用詳情 Modal,隱藏私人書架專屬區塊 ──
+function openCatalogDetail(c) {
+  detailMode       = "catalog";
+  activeCatalogKey = c.key;
+  currentDetailId  = null;
+
+  document.getElementById("detailTitle").textContent  = c.title  || "";
+  document.getElementById("detailAuthor").textContent = c.author || "";
+  document.getElementById("detailGenre").textContent  = c.genre  || "";
+  document.getElementById("detailStatus").innerHTML   = "";
+  const coverImg = document.getElementById("detailCover");
+  coverImg.src = c.cover || "";
+  coverImg.style.display = c.cover ? "" : "none";
+
+  // 隱藏私人書架專屬區塊,顯示「加入我的書架」
+  document.querySelectorAll(".detail-shelf-only").forEach(el => el.style.display = "none");
+  const addBtn  = document.getElementById("addToShelfBtn");
+  const onShelf = allBooks.some(b => (b.catalogKey || catalogKeyFor(b.title, b.author)) === c.key);
+  addBtn.style.display = "";
+  addBtn.disabled      = onShelf;
+  addBtn.textContent   = onShelf ? "✓ 已在你的書架" : "➕ 加入我的書架";
+
+  const readInfo = document.getElementById("reviewReadInfo");
+  if (readInfo) readInfo.innerHTML = "";
+  document.getElementById("reviewPct").value = 0;
+  if (currentUser) {
+    document.getElementById("reviewerName").value =
+      currentUser.displayName || (currentUser.email ? currentUser.email.split("@")[0] : "");
+  }
+  selectedRating = 0; renderStars(0); updateStarLabel(0, true);
+  document.getElementById("reviewText").value = "";
+
+  detailModal.classList.add("open");
+  loadReviews(c.key);
+}
+
+// ── 從探索把書加入我的書架 ──
+document.getElementById("addToShelfBtn").addEventListener("click", async () => {
+  if (!currentUser || !booksCol) { alert("請先登入"); return; }
+  const c = exploreBooks.find(x => x.key === activeCatalogKey)
+         || (viewingPublicUid ? { key: activeCatalogKey } : null);
+  if (!c) return;
+  const btn = document.getElementById("addToShelfBtn");
+  btn.disabled = true; btn.textContent = "加入中...";
+  try {
+    await booksCol.add({
+      title: c.title || document.getElementById("detailTitle").textContent || "",
+      author: c.author || document.getElementById("detailAuthor").textContent || "",
+      genre: c.genre || "", totalPages: c.totalPages || 0, currentPage: 0,
+      status: "Want to Read", cover: c.cover || document.getElementById("detailCover").src || "",
+      startDate: "", finishDate: "", notes: "",
+      startYear: new Date().getFullYear(),
+      userId: currentUser.uid, catalogKey: c.key,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    btn.textContent = "✓ 已加入書架";
+  } catch (e) {
+    alert("加入失敗:" + e.message);
+    btn.disabled = false; btn.textContent = "➕ 加入我的書架";
+  }
+});
+
+// ── 隱私設定 ──
+document.getElementById("openPrivacyBtn").addEventListener("click", async () => {
+  if (!currentUser) { alert("請先登入"); return; }
+  try {
+    const snap = await db.collection("users").doc(currentUser.uid).get();
+    const d = snap.exists ? snap.data() : {};
+    document.getElementById("prefShelfPublic").checked = !!d.shelfPublic;
+    document.getElementById("prefShowReading").checked = !!d.showReading;
+  } catch (e) { console.warn(e); }
+  document.getElementById("privacyModal").classList.add("open");
+});
+function closePrivacy() { document.getElementById("privacyModal").classList.remove("open"); }
+document.getElementById("closePrivacyModal").addEventListener("click", closePrivacy);
+document.getElementById("cancelPrivacy").addEventListener("click", closePrivacy);
+document.getElementById("privacyModal").addEventListener("click", e => {
+  if (e.target.id === "privacyModal") closePrivacy();
+});
+document.getElementById("savePrivacyBtn").addEventListener("click", async () => {
+  if (!currentUser) return;
+  const btn = document.getElementById("savePrivacyBtn");
+  btn.disabled = true; btn.textContent = "儲存中...";
+  try {
+    await db.collection("users").doc(currentUser.uid).set({
+      shelfPublic: document.getElementById("prefShelfPublic").checked,
+      showReading: document.getElementById("prefShowReading").checked,
+    }, { merge: true });
+    closePrivacy();
+  } catch (e) { alert("儲存失敗:" + e.message); }
+  btn.disabled = false; btn.textContent = "儲存";
+});
+
+// ── 一次性:清掉私人書架 notes 裡的舊星等文字(只保留真正的筆記) ──
+async function cleanupRatingNotesOnce(uid) {
+  const profRef = db.collection("users").doc(uid);
+  try {
+    const prof = await profRef.get();
+    if (prof.exists && prof.data().notesCleaned) return;
+    const snap = await booksCol.get();
+    let cleaned = 0;
+    for (const d of snap.docs) {
+      const notes = d.data().notes || "";
+      if (!/[★☆]/.test(notes)) continue;
+      const stripped = notes.replace(/Rating:\s*[★☆]+/g, "").replace(/[★☆]+/g, "").trim();
+      if (stripped !== notes) { await d.ref.update({ notes: stripped }); cleaned++; }
+    }
+    await profRef.set({ notesCleaned: true }, { merge: true });
+    if (cleaned) console.log(`[notes] 已清理 ${cleaned} 本書的舊星等文字`);
+  } catch (e) { console.warn("cleanupRatingNotesOnce failed:", e); }
+}
+
+// ── 看某使用者的公開書架(B3c)──
+async function loadPublicShelf(uid) {
+  switchView("explore");
+  viewingPublicUid = uid;
+  const grid   = document.getElementById("exploreGrid");
+  const banner = document.getElementById("publicBanner");
+  const pbText = banner.querySelector(".pb-text");
+  grid.innerHTML = `<div class="loading">Loading...</div>`;
+  try {
+    const prof  = await db.collection("users").doc(uid).get();
+    const pdata = prof.exists ? prof.data() : {};
+    const name  = pdata.displayName || "Reader";
+    if (!pdata.shelfPublic) {
+      banner.style.display = "flex"; pbText.textContent = `🔒 ${name} 的書架未公開`;
+      grid.innerHTML = `<div class="loading">這位使用者沒有公開書架</div>`;
+      return;
+    }
+    const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
+    const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    banner.style.display = "flex"; pbText.textContent = `📖 ${name} 的公開書架(${books.length} 本)`;
+    renderPublicShelf(books);
+  } catch (e) {
+    banner.style.display = "flex"; pbText.textContent = `🔒 無法載入此書架`;
+    grid.innerHTML = `<div class="loading">對方可能未公開書架</div>`;
+  }
+}
+
+function renderPublicShelf(books) {
+  const grid = document.getElementById("exploreGrid");
+  document.getElementById("exploreCount").textContent = "";
+  if (!books.length) { grid.innerHTML = `<div class="loading">這個書架是空的</div>`; return; }
+  grid.innerHTML = books.map(b => {
+    const cover = b.cover
+      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="" loading="lazy" /></div>`
+      : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title||"")}</div></div>`;
+    const pct = (b.totalPages && b.currentPage) ? Math.min(100, Math.round(b.currentPage / b.totalPages * 100)) : 0;
+    return `<div class="book-card" data-key="${escHtml(b.catalogKey || catalogKeyFor(b.title, b.author))}">
+      ${cover}
+      <div class="book-info">
+        <div class="book-title">${escHtml(b.title||"")}</div>
+        <div class="book-author">${escHtml(b.author||"")}</div>
+        <div class="book-genre">${escHtml(b.status||"")}${pct ? ` · ${pct}%` : ""}</div>
+      </div>
+    </div>`;
+  }).join("");
+  grid.querySelectorAll(".book-card").forEach(card =>
+    card.addEventListener("click", async () => {
+      try {
+        const snap = await db.collection("catalog").doc(card.dataset.key).get();
+        if (snap.exists) openCatalogDetail({ key: card.dataset.key, ...snap.data() });
+      } catch (e) { console.warn(e); }
+    }));
+}
+
+document.getElementById("publicBackBtn").addEventListener("click", () => {
+  viewingPublicUid = null;
+  document.getElementById("publicBanner").style.display = "none";
+  loadExplore();
 });
