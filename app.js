@@ -878,7 +878,7 @@ function openDetail(id) {
   document.getElementById("detailNotes").textContent = b.notes || "";
 
   detailModal.classList.add("open");
-  loadReviews(id);
+  loadReviews(b.catalogKey || catalogKeyFor(b.title, b.author));
 
   // Reset review form
   selectedRating = 0;
@@ -989,12 +989,67 @@ function starsHTML(rating) {
   return html;
 }
 
-function loadReviews(bookId) {
-  if (reviewsUnsub) reviewsUnsub();
-  const reviewsCol = booksCol.doc(bookId).collection("reviews");
-  reviewsUnsub = reviewsCol.orderBy("createdAt", "desc").onSnapshot(snap => {
-    renderReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+// 取得目前詳情書對應的 catalog 鑰匙
+function currentCatalogKey() {
+  const b = allBooks.find(x => x.id === currentDetailId);
+  if (!b) return null;
+  return b.catalogKey || catalogKeyFor(b.title, b.author);
+}
+
+// 新增/編輯公開評論（一人一書一則：用 uid 當文件 id），並用交易同步更新平均分
+async function applyReviewToCatalog(catalogKey, uid, reviewData) {
+  const catRef = db.collection("catalog").doc(catalogKey);
+  const revRef = catRef.collection("reviews").doc(uid);
+  await db.runTransaction(async tx => {
+    const catSnap = await tx.get(catRef);
+    const revSnap = await tx.get(revRef);
+    let sum   = (catSnap.exists && catSnap.data().ratingSum)   || 0;
+    let count = (catSnap.exists && catSnap.data().ratingCount) || 0;
+    const newR = reviewData.rating || 0;
+    if (revSnap.exists) {
+      sum = sum - (revSnap.data().rating || 0) + newR;   // 編輯：調整差額
+    } else {
+      sum += newR; count += 1;                            // 新增
+    }
+    const data = { ...reviewData };
+    if (revSnap.exists && revSnap.data().createdAt) data.createdAt = revSnap.data().createdAt; // 編輯保留原始時間
+    tx.set(revRef, data);
+    tx.set(catRef, {
+      ratingSum: sum, ratingCount: count,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   });
+}
+
+// 刪除自己的公開評論，並用交易回扣平均分
+async function removeReviewFromCatalog(catalogKey, uid) {
+  const catRef = db.collection("catalog").doc(catalogKey);
+  const revRef = catRef.collection("reviews").doc(uid);
+  await db.runTransaction(async tx => {
+    const revSnap = await tx.get(revRef);
+    const catSnap = await tx.get(catRef);
+    if (!revSnap.exists) return;
+    const r = revSnap.data().rating || 0;
+    let sum   = (catSnap.exists && catSnap.data().ratingSum)   || 0;
+    let count = (catSnap.exists && catSnap.data().ratingCount) || 0;
+    tx.delete(revRef);
+    tx.set(catRef, {
+      ratingSum:   Math.max(0, sum - r),
+      ratingCount: Math.max(0, count - 1),
+      updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
+// 讀取某本書的「全站公開評論」
+function loadReviews(catalogKey) {
+  if (reviewsUnsub) reviewsUnsub();
+  if (!catalogKey) { renderReviews([]); return; }
+  const reviewsCol = db.collection("catalog").doc(catalogKey).collection("reviews");
+  reviewsUnsub = reviewsCol.orderBy("createdAt", "desc").onSnapshot(
+    snap => renderReviews(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err  => { console.warn("loadReviews:", err); renderReviews([]); }
+  );
 }
 
 function renderReviews(reviews) {
@@ -1029,7 +1084,7 @@ function renderReviews(reviews) {
   }).join("");
 
   reviewsList.innerHTML = reviews.map(r => {
-    const isOwn    = currentUser && r.userId === currentUser.uid;
+    const isOwn    = currentUser && (r.uid === currentUser.uid || r.id === currentUser.uid);
     const initials = (r.reviewerName || "?").slice(0, 2).toUpperCase();
     const date     = r.createdAt?.toDate
       ? r.createdAt.toDate().toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" })
@@ -1052,30 +1107,35 @@ function renderReviews(reviews) {
     btn.addEventListener("click", async () => {
       if (!confirm("Delete your review?")) return;
       try {
-        await booksCol.doc(currentDetailId).collection("reviews").doc(btn.dataset.id).delete();
+        await removeReviewFromCatalog(currentCatalogKey(), currentUser.uid);
       } catch(e) { alert("Failed to delete: " + e.message); }
     });
   });
 }
 
 document.getElementById("submitReviewBtn").addEventListener("click", async () => {
-  if (!booksCol) { alert("Please sign in first."); return; }
+  if (!currentUser) { alert("Please sign in first."); return; }
   const name = document.getElementById("reviewerName").value.trim();
   const text = document.getElementById("reviewText").value.trim();
   const pct  = parseInt(document.getElementById("reviewPct").value);
   if (!name)           { alert("Please enter your name or nickname."); return; }
   if (!selectedRating) { alert("Please select a star rating."); return; }
 
+  const catalogKey = currentCatalogKey();
+  if (!catalogKey)     { alert("Cannot locate this book in the catalog."); return; }
+
   const btn = document.getElementById("submitReviewBtn");
   btn.disabled = true; btn.textContent = "Submitting...";
   try {
-    await booksCol.doc(currentDetailId).collection("reviews").add({
+    await applyReviewToCatalog(catalogKey, currentUser.uid, {
+      uid:          currentUser.uid,
       reviewerName: name,
       rating:       selectedRating,
       text,
-      readPercent:  pct,
-      userId:       currentUser?.uid || null,
+      readPercent:  Number.isFinite(pct) ? pct : null,
+      photoURL:     currentUser.photoURL || "",
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
     document.getElementById("reviewText").value = "";
     selectedRating = 0; renderStars(0); updateStarLabel(0, true);
