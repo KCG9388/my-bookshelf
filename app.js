@@ -36,7 +36,9 @@ auth.onAuthStateChanged(user => {
     booksCol = db.collection("users").doc(user.uid).collection("books");
     updateUserUI(user);
     startBooksListener();
-    ensureProfile(user).then(() => backfillCatalog(user.uid));
+    ensureProfile(user)
+      .then(() => backfillCatalog(user.uid))
+      .then(() => migrateRatingsOnce(user.uid));
   } else {
     hideApp();
     showAuthModal();
@@ -175,6 +177,43 @@ async function backfillCatalog(uid) {
     await profRef.set({ catalogSeeded: true }, { merge: true });
     if (snap.size) console.log(`[catalog] 已把 ${snap.size} 本書補進共享書庫`);
   } catch (e) { console.warn("backfillCatalog failed:", e); }
+}
+
+// 一次性（僅限站長本人）：把舊書 notes 裡的 ★ 星等，轉成社群評分種子。
+//   只認 SEED_OWNER_UID，避免測試帳號（持有 189 本複製品）污染評分。
+const SEED_OWNER_UID = "oIogb2mbGdNPAZHvue0XMhOAi863";
+async function migrateRatingsOnce(uid) {
+  if (uid !== SEED_OWNER_UID) return;
+  const profRef = db.collection("users").doc(uid);
+  try {
+    const prof = await profRef.get();
+    if (prof.exists && prof.data().ratingsMigrated) return;   // 已遷移過
+    const displayName = (prof.exists && prof.data().displayName) || "Reader";
+    const photoURL    = (prof.exists && prof.data().photoURL)    || "";
+    const snap = await booksCol.get();
+    let migrated = 0;
+    for (const d of snap.docs) {
+      const b     = d.data();
+      const stars = ((b.notes || "").match(/★/g) || []).length;   // 數實心星 = 星等
+      if (stars < 1) continue;
+      const key   = b.catalogKey || catalogKeyFor(b.title, b.author);
+      // 用「讀完日期」當評分時間（沒有就用現在）
+      let createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      if (b.finishDate) {
+        const dt = new Date(b.finishDate);
+        if (!isNaN(dt.getTime())) createdAt = firebase.firestore.Timestamp.fromDate(dt);
+      }
+      await applyReviewToCatalog(key, uid, {
+        uid, reviewerName: displayName, rating: stars, text: "",
+        readPercent: null, photoURL, createdAt,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        seededFromNotes: true,
+      });
+      migrated++;
+    }
+    await profRef.set({ ratingsMigrated: true }, { merge: true });
+    if (migrated) console.log(`[ratings] 已把 ${migrated} 本書的星等轉成社群評分種子`);
+  } catch (e) { console.warn("migrateRatingsOnce failed:", e); }
 }
 
 // ── Sign Out ──
