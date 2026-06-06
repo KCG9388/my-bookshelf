@@ -1,0 +1,5 @@
+_notion_export/
+node_modules/
+.DS_Store
+PROJECT_CONTEXT.md
+ExportBlock-*.zip

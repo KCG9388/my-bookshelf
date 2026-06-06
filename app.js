@@ -36,7 +36,6 @@ auth.onAuthStateChanged(user => {
     booksCol = db.collection("users").doc(user.uid).collection("books");
     updateUserUI(user);
     startBooksListener();
-    checkMigration(user.uid);
   } else {
     hideApp();
     showAuthModal();
@@ -89,37 +88,10 @@ function startBooksListener() {
   });
 }
 
-// ── 舊資料遷移（第一次登入時）──
-async function checkMigration(uid) {
-  try {
-    const userSnap = await db.collection("users").doc(uid).collection("books").limit(1).get();
-    if (!userSnap.empty) return; // 已有資料
-
-    const oldSnap = await db.collection("books").get();
-    if (oldSnap.empty) return; // 沒有舊資料
-
-    const count = oldSnap.size;
-    const ok = confirm(
-      `👋 歡迎！\n\n發現舊書庫有 ${count} 本書。\n是否將它們匯入到你的帳號？`
-    );
-    if (!ok) return;
-
-    // 分批寫入（Firestore 每批上限 499）
-    const BATCH_SIZE = 499;
-    const docs = oldSnap.docs;
-    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
-      const batch = db.batch();
-      docs.slice(i, i + BATCH_SIZE).forEach(doc => {
-        const ref = db.collection("users").doc(uid).collection("books").doc(doc.id);
-        batch.set(ref, { ...doc.data(), userId: uid });
-      });
-      await batch.commit();
-    }
-    alert(`✓ 成功將 ${count} 本書匯入到你的帳號！`);
-  } catch (e) {
-    console.error("Migration failed:", e);
-  }
-}
+// ── 舊書庫自動匯入已移除（多人版修正）──
+//   原本會在「每個新用戶」第一次登入時，問要不要把舊的 189 本複製進他帳號，
+//   這在多人版是錯的：新用戶書庫就該是 0，自己匯入或輸入。
+//   那 189 本舊書保留在 Firestore，Phase B 會拿來當「共享書目」的種子。
 
 // ── Sign Out ──
 document.getElementById("signOutBtn").addEventListener("click", () => {
