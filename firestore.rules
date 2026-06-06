@@ -1,35 +1,47 @@
 rules_version = '2';
 
 // ──────────────────────────────────────────────────────────────
-//  Bookshelf 安全規則
-//  原則：私人書架只有本人能碰；舊書庫唯讀;社群層大家可讀、只能改自己的。
+//  Bookshelf 安全規則（Phase B-1）
+//  原則：使用者檔案公開可讀（只放非敏感欄位）；書架私密；
+//        舊書庫鎖死；共享書庫大家可讀、評論只能改自己的。
 // ──────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ① 私人書架(含個人書、進度、私人筆記、私人評論)
-    //    只有「本人帳號」能讀寫,別人連看都看不到。
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    // ① 使用者公開檔案：顯示名稱 / 頭像 / 隱私開關
+    //    大家可讀（評論要顯示作者名、之後探索頁要顯示使用者），本人可寫。
+    //    email 等敏感資料不放這份文件，所以公開讀無妨。
+    match /users/{uid} {
+      allow read:  if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+
+      // 私人書架：目前只有本人可讀寫。
+      //   （B3 會在此加上「若本人把 shelfPublic 設為 true，他人才可讀」的條件）
+      match /books/{bookId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // 書架底下的舊「私人評論」子集合 — 維持本人專屬
+        match /reviews/{rid} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
     }
 
-    // ② 舊的扁平書庫(你的 189 本)→ 完全鎖死,誰都不能讀/寫/刪。
-    //    自動匯入已移除,新用戶看不到也碰不到這些書(書庫從 0 開始)。
-    //    這批書安靜保留著,Phase B 會由我從後台讀出來轉成「共享書目」種子。
+    // ② 舊的扁平書庫（你的 189 本）→ 完全鎖死，誰都不能讀/寫/刪。
+    //    已不再使用，種子改由各使用者登入時從自己書架補進 catalog。
     match /books/{document=**} {
       allow read, write: if false;
     }
 
-    // ③ 社群層(之後 Phase B 啟用,先把規則放好,不影響現況)
-    //    共享書目:大家可讀;暫時允許登入者寫入書目資料(之後再收緊成只能補欄位)。
+    // ③ 共享書庫 catalog：匿名書目，大家可讀；登入者可建立 / 補資料。
     match /catalog/{bookId} {
       allow read:  if true;
       allow write: if request.auth != null;
 
-      // 公開評論:用「評論者 uid」當文件 id → 天然保證「一人一書一則」。
-      //   大家都看得到;但只能新增/修改/刪除「自己那一則」。
+      // 公開評論：用「評論者 uid」當文件 id → 天然保證一人一書一則。
+      //   大家都看得到；但只能新增 / 修改 / 刪除自己那一則。
       match /reviews/{reviewerUid} {
-        allow read:                  if true;
+        allow read:                   if true;
         allow create, update, delete: if request.auth != null
                                        && request.auth.uid == reviewerUid;
       }

@@ -36,6 +36,7 @@ auth.onAuthStateChanged(user => {
     booksCol = db.collection("users").doc(user.uid).collection("books");
     updateUserUI(user);
     startBooksListener();
+    ensureProfile(user).then(() => backfillCatalog(user.uid));
   } else {
     hideApp();
     showAuthModal();
@@ -92,6 +93,89 @@ function startBooksListener() {
 //   原本會在「每個新用戶」第一次登入時，問要不要把舊的 189 本複製進他帳號，
 //   這在多人版是錯的：新用戶書庫就該是 0，自己匯入或輸入。
 //   那 189 本舊書保留在 Firestore，Phase B 會拿來當「共享書目」的種子。
+
+// ══════════════════════════════════════════
+//  PHASE B-1 — 共享書庫 catalog + 使用者檔案
+// ══════════════════════════════════════════
+
+// 產生 catalog 鑰匙：正規化「書名+作者」（支援中英日文，去空白/標點/大小寫）
+function catalogKeyFor(title, author) {
+  const norm = s => (s || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")        // 去除重音記號
+    .replace(/[^\p{L}\p{N}]+/gu, "");        // 只留字母與數字（Unicode）
+  const k = (norm(title) + "_" + norm(author)).slice(0, 400);
+  return k || "unknown";
+}
+
+// 把一本書 upsert 進共享 catalog（匿名，不含任何使用者資訊）
+async function upsertCatalog(book) {
+  const key = catalogKeyFor(book.title, book.author);
+  const ref = db.collection("catalog").doc(key);
+  try {
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({
+        title:      book.title  || "",
+        author:     book.author || "",
+        genre:      book.genre  || "",
+        totalPages: book.totalPages || 0,
+        cover:      book.cover  || "",
+        ratingCount: 0,
+        ratingSum:   0,
+        createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:  firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      // 已存在：只補「原本沒有的封面」，絕不覆蓋評分聚合
+      const patch = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      if (!snap.data().cover && book.cover) patch.cover = book.cover;
+      await ref.set(patch, { merge: true });
+    }
+  } catch (e) { console.warn("catalog upsert failed:", e); }
+  return key;
+}
+
+// 確保使用者公開檔案存在（顯示名稱/頭像/隱私開關；email 不放這裡）
+async function ensureProfile(user) {
+  const ref = db.collection("users").doc(user.uid);
+  const base = {
+    displayName: user.displayName || (user.email ? user.email.split("@")[0] : "Reader"),
+    photoURL:    user.photoURL || "",
+  };
+  try {
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({
+        ...base,
+        shelfPublic: false,   // 隱私預設：書庫不公開
+        showReading: false,   // 隱私預設：不顯示「正在閱讀」
+        createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await ref.set(base, { merge: true });  // 只更新名稱/頭像，不動隱私開關
+    }
+  } catch (e) { console.warn("ensureProfile failed:", e); }
+}
+
+// 一次性：把使用者現有書架的書補進 catalog（冪等，用 profile 的 catalogSeeded 旗標守門）
+async function backfillCatalog(uid) {
+  const profRef = db.collection("users").doc(uid);
+  try {
+    const prof = await profRef.get();
+    if (prof.exists && prof.data().catalogSeeded) return;
+    const snap = await booksCol.get();
+    for (const d of snap.docs) {
+      const b   = d.data();
+      const key = await upsertCatalog(b);
+      if (!b.catalogKey) d.ref.update({ catalogKey: key }).catch(() => {});
+    }
+    await profRef.set({ catalogSeeded: true }, { merge: true });
+    if (snap.size) console.log(`[catalog] 已把 ${snap.size} 本書補進共享書庫`);
+  } catch (e) { console.warn("backfillCatalog failed:", e); }
+}
 
 // ── Sign Out ──
 document.getElementById("signOutBtn").addEventListener("click", () => {
@@ -741,6 +825,7 @@ document.getElementById("saveBook").addEventListener("click", async () => {
   };
 
   try {
+    book.catalogKey = await upsertCatalog(book);   // 同步進共享書庫，並記下指向 catalog 的鑰匙
     if (currentDetailId && addModal.dataset.mode === "edit") {
       await booksCol.doc(currentDetailId).update({ ...book });
     } else {
@@ -1277,6 +1362,7 @@ startImportBtn.addEventListener("click", async () => {
     }
 
     try {
+      book.catalogKey = await upsertCatalog(book);   // 匯入的書也進共享書庫
       await booksCol.add(book);
       existingTitles.add(book.title.trim().toLowerCase());
       success++;
