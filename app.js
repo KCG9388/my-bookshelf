@@ -566,7 +566,7 @@ document.getElementById("refreshBtn").addEventListener("click", async () => {
   }
 
   if (toDelete.length > 0) {
-    const ok = confirm(`Found ${toDelete.length} duplicate book${toDelete.length > 1 ? "s" : ""}. Remove them?`);
+    const ok = confirm(t(toDelete.length === 1 ? "Found {n} duplicate book. Remove them?" : "Found {n} duplicate books. Remove them?", { n: toDelete.length }));
     if (ok) {
       for (const id of toDelete) await booksCol.doc(id).delete();
     }
@@ -1262,7 +1262,7 @@ function resetImport() {
   document.getElementById("importPreview").style.display  = "none";
   document.getElementById("importProgress").style.display = "none";
   document.getElementById("importDropZone").style.display = "";
-  importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">Drag &amp; drop your CSV file here<br/><span>or click to browse</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
+  importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">${t("Drag & drop your CSV file here")}<br/><span>${t("or click to browse")}</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
   bindFileInput();
   startImportBtn.disabled  = true;
   startImportBtn.textContent = "Import Books";
@@ -1365,11 +1365,11 @@ function parseCSVRow(line) {
 }
 
 function showPreview(filename) {
-  importDropZone.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><div class="upload-filename">${filename}</div><span style="color:#6b6b68;text-decoration:none">Click to change file</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
+  importDropZone.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><div class="upload-filename">${filename}</div><span style="color:#6b6b68;text-decoration:none">${t("Click to change file")}</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
   bindFileInput();
 
   const preview = document.getElementById("importPreview");
-  document.getElementById("previewSummary").textContent = `Found ${parsedBooks.length} books ready to import.`;
+  document.getElementById("previewSummary").textContent = t("Found {n} books ready to import.", { n: parsedBooks.length });
 
   const sample = parsedBooks.slice(0, 5);
   const table  = document.getElementById("previewTable");
@@ -1473,7 +1473,7 @@ startImportBtn.addEventListener("click", async () => {
   for (let i = 0; i < parsedBooks.length; i++) {
     const pct  = Math.round(((i + 1) / parsedBooks.length) * 100);
     fillEl.style.width  = pct + "%";
-    labelEl.textContent = `Importing ${i + 1} / ${parsedBooks.length}...`;
+    labelEl.textContent = t("Importing {i} / {total}...", { i: i + 1, total: parsedBooks.length });
     const book = parsedBooks[i];
 
     if (existingTitles.has(book.title.trim().toLowerCase())) {
@@ -1506,7 +1506,9 @@ startImportBtn.addEventListener("click", async () => {
     if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
   }
 
-  labelEl.textContent = `Done! ✓ ${success} imported${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ✗ ${failed} failed` : ""}.`;
+  labelEl.textContent = t("Done! ✓ {ok} imported", { ok: success })
+    + (skipped ? t(", {n} skipped", { n: skipped }) : "")
+    + (failed ? t(", ✗ {n} failed", { n: failed }) : "") + ".";
   labelEl.style.color = "#1a6632";
   startImportBtn.textContent = "Close";
   startImportBtn.disabled    = false;
@@ -1833,6 +1835,14 @@ const DICT = {
   // 匯入
   "⬆ Import from Notion": { "zh-TW": "⬆ 從 Notion 匯入" },
   "Importing...": { "zh-TW": "匯入中..." }, "Import Books": { "zh-TW": "匯入書籍" },
+  "📋 How to export from Notion": { "zh-TW": "📋 如何從 Notion 匯出" },
+  "Found {n} books ready to import.": { "zh-TW": "找到 {n} 本書可匯入。" },
+  "Found {n} duplicate books. Remove them?": { "zh-TW": "找到 {n} 本重複的書,要移除嗎?" },
+  "Found {n} duplicate book. Remove them?": { "zh-TW": "找到 {n} 本重複的書,要移除嗎?" },
+  "Drag & drop your CSV file here": { "zh-TW": "拖曳你的 CSV 檔到這裡" },
+  "or click to browse": { "zh-TW": "或點擊瀏覽" },
+  "Click to change file": { "zh-TW": "點擊更換檔案" }, "Importing {i} / {total}...": { "zh-TW": "匯入中 {i} / {total}..." },
+  "Done! ✓ {ok} imported": { "zh-TW": "完成!✓ 已匯入 {ok} 本" }, ", {n} skipped": { "zh-TW": ",跳過 {n} 本" }, ", ✗ {n} failed": { "zh-TW": ",✗ 失敗 {n} 本" },
   // 登入
   "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
@@ -1860,6 +1870,19 @@ const DICT = {
   "😊 Really liked it": { "zh-TW": "😊 很喜歡" }, "🤩 Amazing!": { "zh-TW": "🤩 超讚!" },
 };
 
+// 含 HTML 標籤的整塊內容(無法用純文字翻)
+const HTML_DICT = {
+  "import-steps": {
+    "zh-TW": `<li>在 Notion 打開你的書籍資料庫頁面</li><li>點右上角 <strong>⋯</strong> → <strong>Export</strong>(匯出)</li><li>格式(Format)選 <strong>CSV</strong></li><li>點 <strong>Export</strong> 並儲存檔案</li><li>在下方上傳 <code>.csv</code> 檔</li>`
+  },
+  "import-cols": {
+    "zh-TW": `⚠️ 你的 Notion 資料庫必須包含這些欄位:<br/><code>Title</code>、<code>Author</code>、<code>Status</code>、<code>Total Pages</code>、<code>Current Page</code>、<code>Genre</code>、<code>Date Finished</code>`
+  },
+  "import-upload": {
+    "zh-TW": `拖曳你的 CSV 檔到這裡<br/><span>或點擊瀏覽</span>`
+  },
+};
+
 function detectLang() {
   const saved = localStorage.getItem("lang");
   if (saved && LANGS.includes(saved)) return saved;
@@ -1875,9 +1898,15 @@ function t(en, vars) {
 
 // 翻譯靜態 DOM(葉節點文字 + placeholder),跳過動態書格與使用者資料
 function translateStatic(lang) {
+  // 含 HTML 標籤的整塊內容
+  document.querySelectorAll("[data-i18n-html]").forEach(el => {
+    const key = el.dataset.i18nHtml;
+    if (!el.dataset.i18nOrig) el.dataset.i18nOrig = el.innerHTML;
+    el.innerHTML = (lang !== "en" && HTML_DICT[key] && HTML_DICT[key][lang]) ? HTML_DICT[key][lang] : el.dataset.i18nOrig;
+  });
   document.querySelectorAll("button, label, span, option, li, h2, h3, p, div, a").forEach(el => {
     if (el.children.length) return;
-    if (el.closest("#bookGrid, #exploreGrid, #reviewsList, #galleryGrid, #previewTable, #importLog, .filter-chips, #yearFilter, #genreFilter, #formatSelect")) return;
+    if (el.closest("[data-i18n-html], #bookGrid, #exploreGrid, #reviewsList, #galleryGrid, #previewTable, #importLog, .filter-chips, #yearFilter, #genreFilter, #formatSelect")) return;
     const key = el.dataset.i18nKey || el.textContent.trim();
     if (!key || (!DICT[key] && !el.dataset.i18nKey)) return;
     el.dataset.i18nKey = key;
