@@ -43,14 +43,6 @@
             <option value="totalPages_desc">Pages ↓</option>
           </select>
         </div>
-        <div class="sort-row">
-          <label data-i18n>Format</label>
-          <select id="formatSelect">
-            <option value="all">All Formats</option>
-          </select>
-        </div>
-        <div class="filter-chips" id="activeFilters"></div>
-        <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
       </div>
     </div>
 
@@ -90,6 +82,15 @@
     <div class="sidebar-label">Genre</div>
     <select class="filter-select" id="genreFilter"></select>
   </div>
+
+  <div class="sidebar-section shelf-only">
+    <div class="sidebar-label">Format</div>
+    <select class="filter-select" id="formatSelect">
+      <option value="all">All Formats</option>
+    </select>
+  </div>
+
+  <button class="filter-clear-btn shelf-only" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
 
   <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import from Notion</button>

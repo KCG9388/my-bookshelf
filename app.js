@@ -615,12 +615,11 @@ function setZoom(w) { applyCardW(w); refreshLayout(); }
 })();
 
 function updateActiveFilters() {
-  const chips    = document.getElementById("activeFilters");
   const clearBtn = document.getElementById("clearFiltersBtn");
-  const active   = [];
-  if (currentFilter.format !== "all") active.push(`Format: ${currentFilter.format}`);
-  chips.innerHTML = active.map(a => `<span class="filter-chip">${escHtml(a)}</span>`).join("");
-  clearBtn.style.display = (active.length || currentFilter.status !== "all" || currentFilter.year !== "all" || currentFilter.genre !== "all" || currentFilter.search) ? "" : "none";
+  if (!clearBtn) return;
+  const anyActive = currentFilter.format !== "all" || currentFilter.status !== "all"
+    || currentFilter.year !== "all" || currentFilter.genre !== "all" || currentFilter.search;
+  clearBtn.style.display = anyActive ? "" : "none";
 }
 
 function rebuildFormatFilter() {

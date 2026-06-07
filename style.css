@@ -17,8 +17,8 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 60px;
-  padding: 0 18px;
+  height: 68px;
+  padding: 0 20px;
   background: rgba(255,255,255,.40);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
@@ -29,9 +29,9 @@ body {
 .hdr-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 214px;            /* 固定寬,讓右側 nav 切齊書架第一本書(248px)*/
-  font-size: 20px;
+  gap: 9px;
+  width: 212px;            /* 固定寬,讓右側 nav 切齊書架第一本書(248px)*/
+  font-size: 22px;
   font-weight: 800;
   color: #37352f;
   white-space: nowrap;
@@ -44,24 +44,24 @@ body {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 420px;
-  max-width: 36vw;
+  width: 460px;
+  max-width: 38vw;
 }
 .hdr-search-icon {
   position: absolute;
-  left: 10px;
+  left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 13px;
+  font-size: 14px;
   opacity: .45;
   pointer-events: none;
 }
 .search-input {
   width: 100%;
-  padding: 8px 14px 8px 32px;
+  padding: 10px 16px 10px 36px;
   border: 1px solid rgba(255,255,255,.6);
-  border-radius: 22px;
-  font-size: 13.5px;
+  border-radius: 24px;
+  font-size: 15px;
   background: rgba(255,255,255,.55);
   outline: none;
   transition: border-color .15s, background .15s, box-shadow .15s;
@@ -89,7 +89,7 @@ body {
 }
 .icon-btn:hover { background: rgba(255,255,255,.6); color: #37352f; }
 
-.book-count { font-size: 12px; color: #7a7873; white-space: nowrap; }
+.book-count { font-size: 13px; color: #7a7873; white-space: nowrap; }
 
 /* 排序 / 版本浮層 */
 .sort-pop-wrap { position: relative; display: flex; }
@@ -98,10 +98,10 @@ body {
   top: calc(100% + 10px);
   right: 0;
   width: 234px;
-  background: rgba(255,255,255,.78);
+  background: rgba(255,255,255,.97);
   backdrop-filter: blur(24px) saturate(150%);
   -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255,255,255,.75);
+  border: 1px solid rgba(0,0,0,.08);
   border-radius: 16px;
   box-shadow: 0 16px 44px rgba(120,100,90,.24);
   padding: 14px;
@@ -117,9 +117,10 @@ body {
 }
 .sort-row select {
   width: 100%; padding: 8px 10px; border-radius: 10px;
-  border: 1px solid rgba(0,0,0,.10); background: rgba(255,255,255,.7);
-  font-size: 13px; color: #37352f; cursor: pointer; outline: none;
+  border: 1px solid rgba(0,0,0,.14); background: #fff;
+  font-size: 13.5px; color: #37352f; cursor: pointer; outline: none;
 }
+.sort-row label { color: #6b6b68; }
 .sort-row select:focus { border-color: rgba(124,92,255,.5); }
 
 /* 右下角書卡縮放 dock */
@@ -1602,9 +1603,9 @@ body {
 .nav-tab {
   background: transparent;
   border: none;
-  border-radius: 7px;
-  padding: 6px 15px;
-  font-size: 13px;
+  border-radius: 8px;
+  padding: 8px 17px;
+  font-size: 14.5px;
   font-weight: 600;
   color: #6b6b68;
   cursor: pointer;
