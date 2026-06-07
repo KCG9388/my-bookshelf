@@ -546,6 +546,22 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   });
 })();
 
+// 書卡縮放(−/+):改 CSS 變數 --card-w,記在 localStorage
+(function setupZoom() {
+  const ZMIN = 120, ZMAX = 250, ZSTEP = 18, ZDEF = 160;
+  const apply = w => {
+    w = Math.max(ZMIN, Math.min(ZMAX, w));
+    document.documentElement.style.setProperty("--card-w", w + "px");
+    localStorage.setItem("cardW", w);
+    return w;
+  };
+  let w = apply(parseInt(localStorage.getItem("cardW"), 10) || ZDEF);
+  const out = document.getElementById("zoomOutBtn");
+  const inn = document.getElementById("zoomInBtn");
+  if (out) out.addEventListener("click", () => { w = apply(w - ZSTEP); });
+  if (inn) inn.addEventListener("click", () => { w = apply(w + ZSTEP); });
+})();
+
 function updateActiveFilters() {
   const chips    = document.getElementById("activeFilters");
   const clearBtn = document.getElementById("clearFiltersBtn");
