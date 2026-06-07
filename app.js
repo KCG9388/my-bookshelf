@@ -465,7 +465,7 @@ function rebuildSidebarFilters() {
   const genres = [...new Set(allBooks.map(b => b.genre).filter(Boolean))].sort();
 
   const yearFilter = document.getElementById("yearFilter");
-  yearFilter.innerHTML = `<li class="${currentFilter.year==="all"?"active":""}" data-year="all">All Years</li>` +
+  yearFilter.innerHTML = `<li class="${currentFilter.year==="all"?"active":""}" data-year="all">${t("All Years")}</li>` +
     years.map(y => `<li class="${currentFilter.year===String(y)?"active":""}" data-year="${y}">${y}</li>`).join("");
   yearFilter.querySelectorAll("li").forEach(li => {
     li.addEventListener("click", () => {
@@ -476,7 +476,7 @@ function rebuildSidebarFilters() {
   });
 
   const genreFilter = document.getElementById("genreFilter");
-  genreFilter.innerHTML = `<li class="${currentFilter.genre==="all"?"active":""}" data-genre="all">All Genres</li>` +
+  genreFilter.innerHTML = `<li class="${currentFilter.genre==="all"?"active":""}" data-genre="all">${t("All Genres")}</li>` +
     genres.map(g => `<li class="${currentFilter.genre===g?"active":""}" data-genre="${g}">${escHtml(g)}</li>`).join("");
   genreFilter.querySelectorAll("li").forEach(li => {
     li.addEventListener("click", () => {
@@ -547,7 +547,7 @@ function rebuildFormatFilter() {
   const formats = [...new Set(allBooks.map(b => b.format).filter(Boolean))].sort();
   const sel = document.getElementById("formatSelect");
   const cur = sel.value;
-  sel.innerHTML = `<option value="all">All Formats</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
+  sel.innerHTML = `<option value="all">${t("All Formats")}</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
   if (formats.includes(cur)) sel.value = cur;
 }
 
@@ -912,7 +912,7 @@ function openDetail(id) {
   document.getElementById("detailGenre").textContent  = b.genre  || "";
 
   const statusEl = document.getElementById("detailStatus");
-  statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(b.status)}</span>`;
+  statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span>`;
 
   const pct = calcPct(b.currentPage, b.totalPages);
   document.getElementById("detailProgressBar").style.width  = pct !== null ? pct + "%" : "0%";
@@ -1900,8 +1900,9 @@ function setLang(lang) {
   if (btn) btn.textContent = lang === "en" ? "中" : "EN";
   // 重新渲染含動態文字的可見區塊
   try {
+    if (allBooks.length) { rebuildSidebarFilters(); rebuildFormatFilter(); }
     if (currentView === "explore" && !viewingPublicUid) renderExplore();
-    else if (typeof renderGrid === "function") renderGrid();
+    else renderGrid();
   } catch (e) {}
 }
 
