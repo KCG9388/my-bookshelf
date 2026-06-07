@@ -127,7 +127,7 @@ body {
 .zoom-dock {
   position: fixed;
   right: 24px;
-  bottom: 16px;              /* 與底部分頁列同一水平線 */
+  bottom: 7px;               /* 與底部分頁列同一水平線 */
   z-index: 80;
   display: flex;
   align-items: center;
