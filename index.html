@@ -13,8 +13,8 @@
   <div class="sidebar-title">📚 Home Library</div>
 
   <div class="nav-tabs">
-    <button class="nav-tab active" data-view="shelf">📚 我的書架</button>
-    <button class="nav-tab" data-view="explore">🌐 探索</button>
+    <button class="nav-tab active" data-view="shelf" data-i18n>📚 My Shelf</button>
+    <button class="nav-tab" data-view="explore" data-i18n>🌐 Explore</button>
   </div>
 
   <div class="sidebar-section shelf-only">
@@ -45,7 +45,7 @@
 
   <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import from Notion</button>
-  <button class="settings-btn" id="openPrivacyBtn">⚙ 隱私設定</button>
+  <button class="settings-btn" id="openPrivacyBtn">⚙ Privacy</button>
 </aside>
 
 <!-- 主內容 -->
@@ -54,6 +54,7 @@
     <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
     <span class="book-count" id="bookCount">0 books</span>
     <button class="refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
+    <button class="lang-toggle" id="langToggle" title="Switch language">中</button>
     <!-- 使用者資訊 -->
     <div class="user-info" id="userInfo" style="display:none">
       <div class="user-avatar-sm" id="userAvatarSm"></div>
@@ -96,15 +97,15 @@
   <div id="exploreView" style="display:none">
     <div class="public-banner" id="publicBanner">
       <span class="pb-text"></span>
-      <button class="pb-back" id="publicBackBtn">← 回探索</button>
+      <button class="pb-back" id="publicBackBtn">← Back to Explore</button>
     </div>
     <div class="filter-bar">
       <div class="filter-group">
         <label>Sort by</label>
         <select id="exploreSortSelect">
-          <option value="rating">評分 ↓</option>
-          <option value="popular">熱度(評分人數)↓</option>
-          <option value="recent">最新加入</option>
+          <option value="rating">Rating ↓</option>
+          <option value="popular">Popularity ↓</option>
+          <option value="recent">Recently Added</option>
         </select>
       </div>
       <span class="book-count" id="exploreCount"></span>
@@ -322,7 +323,7 @@
         <div class="detail-actions">
           <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
           <button class="btn-delete detail-shelf-only" id="deleteBookBtn">Delete</button>
-          <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ 加入我的書架</button>
+          <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ Add to My Shelf</button>
         </div>
       </div>
     </div>
@@ -363,33 +364,33 @@
 <div class="modal-overlay" id="privacyModal">
   <div class="modal modal-privacy">
     <div class="modal-header">
-      <h2>⚙ 隱私設定</h2>
+      <h2>⚙ Privacy</h2>
       <button class="modal-close" id="closePrivacyModal">✕</button>
     </div>
     <div class="privacy-body">
-      <p class="privacy-intro">控制別人能不能看到你的書架。預設全部不公開。</p>
+      <p class="privacy-intro">Control who can see your shelf. Everything is private by default.</p>
 
       <label class="privacy-row">
         <div class="privacy-text">
-          <div class="privacy-name">公開我的書庫</div>
-          <div class="privacy-desc">開啟後,別人可以瀏覽你讀過/在讀/想讀的書、狀態與閱讀進度。</div>
+          <div class="privacy-name">Make my library public</div>
+          <div class="privacy-desc">When on, others can browse the books you've read / are reading / want to read, with status and progress.</div>
         </div>
         <input type="checkbox" id="prefShelfPublic" class="privacy-switch" />
       </label>
 
       <label class="privacy-row">
         <div class="privacy-text">
-          <div class="privacy-name">顯示「正在閱讀」</div>
-          <div class="privacy-desc">在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。</div>
+          <div class="privacy-name">Show "Now Reading"</div>
+          <div class="privacy-desc">Highlight what you're currently reading on your public library (requires public library).</div>
         </div>
         <input type="checkbox" id="prefShowReading" class="privacy-switch" />
       </label>
 
-      <div class="privacy-note">📌 你的「公開評分/評論」一律公開,不受此設定影響——刪除評論才會消失。</div>
+      <div class="privacy-note">📌 Your public ratings/reviews are always public regardless of this setting — they only disappear if you delete them.</div>
     </div>
     <div class="modal-footer">
       <button class="btn-cancel" id="cancelPrivacy">Cancel</button>
-      <button class="btn-save" id="savePrivacyBtn">儲存</button>
+      <button class="btn-save" id="savePrivacyBtn">Save</button>
     </div>
   </div>
 </div>

@@ -1272,6 +1272,21 @@ body {
   .form-row.two-col { flex-direction: column; }
 }
 
+/* 語言切換鈕 */
+.lang-toggle {
+  background: transparent;
+  border: 1px solid #e8e8e6;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #37352f;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.lang-toggle:hover { background: #ebebea; }
+
 /* ════════════════ Phase B-3：探索 / 隱私設定 ════════════════ */
 
 /* 側欄頁籤切換(我的書架 / 探索) */

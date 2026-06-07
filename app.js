@@ -382,7 +382,7 @@ function filterBooks() {
 
 function renderGrid() {
   const books = filterBooks();
-  bookCountEl.textContent = `${books.length} book${books.length !== 1 ? "s" : ""}`;
+  bookCountEl.textContent = t(books.length === 1 ? "{n} book" : "{n} books", { n: books.length });
 
   if (books.length === 0) {
     bookGrid.innerHTML = `<div class="empty-state">No books found.</div>`;
@@ -591,7 +591,13 @@ document.getElementById("cancelAdd").addEventListener("click", closeAddModal);
 
 function openAddModal(prefill) {
   resetAddForm();
-  if (prefill) fillForm(prefill);
+  if (prefill) {
+    fillForm(prefill);
+  } else {
+    addModal.dataset.mode = "add";
+    currentDetailId = null;
+    document.querySelector("#addModal .modal-header h2").textContent = t("Add Book");
+  }
   addModal.classList.add("open");
 }
 function closeAddModal() { addModal.classList.remove("open"); }
@@ -850,9 +856,9 @@ function resetAddForm() {
 
 // ── Save Book ──
 document.getElementById("saveBook").addEventListener("click", async () => {
-  if (!booksCol) { alert("Please sign in first."); return; }
+  if (!booksCol) { alert(t("Please sign in first.")); return; }
   const title = document.getElementById("bookTitle").value.trim();
-  if (!title) { alert("Title is required."); return; }
+  if (!title) { alert(t("Title is required.")); return; }
 
   const startDate = document.getElementById("bookStartDate").value;
   const book = {
@@ -1019,13 +1025,13 @@ function renderStars(rating) {
 
 function updateStarLabel(rating, committed) {
   const el = document.getElementById("starPickLabel");
-  if (!rating) { el.textContent = "Select rating"; el.style.color = "#9b9a97"; return; }
+  if (!rating) { el.textContent = t("Select rating"); el.style.color = "#9b9a97"; return; }
   const label =
-    rating <= 1 ? "😞 Didn't like it" :
-    rating <= 2 ? "😐 It was ok"       :
-    rating <= 3 ? "🙂 Liked it"        :
-    rating <= 4 ? "😊 Really liked it" :
-                  "🤩 Amazing!";
+    rating <= 1 ? t("😞 Didn't like it") :
+    rating <= 2 ? t("😐 It was ok")       :
+    rating <= 3 ? t("🙂 Liked it")        :
+    rating <= 4 ? t("😊 Really liked it") :
+                  t("🤩 Amazing!");
   el.textContent = `${rating} — ${label}`;
   el.style.color = committed ? "#f0a500" : "#6b6b68";
 }
@@ -1111,9 +1117,9 @@ function renderReviews(reviews) {
   const reviewsList = document.getElementById("reviewsList");
 
   if (!reviews.length) {
-    aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = "No reviews yet";
+    aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = t("No reviews yet");
     ratingBars.innerHTML = "";
-    reviewsList.innerHTML = `<div class="reviews-empty">📝 No reviews yet — be the first!</div>`;
+    reviewsList.innerHTML = `<div class="reviews-empty">${t("📝 No reviews yet — be the first!")}</div>`;
     return;
   }
 
@@ -1121,7 +1127,7 @@ function renderReviews(reviews) {
   const avg = withRating.length ? withRating.reduce((s,r) => s+r.rating, 0) / withRating.length : 0;
   aggScore.textContent = avg.toFixed(1);
   aggStars.innerHTML   = starsHTML(avg);
-  aggCount.textContent = `${reviews.length} review${reviews.length > 1 ? "s" : ""}`;
+  aggCount.textContent = t(reviews.length === 1 ? "{n} review" : "{n} reviews", { n: reviews.length });
 
   const counts = [0,0,0,0,0,0];
   withRating.forEach(r => { const n = Math.round(r.rating); if (n >= 1 && n <= 5) counts[n]++; });
@@ -1173,18 +1179,18 @@ function renderReviews(reviews) {
 }
 
 document.getElementById("submitReviewBtn").addEventListener("click", async () => {
-  if (!currentUser) { alert("Please sign in first."); return; }
+  if (!currentUser) { alert(t("Please sign in first.")); return; }
   const name = document.getElementById("reviewerName").value.trim();
   const text = document.getElementById("reviewText").value.trim();
   const pct  = parseInt(document.getElementById("reviewPct").value);
-  if (!name)           { alert("Please enter your name or nickname."); return; }
-  if (!selectedRating) { alert("Please select a star rating."); return; }
+  if (!name)           { alert(t("Please enter your name or nickname.")); return; }
+  if (!selectedRating) { alert(t("Please select a star rating.")); return; }
 
   const catalogKey = currentCatalogKey();
-  if (!catalogKey)     { alert("Cannot locate this book in the catalog."); return; }
+  if (!catalogKey)     { alert(t("Cannot locate this book in the catalog.")); return; }
 
   const btn = document.getElementById("submitReviewBtn");
-  btn.disabled = true; btn.textContent = "Submitting...";
+  btn.disabled = true; btn.textContent = t("Submitting...");
   try {
     await applyReviewToCatalog(catalogKey, currentUser.uid, {
       uid:          currentUser.uid,
@@ -1198,8 +1204,8 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
     });
     document.getElementById("reviewText").value = "";
     selectedRating = 0; renderStars(0); updateStarLabel(0, true);
-  } catch(e) { alert("Failed: " + e.message); }
-  btn.disabled = false; btn.textContent = "Submit Review";
+  } catch(e) { alert(t("Failed") + ": " + e.message); }
+  btn.disabled = false; btn.textContent = t("Submit Review");
 });
 
 document.getElementById("updatePageBtn").addEventListener("click", async () => {
@@ -1223,7 +1229,7 @@ document.getElementById("editBookBtn").addEventListener("click", () => {
   document.getElementById("bookStartDate").value    = b.startDate || "";
   document.getElementById("bookFinishDate").value   = b.finishDate || "";
   document.getElementById("bookNotes").value        = b.notes || "";
-  document.querySelector("#addModal .modal-header h2").textContent = "Edit Book";
+  document.querySelector("#addModal .modal-header h2").textContent = t("Edit Book");
 });
 
 document.getElementById("deleteBookBtn").addEventListener("click", async () => {
@@ -1539,13 +1545,13 @@ function avgOf(c) {
 // ── 載入共享書庫 ──
 async function loadExplore() {
   const grid = document.getElementById("exploreGrid");
-  grid.innerHTML = `<div class="loading">Loading...</div>`;
+  grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
   try {
     const snap = await db.collection("catalog").get();
     exploreBooks = snap.docs.map(d => ({ key: d.id, ...d.data() }));
     renderExplore();
   } catch (e) {
-    grid.innerHTML = `<div class="loading">載入失敗:${escHtml(e.message)}</div>`;
+    grid.innerHTML = `<div class="loading">${t("Failed to load")}: ${escHtml(e.message)}</div>`;
   }
 }
 
@@ -1557,8 +1563,8 @@ function renderExplore() {
   else if (sort === "popular")  list.sort((a,b) => (b.ratingCount||0) - (a.ratingCount||0));
   else                          list.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
 
-  document.getElementById("exploreCount").textContent = `${list.length} books`;
-  if (!list.length) { grid.innerHTML = `<div class="loading">共享書庫還沒有書</div>`; return; }
+  document.getElementById("exploreCount").textContent = t("{n} books", { n: list.length });
+  if (!list.length) { grid.innerHTML = `<div class="loading">${t("No books in the shared library yet")}</div>`; return; }
 
   grid.innerHTML = list.map(c => {
     const avg   = avgOf(c);
@@ -1567,7 +1573,7 @@ function renderExplore() {
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(c.title||"")}</div></div>`;
     const rating = c.ratingCount
       ? `<div class="card-rating"><span class="cr-star">${starsHTML(avg)}</span><span>${avg.toFixed(1)}</span><span class="cr-count">(${c.ratingCount})</span></div>`
-      : `<div class="card-rating cr-empty">尚無評分</div>`;
+      : `<div class="card-rating cr-empty">${t("No ratings yet")}</div>`;
     return `<div class="book-card" data-key="${escHtml(c.key)}">
       ${cover}
       <div class="book-info">
@@ -1605,7 +1611,7 @@ function openCatalogDetail(c) {
   const onShelf = allBooks.some(b => (b.catalogKey || catalogKeyFor(b.title, b.author)) === c.key);
   addBtn.style.display = "";
   addBtn.disabled      = onShelf;
-  addBtn.textContent   = onShelf ? "✓ 已在你的書架" : "➕ 加入我的書架";
+  addBtn.textContent   = onShelf ? t("✓ Already on your shelf") : t("➕ Add to My Shelf");
 
   const readInfo = document.getElementById("reviewReadInfo");
   if (readInfo) readInfo.innerHTML = "";
@@ -1623,12 +1629,12 @@ function openCatalogDetail(c) {
 
 // ── 從探索把書加入我的書架 ──
 document.getElementById("addToShelfBtn").addEventListener("click", async () => {
-  if (!currentUser || !booksCol) { alert("請先登入"); return; }
+  if (!currentUser || !booksCol) { alert(t("Please sign in first.")); return; }
   const c = exploreBooks.find(x => x.key === activeCatalogKey)
          || (viewingPublicUid ? { key: activeCatalogKey } : null);
   if (!c) return;
   const btn = document.getElementById("addToShelfBtn");
-  btn.disabled = true; btn.textContent = "加入中...";
+  btn.disabled = true; btn.textContent = t("Adding...");
   try {
     await booksCol.add({
       title: c.title || document.getElementById("detailTitle").textContent || "",
@@ -1640,16 +1646,16 @@ document.getElementById("addToShelfBtn").addEventListener("click", async () => {
       userId: currentUser.uid, catalogKey: c.key,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    btn.textContent = "✓ 已加入書架";
+    btn.textContent = t("✓ Added to shelf");
   } catch (e) {
-    alert("加入失敗:" + e.message);
-    btn.disabled = false; btn.textContent = "➕ 加入我的書架";
+    alert(t("Failed to add") + ": " + e.message);
+    btn.disabled = false; btn.textContent = t("➕ Add to My Shelf");
   }
 });
 
 // ── 隱私設定 ──
 document.getElementById("openPrivacyBtn").addEventListener("click", async () => {
-  if (!currentUser) { alert("請先登入"); return; }
+  if (!currentUser) { alert(t("Please sign in first.")); return; }
   try {
     const snap = await db.collection("users").doc(currentUser.uid).get();
     const d = snap.exists ? snap.data() : {};
@@ -1667,15 +1673,15 @@ document.getElementById("privacyModal").addEventListener("click", e => {
 document.getElementById("savePrivacyBtn").addEventListener("click", async () => {
   if (!currentUser) return;
   const btn = document.getElementById("savePrivacyBtn");
-  btn.disabled = true; btn.textContent = "儲存中...";
+  btn.disabled = true; btn.textContent = t("Saving...");
   try {
     await db.collection("users").doc(currentUser.uid).set({
       shelfPublic: document.getElementById("prefShelfPublic").checked,
       showReading: document.getElementById("prefShowReading").checked,
     }, { merge: true });
     closePrivacy();
-  } catch (e) { alert("儲存失敗:" + e.message); }
-  btn.disabled = false; btn.textContent = "儲存";
+  } catch (e) { alert(t("Failed to save") + ": " + e.message); }
+  btn.disabled = false; btn.textContent = t("Save");
 });
 
 // ── 一次性:清掉私人書架 notes 裡的舊星等文字(只保留真正的筆記) ──
@@ -1710,30 +1716,30 @@ async function loadPublicShelf(uid) {
   const grid   = document.getElementById("exploreGrid");
   const banner = document.getElementById("publicBanner");
   const pbText = banner.querySelector(".pb-text");
-  grid.innerHTML = `<div class="loading">Loading...</div>`;
+  grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
   try {
     const prof  = await db.collection("users").doc(uid).get();
     const pdata = prof.exists ? prof.data() : {};
     const name  = pdata.displayName || "Reader";
     if (!pdata.shelfPublic) {
-      banner.style.display = "flex"; pbText.textContent = `🔒 ${name} 的書架未公開`;
-      grid.innerHTML = `<div class="loading">這位使用者沒有公開書架</div>`;
+      banner.style.display = "flex"; pbText.textContent = t("🔒 {name}'s library is private", { name });
+      grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
       return;
     }
     const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
     const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    banner.style.display = "flex"; pbText.textContent = `📖 ${name} 的公開書架(${books.length} 本)`;
+    banner.style.display = "flex"; pbText.textContent = t("📖 {name}'s library ({n} books)", { name, n: books.length });
     renderPublicShelf(books);
   } catch (e) {
-    banner.style.display = "flex"; pbText.textContent = `🔒 無法載入此書架`;
-    grid.innerHTML = `<div class="loading">對方可能未公開書架</div>`;
+    banner.style.display = "flex"; pbText.textContent = t("🔒 Cannot load this shelf");
+    grid.innerHTML = `<div class="loading">${t("Could not load — they may have made it private")}</div>`;
   }
 }
 
 function renderPublicShelf(books) {
   const grid = document.getElementById("exploreGrid");
   document.getElementById("exploreCount").textContent = "";
-  if (!books.length) { grid.innerHTML = `<div class="loading">這個書架是空的</div>`; return; }
+  if (!books.length) { grid.innerHTML = `<div class="loading">${t("This shelf is empty")}</div>`; return; }
   grid.innerHTML = books.map(b => {
     const cover = b.cover
       ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="" loading="lazy" /></div>`
@@ -1762,3 +1768,144 @@ document.getElementById("publicBackBtn").addEventListener("click", () => {
   document.getElementById("publicBanner").style.display = "none";
   loadExplore();
 });
+
+// ══════════════════════════════════════════
+//  i18n — 多語系(英文基準 + 繁中,自動偵測 + 可切換)
+// ══════════════════════════════════════════
+const LANGS = ["en", "zh-TW"];
+let currentLang = "en";
+
+const DICT = {
+  // 導覽 / 側欄
+  "📚 My Shelf": { "zh-TW": "📚 我的書架" }, "🌐 Explore": { "zh-TW": "🌐 探索" },
+  "Status": { "zh-TW": "狀態" }, "⬜ All": { "zh-TW": "⬜ 全部" },
+  "⏳ Now Reading": { "zh-TW": "⏳ 正在閱讀" }, "⏭ TBR": { "zh-TW": "⏭ 待讀" },
+  "📋 Want to Read": { "zh-TW": "📋 想讀" }, "✅ Finished": { "zh-TW": "✅ 已讀完" }, "🚫 DNF": { "zh-TW": "🚫 棄讀" },
+  "Year": { "zh-TW": "年份" }, "All Years": { "zh-TW": "所有年份" },
+  "Genre": { "zh-TW": "類型" }, "All Genres": { "zh-TW": "所有類型" },
+  "+ New Book": { "zh-TW": "+ 新增書籍" }, "⬆ Import from Notion": { "zh-TW": "⬆ 從 Notion 匯入" },
+  "⚙ Privacy": { "zh-TW": "⚙ 隱私設定" }, "Sign out": { "zh-TW": "登出" },
+  // 篩選列
+  "Sort by": { "zh-TW": "排序" },
+  "Date Added ↓": { "zh-TW": "加入日期 ↓" }, "Date Added ↑": { "zh-TW": "加入日期 ↑" },
+  "Title A → Z": { "zh-TW": "書名 A → Z" }, "Title Z → A": { "zh-TW": "書名 Z → A" },
+  "Author A → Z": { "zh-TW": "作者 A → Z" }, "Date Finished ↓": { "zh-TW": "讀完日期 ↓" },
+  "Progress ↓": { "zh-TW": "進度 ↓" }, "Pages ↓": { "zh-TW": "頁數 ↓" },
+  "Format": { "zh-TW": "版本" }, "All Formats": { "zh-TW": "所有版本" },
+  "✕ Clear filters": { "zh-TW": "✕ 清除篩選" },
+  "Rating ↓": { "zh-TW": "評分 ↓" }, "Popularity ↓": { "zh-TW": "熱度 ↓" }, "Recently Added": { "zh-TW": "最新加入" },
+  "Search books...": { "zh-TW": "搜尋書籍..." },
+  // 截圖 / Toast
+  "Drag to select the area you want as the cover": { "zh-TW": "拖曳選取要當封面的區域" },
+  "✕ Cancel": { "zh-TW": "✕ 取消" }, "✓ Use this area": { "zh-TW": "✓ 使用此區域" }, "↺ Re-select": { "zh-TW": "↺ 重選" },
+  // 新增書籍 Modal
+  "Add Book": { "zh-TW": "新增書籍" }, "Edit Book": { "zh-TW": "編輯書籍" },
+  "Enter ISBN or book title...": { "zh-TW": "輸入 ISBN 或書名..." }, "Search": { "zh-TW": "搜尋" },
+  "Cover": { "zh-TW": "封面" }, "No Cover": { "zh-TW": "無封面" },
+  "🖼 Change Cover": { "zh-TW": "🖼 更換封面" }, "🔄 Re-fetch": { "zh-TW": "🔄 重新抓取" },
+  "🎨 Gallery": { "zh-TW": "🎨 圖庫" }, "📁 Upload": { "zh-TW": "📁 上傳" }, "🔗 Link": { "zh-TW": "🔗 連結" }, "✂️ Screenshot": { "zh-TW": "✂️ 截圖" },
+  "click to browse": { "zh-TW": "點擊瀏覽" }, "or Ctrl+V to paste an image": { "zh-TW": "或按 Ctrl+V 貼上圖片" },
+  "Paste an image URL...": { "zh-TW": "貼上圖片網址..." }, "Submit": { "zh-TW": "送出" },
+  "Works with any image URL from the web.": { "zh-TW": "可用網路上任何圖片網址。" },
+  "Capture any area of your screen as a book cover.": { "zh-TW": "擷取螢幕任一區域當作書封。" },
+  "📸 Start Screen Capture": { "zh-TW": "📸 開始截取螢幕" },
+  "🗑 Remove cover": { "zh-TW": "🗑 移除封面" }, "Close": { "zh-TW": "關閉" },
+  "Title *": { "zh-TW": "書名 *" }, "Book title": { "zh-TW": "書名" }, "Author *": { "zh-TW": "作者 *" }, "Author name": { "zh-TW": "作者名" },
+  "e.g. Fantasy, Mystery": { "zh-TW": "例:奇幻、推理" }, "Total Pages": { "zh-TW": "總頁數" }, "e.g. 400": { "zh-TW": "例:400" },
+  "Want to Read": { "zh-TW": "想讀" }, "TBR": { "zh-TW": "待讀" }, "Now Reading": { "zh-TW": "正在閱讀" }, "Finished": { "zh-TW": "已讀完" }, "DNF": { "zh-TW": "棄讀" },
+  "Current Page": { "zh-TW": "目前頁數" }, "e.g. 120": { "zh-TW": "例:120" },
+  "Start Date": { "zh-TW": "開始日期" }, "Finish Date": { "zh-TW": "讀完日期" },
+  "Notes": { "zh-TW": "筆記" }, "Your thoughts...": { "zh-TW": "你的想法..." },
+  "Cancel": { "zh-TW": "取消" }, "Save Book": { "zh-TW": "儲存書籍" }, "Save": { "zh-TW": "儲存" },
+  // 詳情 / 評論
+  "Book Detail": { "zh-TW": "書籍詳情" }, "Progress": { "zh-TW": "進度" },
+  "Update current page:": { "zh-TW": "更新目前頁數:" }, "Update": { "zh-TW": "更新" },
+  "Edit": { "zh-TW": "編輯" }, "Delete": { "zh-TW": "刪除" }, "➕ Add to My Shelf": { "zh-TW": "➕ 加入我的書架" },
+  "✍️ Write a Review": { "zh-TW": "✍️ 寫評論" }, "Your name or nickname": { "zh-TW": "你的名字或暱稱" },
+  "Select rating": { "zh-TW": "選擇評分" }, "Share your thoughts... (optional)": { "zh-TW": "分享你的想法...(選填)" }, "Submit Review": { "zh-TW": "送出評論" },
+  // 隱私
+  "Control who can see your shelf. Everything is private by default.": { "zh-TW": "控制誰能看到你的書架。預設全部不公開。" },
+  "Make my library public": { "zh-TW": "公開我的書庫" },
+  "When on, others can browse the books you've read / are reading / want to read, with status and progress.": { "zh-TW": "開啟後,別人可以瀏覽你讀過/在讀/想讀的書,以及狀態與進度。" },
+  "Show \"Now Reading\"": { "zh-TW": "顯示「正在閱讀」" },
+  "Highlight what you're currently reading on your public library (requires public library).": { "zh-TW": "在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。" },
+  "📌 Your public ratings/reviews are always public regardless of this setting — they only disappear if you delete them.": { "zh-TW": "📌 你的公開評分/評論一律公開,不受此設定影響——刪除才會消失。" },
+  // 匯入
+  "⬆ Import from Notion": { "zh-TW": "⬆ 從 Notion 匯入" },
+  "Importing...": { "zh-TW": "匯入中..." }, "Import Books": { "zh-TW": "匯入書籍" },
+  // 登入
+  "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
+  "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
+  "Sign In": { "zh-TW": "登入" }, "Create Account": { "zh-TW": "建立帳號" },
+  "Your name (e.g. Jane)": { "zh-TW": "你的名字(例:小明)" }, "Email address": { "zh-TW": "Email 地址" },
+  "Password": { "zh-TW": "密碼" }, "Confirm password": { "zh-TW": "確認密碼" }, "Forgot password?": { "zh-TW": "忘記密碼?" },
+  // 動態字串(JS 用 t() 取)
+  "Loading...": { "zh-TW": "載入中..." }, "{n} books": { "zh-TW": "{n} 本書" }, "{n} book": { "zh-TW": "{n} 本書" },
+  "No reviews yet": { "zh-TW": "尚無評論" }, "📝 No reviews yet — be the first!": { "zh-TW": "📝 還沒有評論——當第一個!" },
+  "{n} reviews": { "zh-TW": "{n} 則評論" }, "{n} review": { "zh-TW": "{n} 則評論" },
+  "No ratings yet": { "zh-TW": "尚無評分" }, "No books in the shared library yet": { "zh-TW": "共享書庫還沒有書" },
+  "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
+  "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
+  "Adding...": { "zh-TW": "加入中..." }, "✓ Added to shelf": { "zh-TW": "✓ 已加入書架" }, "Failed to add": { "zh-TW": "加入失敗" },
+  "Submitting...": { "zh-TW": "送出中..." }, "Saving...": { "zh-TW": "儲存中..." },
+  "Please sign in first.": { "zh-TW": "請先登入。" }, "Cannot locate this book in the catalog.": { "zh-TW": "找不到這本書的書庫資料。" },
+  "🔒 {name}'s library is private": { "zh-TW": "🔒 {name} 的書庫未公開" },
+  "This user has no public library": { "zh-TW": "這位使用者沒有公開書庫" },
+  "📖 {name}'s library ({n} books)": { "zh-TW": "📖 {name} 的書庫({n} 本)" },
+  "This shelf is empty": { "zh-TW": "這個書架是空的" }, "🔒 Cannot load this shelf": { "zh-TW": "🔒 無法載入此書架" },
+  "Could not load — they may have made it private": { "zh-TW": "對方可能未公開書架" },
+  "Title is required.": { "zh-TW": "請填書名。" }, "Please select a star rating.": { "zh-TW": "請選擇星等評分。" },
+  "Please enter your name or nickname.": { "zh-TW": "請輸入你的名字或暱稱。" },
+  "😞 Didn't like it": { "zh-TW": "😞 不喜歡" }, "😐 It was ok": { "zh-TW": "😐 普通" }, "🙂 Liked it": { "zh-TW": "🙂 喜歡" },
+  "😊 Really liked it": { "zh-TW": "😊 很喜歡" }, "🤩 Amazing!": { "zh-TW": "🤩 超讚!" },
+};
+
+function detectLang() {
+  const saved = localStorage.getItem("lang");
+  if (saved && LANGS.includes(saved)) return saved;
+  return (navigator.language || "en").toLowerCase().startsWith("zh") ? "zh-TW" : "en";
+}
+
+// 取翻譯;vars 可帶 {n}、{name} 等變數
+function t(en, vars) {
+  let s = (currentLang !== "en" && DICT[en] && DICT[en][currentLang]) ? DICT[en][currentLang] : en;
+  if (vars) for (const k in vars) s = s.split("{" + k + "}").join(vars[k]);
+  return s;
+}
+
+// 翻譯靜態 DOM(葉節點文字 + placeholder),跳過動態書格與使用者資料
+function translateStatic(lang) {
+  document.querySelectorAll("button, label, span, option, li, h2, h3, p, div, a").forEach(el => {
+    if (el.children.length) return;
+    if (el.closest("#bookGrid, #exploreGrid, #reviewsList, #galleryGrid, #previewTable, #importLog, .filter-chips, #yearFilter, #genreFilter, #formatSelect")) return;
+    const key = el.dataset.i18nKey || el.textContent.trim();
+    if (!key || (!DICT[key] && !el.dataset.i18nKey)) return;
+    el.dataset.i18nKey = key;
+    el.textContent = (lang !== "en" && DICT[key] && DICT[key][lang]) ? DICT[key][lang] : key;
+  });
+  document.querySelectorAll("input[placeholder], textarea[placeholder]").forEach(el => {
+    const key = el.dataset.i18nPh || el.getAttribute("placeholder");
+    if (!key || (!DICT[key] && !el.dataset.i18nPh)) return;
+    el.dataset.i18nPh = key;
+    el.setAttribute("placeholder", (lang !== "en" && DICT[key] && DICT[key][lang]) ? DICT[key][lang] : key);
+  });
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem("lang", lang);
+  document.documentElement.lang = lang === "zh-TW" ? "zh-TW" : "en";
+  translateStatic(lang);
+  const btn = document.getElementById("langToggle");
+  if (btn) btn.textContent = lang === "en" ? "中" : "EN";
+  // 重新渲染含動態文字的可見區塊
+  try {
+    if (currentView === "explore" && !viewingPublicUid) renderExplore();
+    else if (typeof renderGrid === "function") renderGrid();
+  } catch (e) {}
+}
+
+document.getElementById("langToggle").addEventListener("click", () =>
+  setLang(currentLang === "en" ? "zh-TW" : "en"));
+
+setLang(detectLang());
