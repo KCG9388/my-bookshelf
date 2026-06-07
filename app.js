@@ -953,6 +953,7 @@ function openDetail(id) {
 
   detailModal.classList.add("open");
   loadReviews(b.catalogKey || catalogKeyFor(b.title, b.author));
+  loadDiscussion(b.catalogKey || catalogKeyFor(b.title, b.author));
 
   // Reset review form
   selectedRating = 0;
@@ -1169,6 +1170,9 @@ function renderReviews(reviews) {
       </div>
       ${r.text ? `<div class="review-text">${escHtml(r.text)}</div>` : ""}
       <div class="review-date">${date}</div>
+      <div class="review-replies" data-rev="${escHtml(r.uid || r.id || "")}">
+        <button class="review-reply-toggle" data-rev="${escHtml(r.uid || r.id || "")}">💬 ${t("Reply")}</button>
+      </div>
     </div>`;
   }).join("");
 
@@ -1187,6 +1191,14 @@ function renderReviews(reviews) {
     el.addEventListener("click", () => {
       const uid = el.dataset.uid;
       if (uid) { detailModal.classList.remove("open"); loadPublicShelf(uid); }
+    });
+  });
+
+  // Bind 回覆展開
+  reviewsList.querySelectorAll(".review-reply-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      btn.style.display = "none";
+      expandReplies(btn.dataset.rev, btn.closest(".review-replies"));
     });
   });
 }
@@ -1645,6 +1657,7 @@ function openCatalogDetail(c) {
 
   detailModal.classList.add("open");
   loadReviews(c.key);
+  loadDiscussion(c.key);
 }
 
 // ── 從探索把書加入我的書架 ──
@@ -1884,6 +1897,10 @@ const DICT = {
   "{name} reviewed {book}": { "zh-TW": "{name} 評論了《{book}》" },
   "{name} is now reading {book}": { "zh-TW": "{name} 正在讀《{book}》" },
   "{name} finished {book}": { "zh-TW": "{name} 讀完了《{book}》" },
+  "Reply": { "zh-TW": "回覆" }, "Write a reply...": { "zh-TW": "寫回覆..." }, "Send": { "zh-TW": "送出" },
+  "No replies yet": { "zh-TW": "還沒有回覆" },
+  "💬 Book Club Discussion": { "zh-TW": "💬 讀書會討論" }, "Join the discussion...": { "zh-TW": "加入討論..." },
+  "Be the first to start the discussion!": { "zh-TW": "搶第一個開始討論吧!" },
   "Adding...": { "zh-TW": "加入中..." }, "✓ Added to shelf": { "zh-TW": "✓ 已加入書架" }, "Failed to add": { "zh-TW": "加入失敗" },
   "Submitting...": { "zh-TW": "送出中..." }, "Saving...": { "zh-TW": "儲存中..." },
   "Please sign in first.": { "zh-TW": "請先登入。" }, "Cannot locate this book in the catalog.": { "zh-TW": "找不到這本書的書庫資料。" },
@@ -2116,3 +2133,124 @@ document.querySelectorAll(".feed-subtab").forEach(btn => btn.addEventListener("c
   document.querySelectorAll(".feed-subtab").forEach(b => b.classList.toggle("active", b === btn));
   renderFeed();
 }));
+
+// ══════════════════════════════════════════
+//  PHASE B-4c — 評論回覆
+// ══════════════════════════════════════════
+function myDisplayName() {
+  return currentUser ? (currentUser.displayName || (currentUser.email ? currentUser.email.split("@")[0] : "Reader")) : "Reader";
+}
+
+async function expandReplies(reviewUid, container) {
+  if (!container || container.dataset.expanded === "1") return;
+  container.dataset.expanded = "1";
+  container.insertAdjacentHTML("beforeend",
+    `<div class="replies-list" id="replies-${reviewUid}"><div class="replies-empty">${t("Loading...")}</div></div>` +
+    (currentUser ? `<div class="reply-input-row">
+        <input type="text" class="reply-input" placeholder="${escHtml(t("Write a reply..."))}" maxlength="300">
+        <button class="reply-send">${escHtml(t("Send"))}</button>
+      </div>` : ""));
+  await renderReplies(reviewUid);
+  const sendBtn = container.querySelector(".reply-send");
+  const input   = container.querySelector(".reply-input");
+  async function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    sendBtn.disabled = true;
+    try {
+      await db.collection("catalog").doc(currentCatalogKey()).collection("reviews").doc(reviewUid).collection("replies").add({
+        uid: currentUser.uid, displayName: myDisplayName(), photoURL: currentUser.photoURL || "",
+        text, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      input.value = "";
+      await renderReplies(reviewUid);
+    } catch (e) { alert(t("Failed") + ": " + e.message); }
+    sendBtn.disabled = false;
+  }
+  if (sendBtn) sendBtn.addEventListener("click", send);
+  if (input)   input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+}
+
+async function renderReplies(reviewUid) {
+  const el = document.getElementById("replies-" + reviewUid);
+  if (!el) return;
+  const repCol = db.collection("catalog").doc(currentCatalogKey()).collection("reviews").doc(reviewUid).collection("replies");
+  let docs;
+  try { docs = (await repCol.orderBy("createdAt", "asc").get()).docs; }
+  catch (e) { el.innerHTML = `<div class="replies-empty">${t("Failed to load")}</div>`; return; }
+  if (!docs.length) { el.innerHTML = `<div class="replies-empty">${t("No replies yet")}</div>`; return; }
+  el.innerHTML = docs.map(d => {
+    const r = d.data();
+    const date = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleDateString() : "";
+    const mine = currentUser && r.uid === currentUser.uid;
+    return `<div class="reply-item">
+      <span class="reply-name clickable" data-uid="${escHtml(r.uid)}">${escHtml(r.displayName || "Reader")}</span>
+      <span class="reply-text">${escHtml(r.text)}</span>
+      <span class="reply-date">${date}</span>
+      ${mine ? `<button class="reply-del" data-id="${d.id}" title="Delete">🗑</button>` : ""}
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".reply-del").forEach(b => b.addEventListener("click", async () => {
+    try { await repCol.doc(b.dataset.id).delete(); await renderReplies(reviewUid); } catch (e) {}
+  }));
+  el.querySelectorAll(".reply-name.clickable").forEach(n => n.addEventListener("click", () => {
+    if (n.dataset.uid) { detailModal.classList.remove("open"); loadPublicShelf(n.dataset.uid); }
+  }));
+}
+
+// ══════════════════════════════════════════
+//  PHASE B-4d — 讀書會討論
+// ══════════════════════════════════════════
+async function loadDiscussion(catalogKey) {
+  const list = document.getElementById("discussionList");
+  if (!list) return;
+  if (!catalogKey) { list.innerHTML = ""; return; }
+  list.innerHTML = `<div class="discussion-empty">${t("Loading...")}</div>`;
+  let docs;
+  try { docs = (await db.collection("catalog").doc(catalogKey).collection("discussion").orderBy("createdAt", "asc").get()).docs; }
+  catch (e) { list.innerHTML = `<div class="discussion-empty">${t("Failed to load")}</div>`; return; }
+  if (!docs.length) { list.innerHTML = `<div class="discussion-empty">${t("Be the first to start the discussion!")}</div>`; return; }
+  list.innerHTML = docs.map(d => {
+    const m = d.data();
+    const initials = (m.displayName || "?").slice(0, 2).toUpperCase();
+    const date = m.createdAt && m.createdAt.toDate ? m.createdAt.toDate().toLocaleDateString() : "";
+    const mine = currentUser && m.uid === currentUser.uid;
+    const avatar = m.photoURL
+      ? `<div class="disc-avatar" data-uid="${escHtml(m.uid)}"><img src="${escHtml(m.photoURL)}" alt=""></div>`
+      : `<div class="disc-avatar" data-uid="${escHtml(m.uid)}">${escHtml(initials)}</div>`;
+    return `<div class="disc-item">
+      ${avatar}
+      <div class="disc-body">
+        <div class="disc-head"><span class="disc-name clickable" data-uid="${escHtml(m.uid)}">${escHtml(m.displayName || "Reader")}</span><span class="disc-date">${date}</span>${mine ? `<button class="disc-del" data-id="${d.id}" title="Delete">🗑</button>` : ""}</div>
+        <div class="disc-text">${escHtml(m.text)}</div>
+      </div>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".disc-del").forEach(b => b.addEventListener("click", async () => {
+    try { await db.collection("catalog").doc(catalogKey).collection("discussion").doc(b.dataset.id).delete(); loadDiscussion(catalogKey); } catch (e) {}
+  }));
+  list.querySelectorAll(".disc-name.clickable, .disc-avatar").forEach(n => n.addEventListener("click", () => {
+    if (n.dataset.uid) { detailModal.classList.remove("open"); loadPublicShelf(n.dataset.uid); }
+  }));
+}
+
+async function sendDiscussion() {
+  if (!currentUser) { alert(t("Please sign in first.")); return; }
+  const input = document.getElementById("discussionInput");
+  const text  = input.value.trim();
+  const key   = currentCatalogKey();
+  if (!text || !key) return;
+  const btn = document.getElementById("discussionSend");
+  btn.disabled = true;
+  try {
+    await db.collection("catalog").doc(key).collection("discussion").add({
+      uid: currentUser.uid, displayName: myDisplayName(), photoURL: currentUser.photoURL || "",
+      text, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    input.value = "";
+    await loadDiscussion(key);
+  } catch (e) { alert(t("Failed") + ": " + e.message); }
+  btn.disabled = false;
+}
+document.getElementById("discussionSend").addEventListener("click", sendDiscussion);
+document.getElementById("discussionInput").addEventListener("keydown", e => { if (e.key === "Enter") sendDiscussion(); });
