@@ -122,24 +122,58 @@ body {
 }
 .sort-row select:focus { border-color: rgba(124,92,255,.5); }
 
-/* 書卡縮放 −/+ */
-.zoom-group {
+/* 右下角書卡縮放 dock */
+.zoom-dock {
+  position: fixed;
+  right: 22px;
+  bottom: 20px;
+  z-index: 80;
   display: flex;
   align-items: center;
-  background: rgba(255,255,255,.32);
-  border: 1px solid rgba(255,255,255,.5);
-  border-radius: 10px;
-  overflow: hidden;
-  flex-shrink: 0;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,.62);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(120,100,90,.24);
 }
-.zoom-btn {
+.zoom-dock-ico { color: #6b6b68; display: flex; align-items: center; margin-right: 2px; }
+.zoom-dock-btn {
   background: none; border: none; cursor: pointer;
-  width: 28px; height: 30px; font-size: 18px; font-weight: 600;
+  width: 22px; height: 26px; font-size: 18px; font-weight: 700;
   color: #6b6b68; display: flex; align-items: center; justify-content: center;
-  transition: background .12s, color .12s;
+  border-radius: 7px; transition: background .12s, color .12s;
 }
-.zoom-btn:hover { background: rgba(255,255,255,.65); color: #37352f; }
-.zoom-btn:first-child { border-right: 1px solid rgba(255,255,255,.5); }
+.zoom-dock-btn:hover { background: rgba(0,0,0,.06); color: #37352f; }
+
+/* 三角形音量條 */
+.zoom-wedge { position: relative; width: 92px; height: 22px; display: flex; align-items: center; }
+.zoom-wedge::before {
+  content: ""; position: absolute; left: 2px; right: 2px; top: 50%; transform: translateY(-50%);
+  height: 15px;
+  background: linear-gradient(90deg, rgba(124,92,255,.30), rgba(91,141,239,.65));
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);   /* 左尖右粗 */
+  border-radius: 2px;
+  pointer-events: none;
+}
+.zoom-wedge input[type=range] {
+  position: relative; width: 100%; margin: 0; height: 22px; cursor: pointer;
+  background: transparent; -webkit-appearance: none; appearance: none;
+}
+.zoom-wedge input[type=range]::-webkit-slider-runnable-track { background: transparent; height: 22px; }
+.zoom-wedge input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid #7c5cff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3); margin-top: 4px;
+}
+.zoom-wedge input[type=range]::-moz-range-track { background: transparent; height: 22px; }
+.zoom-wedge input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid #7c5cff; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
 
 /* ── Body row(側欄 + 內容)── */
 .app-body {

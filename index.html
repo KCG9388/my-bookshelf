@@ -26,12 +26,6 @@
   <div class="hdr-actions">
     <span class="book-count" id="bookCount">0 books</span>
 
-    <!-- 書卡縮放 -->
-    <div class="zoom-group" title="Card size">
-      <button class="zoom-btn" id="zoomOutBtn" title="Smaller cards">−</button>
-      <button class="zoom-btn" id="zoomInBtn" title="Larger cards">+</button>
-    </div>
-
     <!-- 排序 / 版本:收進右上角浮層 -->
     <div class="sort-pop-wrap shelf-only">
       <button class="icon-btn" id="sortToggleBtn" title="Sort & filter">⇅</button>
@@ -147,6 +141,23 @@
     </div>
   </div>
 </main>
+
+<!-- 右下角:書卡縮放(resize icon + 三角拖曳條 + −/+)-->
+<div class="zoom-dock" id="zoomDock">
+  <span class="zoom-dock-ico" title="Card size">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
+      <line x1="8.5" y1="15.5" x2="15.5" y2="8.5"/>
+      <polyline points="11,8.5 15.5,8.5 15.5,13"/>
+      <polyline points="13,15.5 8.5,15.5 8.5,11"/>
+    </svg>
+  </span>
+  <button class="zoom-dock-btn" id="zoomOutBtn" title="Smaller cards">−</button>
+  <div class="zoom-wedge">
+    <input type="range" id="zoomRange" min="120" max="260" step="2" value="160" />
+  </div>
+  <button class="zoom-dock-btn" id="zoomInBtn" title="Larger cards">+</button>
+</div>
 
 </div><!-- /app-body -->
 

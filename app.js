@@ -11,7 +11,7 @@ let booksUnsub   = null;
 let currentFilter = { status: "all", year: "all", genre: "all", search: "", format: "all" };
 let currentSort   = "createdAt_desc";
 let currentDetailId = null;
-const PAGE_SIZE = 24;
+let PAGE_SIZE = 24;          // 動態:依縮放比例算成「欄數 × 可塞排數」,讓每頁填滿、每排不缺本
 let currentPage = 1;
 // ── Phase B-3 狀態 ──
 let activeCatalogKey = null;
@@ -97,7 +97,7 @@ function startBooksListener() {
     allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     rebuildSidebarFilters();
     rebuildFormatFilter();
-    renderGrid();
+    refreshLayout();
   });
 }
 
@@ -546,20 +546,71 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   });
 })();
 
-// 書卡縮放(−/+):改 CSS 變數 --card-w,記在 localStorage
+// ── 書卡縮放 + 依比例自動填滿頁面 ──
+const ZMIN = 120, ZMAX = 260, ZDEF = 160, ZSTEP = 16;
+let _infoH = 150;  // 卡片資訊區高度(固定),量測後快取
+
+function getCardW() {
+  return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--card-w"), 10) || ZDEF;
+}
+
+// 依目前卡片寬與可視區,算出「欄數 × 可塞排數」當作每頁數量 → 每排填滿、無殘缺
+function computePageSize() {
+  const grid = document.getElementById("bookGrid");
+  if (!grid || !grid.clientWidth) return PAGE_SIZE;
+  const cs   = getComputedStyle(grid);
+  const gap  = parseFloat(cs.columnGap) || 20;
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop)  + parseFloat(cs.paddingBottom);
+  const cardW = getCardW();
+  const info = grid.querySelector(".book-info");
+  if (info) _infoH = info.getBoundingClientRect().height;
+  const cardH  = cardW * 1.5 + _infoH;
+  const innerW = grid.clientWidth  - padX;
+  const innerH = grid.clientHeight - padY;
+  const cols = Math.max(1, Math.floor((innerW + gap) / (cardW + gap)));
+  const rows = Math.max(1, Math.floor((innerH + gap) / (cardH + gap)));
+  return cols * rows;
+}
+
+function refreshLayout() {
+  // 第一趟:用估計值算頁面數量並渲染
+  const next = computePageSize();
+  if (next) PAGE_SIZE = next;
+  if (currentView === "shelf") renderGrid();
+  // 第二趟:用剛渲染出的真實卡片高度修正(僅在數量有變時再渲染一次,不會無限循環)
+  const corrected = computePageSize();
+  if (corrected && corrected !== PAGE_SIZE) {
+    PAGE_SIZE = corrected;
+    if (currentView === "shelf") renderGrid();
+  }
+}
+
+// 只改卡片大小(便宜的 CSS 變更,拖曳時即時用)
+function applyCardW(w) {
+  w = Math.max(ZMIN, Math.min(ZMAX, Math.round(w)));
+  document.documentElement.style.setProperty("--card-w", w + "px");
+  localStorage.setItem("cardW", w);
+  const range = document.getElementById("zoomRange");
+  if (range && +range.value !== w) range.value = w;
+  return w;
+}
+// 改大小 + 重算每頁填滿(按鈕/放開拖曳時用)
+function setZoom(w) { applyCardW(w); refreshLayout(); }
+
 (function setupZoom() {
-  const ZMIN = 120, ZMAX = 250, ZSTEP = 18, ZDEF = 160;
-  const apply = w => {
-    w = Math.max(ZMIN, Math.min(ZMAX, w));
-    document.documentElement.style.setProperty("--card-w", w + "px");
-    localStorage.setItem("cardW", w);
-    return w;
-  };
-  let w = apply(parseInt(localStorage.getItem("cardW"), 10) || ZDEF);
-  const out = document.getElementById("zoomOutBtn");
-  const inn = document.getElementById("zoomInBtn");
-  if (out) out.addEventListener("click", () => { w = apply(w - ZSTEP); });
-  if (inn) inn.addEventListener("click", () => { w = apply(w + ZSTEP); });
+  const saved = applyCardW(parseInt(localStorage.getItem("cardW"), 10) || ZDEF);
+  const range = document.getElementById("zoomRange");
+  const out   = document.getElementById("zoomOutBtn");
+  const inn   = document.getElementById("zoomInBtn");
+  if (range) {
+    range.value = saved;
+    range.addEventListener("input",  () => applyCardW(+range.value)); // 拖曳中:即時縮放
+    range.addEventListener("change", () => refreshLayout());          // 放開:重算填滿
+  }
+  if (out) out.addEventListener("click", () => setZoom(getCardW() - ZSTEP));
+  if (inn) inn.addEventListener("click", () => setZoom(getCardW() + ZSTEP));
+  let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(refreshLayout, 150); });
 })();
 
 function updateActiveFilters() {
