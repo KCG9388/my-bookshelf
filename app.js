@@ -1947,7 +1947,7 @@ const DICT = {
   "Highlight what you're currently reading on your public library (requires public library).": { "zh-TW": "在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。" },
   "📌 Your public ratings/reviews are always public regardless of this setting — they only disappear if you delete them.": { "zh-TW": "📌 你的公開評分/評論一律公開,不受此設定影響——刪除才會消失。" },
   // 匯入
-  "⬆ Import from Notion": { "zh-TW": "⬆ 從 Notion 匯入" },
+  "⬆ Import Books": { "zh-TW": "⬆ 匯入書籍" },
   "Importing...": { "zh-TW": "匯入中..." }, "Import Books": { "zh-TW": "匯入書籍" },
   "📋 How to export from Notion": { "zh-TW": "📋 如何從 Notion 匯出" },
   "Found {n} books ready to import.": { "zh-TW": "找到 {n} 本書可匯入。" },
