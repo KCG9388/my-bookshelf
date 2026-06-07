@@ -13,10 +13,11 @@ body {
 
 /* ── 頂部 Header(橫跨全寬)── */
 .app-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 56px;
+  height: 60px;
   padding: 0 18px;
   background: rgba(255,255,255,.40);
   backdrop-filter: blur(20px) saturate(140%);
@@ -28,20 +29,23 @@ body {
 .hdr-brand {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 15px;
-  font-weight: 700;
+  gap: 8px;
+  width: 214px;            /* 固定寬,讓右側 nav 切齊書架第一本書(248px)*/
+  font-size: 20px;
+  font-weight: 800;
   color: #37352f;
   white-space: nowrap;
   flex-shrink: 0;
 }
-.hdr-brand span { letter-spacing: -.01em; }
+.hdr-brand span { letter-spacing: -.015em; }
 
 .hdr-search {
-  position: relative;
-  width: 360px;
-  max-width: 40vw;
-  margin-left: 4px;
+  position: absolute;       /* 絕對置中於頁面上方 */
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 420px;
+  max-width: 36vw;
 }
 .hdr-search-icon {
   position: absolute;
