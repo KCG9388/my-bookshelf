@@ -1723,6 +1723,7 @@ async function loadPublicShelf(uid) {
     const prof  = await db.collection("users").doc(uid).get();
     const pdata = prof.exists ? prof.data() : {};
     const name  = pdata.displayName || "Reader";
+    setupFollowButton(uid);
     if (!pdata.shelfPublic) {
       banner.style.display = "flex"; pbText.textContent = t("🔒 {name}'s library is private", { name });
       grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
@@ -1856,6 +1857,7 @@ const DICT = {
   "No ratings yet": { "zh-TW": "尚無評分" }, "No books in the shared library yet": { "zh-TW": "共享書庫還沒有書" },
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
+  "Follow": { "zh-TW": "追蹤" }, "Following": { "zh-TW": "已追蹤" },
   "Adding...": { "zh-TW": "加入中..." }, "✓ Added to shelf": { "zh-TW": "✓ 已加入書架" }, "Failed to add": { "zh-TW": "加入失敗" },
   "Submitting...": { "zh-TW": "送出中..." }, "Saving...": { "zh-TW": "儲存中..." },
   "Please sign in first.": { "zh-TW": "請先登入。" }, "Cannot locate this book in the catalog.": { "zh-TW": "找不到這本書的書庫資料。" },
@@ -1939,3 +1941,55 @@ document.getElementById("langToggle").addEventListener("click", () =>
   setLang(currentLang === "en" ? "zh-TW" : "en"));
 
 setLang(detectLang());
+
+// ══════════════════════════════════════════
+//  PHASE B-4a — 追蹤系統(單向)
+// ══════════════════════════════════════════
+async function isFollowing(targetUid) {
+  if (!currentUser) return false;
+  try {
+    const snap = await db.collection("users").doc(currentUser.uid).collection("following").doc(targetUid).get();
+    return snap.exists;
+  } catch (e) { return false; }
+}
+
+async function toggleFollow(targetUid) {
+  const meRef   = db.collection("users").doc(currentUser.uid).collection("following").doc(targetUid);
+  const themRef = db.collection("users").doc(targetUid).collection("followers").doc(currentUser.uid);
+  const snap = await meRef.get();
+  if (snap.exists) {
+    await meRef.delete();
+    await themRef.delete().catch(() => {});
+    return false;
+  }
+  const ts = firebase.firestore.FieldValue.serverTimestamp();
+  await meRef.set({ createdAt: ts });
+  await themRef.set({ createdAt: ts, displayName: currentUser.displayName || "", photoURL: currentUser.photoURL || "" }).catch(() => {});
+  return true;
+}
+
+function paintFollowBtn(following) {
+  const btn = document.getElementById("publicFollowBtn");
+  btn.classList.toggle("following", following);
+  btn.textContent = following ? t("Following") : t("Follow");
+}
+
+// 進入某人公開書架時設定追蹤鈕(本人/未登入則隱藏)
+async function setupFollowButton(uid) {
+  const btn = document.getElementById("publicFollowBtn");
+  if (!currentUser || uid === currentUser.uid) { btn.style.display = "none"; return; }
+  btn.style.display = "";
+  btn.dataset.target = uid;
+  paintFollowBtn(await isFollowing(uid));
+}
+
+document.getElementById("publicFollowBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("publicFollowBtn");
+  const target = btn.dataset.target;
+  if (!target || !currentUser) return;
+  btn.disabled = true;
+  try {
+    paintFollowBtn(await toggleFollow(target));
+  } catch (e) { alert(t("Failed") + ": " + e.message); }
+  btn.disabled = false;
+});
