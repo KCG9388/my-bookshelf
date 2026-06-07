@@ -20,6 +20,8 @@ let currentView   = "shelf";   // "shelf" | "explore"
 let exploreBooks  = [];
 let exploreLoaded = false;
 let viewingPublicUid = null;
+let myProfile = {};   // 快取本人 profile(含 shelfPublic/showReading,給動態判斷)
+let feedSubtab = "following";
 
 // ── DOM ──
 const bookGrid      = document.getElementById("bookGrid");
@@ -158,14 +160,17 @@ async function ensureProfile(user) {
   try {
     const snap = await ref.get();
     if (!snap.exists) {
-      await ref.set({
+      const init = {
         ...base,
         shelfPublic: false,   // 隱私預設：書庫不公開
         showReading: false,   // 隱私預設：不顯示「正在閱讀」
         createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      await ref.set(init);
+      myProfile = init;
     } else {
       await ref.set(base, { merge: true });  // 只更新名稱/頭像，不動隱私開關
+      myProfile = { ...snap.data(), ...base };
     }
   } catch (e) { console.warn("ensureProfile failed:", e); }
 }
@@ -878,11 +883,19 @@ document.getElementById("saveBook").addEventListener("click", async () => {
   };
 
   try {
+    const existing = (currentDetailId && addModal.dataset.mode === "edit") ? allBooks.find(b => b.id === currentDetailId) : null;
+    const statusChanged = !existing || existing.status !== book.status;
     book.catalogKey = await upsertCatalog(book);   // 同步進共享書庫，並記下指向 catalog 的鑰匙
     if (currentDetailId && addModal.dataset.mode === "edit") {
       await booksCol.doc(currentDetailId).update({ ...book });
     } else {
       await booksCol.add(book);
+    }
+    // 動態事件(依隱私旗標)
+    if (statusChanged) {
+      const ctx = { key: book.catalogKey, title: book.title, cover: book.cover };
+      if (book.status === "Finished" && myProfile.shelfPublic)      logActivity("finished", ctx);
+      else if (book.status === "Now Reading" && myProfile.showReading) logActivity("now_reading", ctx);
     }
     closeAddModal();
   } catch (e) {
@@ -1202,6 +1215,9 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
+    logActivity("review",
+      { key: catalogKey, title: document.getElementById("detailTitle").textContent, cover: document.getElementById("detailCover").src },
+      { rating: selectedRating, text });
     document.getElementById("reviewText").value = "";
     selectedRating = 0; renderStars(0); updateStarLabel(0, true);
   } catch(e) { alert(t("Failed") + ": " + e.message); }
@@ -1528,11 +1544,13 @@ function switchView(view) {
     el.style.display = view === "shelf" ? "" : "none");
   document.getElementById("shelfView").style.display   = view === "shelf"   ? "" : "none";
   document.getElementById("exploreView").style.display = view === "explore" ? "" : "none";
+  document.getElementById("feedView").style.display    = view === "feed"    ? "" : "none";
   if (view === "explore") {
     document.getElementById("publicBanner").style.display = "none";
     if (!exploreLoaded || viewingPublicUid) { viewingPublicUid = null; loadExplore(); }
     exploreLoaded = true;
   }
+  if (view === "feed") loadFeed();
 }
 document.querySelectorAll(".nav-tab").forEach(tab =>
   tab.addEventListener("click", () => switchView(tab.dataset.view)));
@@ -1677,9 +1695,11 @@ document.getElementById("savePrivacyBtn").addEventListener("click", async () => 
   const btn = document.getElementById("savePrivacyBtn");
   btn.disabled = true; btn.textContent = t("Saving...");
   try {
+    myProfile.shelfPublic = document.getElementById("prefShelfPublic").checked;
+    myProfile.showReading = document.getElementById("prefShowReading").checked;
     await db.collection("users").doc(currentUser.uid).set({
-      shelfPublic: document.getElementById("prefShelfPublic").checked,
-      showReading: document.getElementById("prefShowReading").checked,
+      shelfPublic: myProfile.shelfPublic,
+      showReading: myProfile.showReading,
     }, { merge: true });
     closePrivacy();
   } catch (e) { alert(t("Failed to save") + ": " + e.message); }
@@ -1858,6 +1878,12 @@ const DICT = {
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
   "Follow": { "zh-TW": "追蹤" }, "Following": { "zh-TW": "已追蹤" },
+  "← Back to Explore": { "zh-TW": "← 回探索" },
+  "📰 Feed": { "zh-TW": "📰 動態" }, "All": { "zh-TW": "全部" },
+  "No activity yet": { "zh-TW": "還沒有動態" }, "No activity from people you follow yet": { "zh-TW": "你追蹤的人還沒有動態" },
+  "{name} reviewed {book}": { "zh-TW": "{name} 評論了《{book}》" },
+  "{name} is now reading {book}": { "zh-TW": "{name} 正在讀《{book}》" },
+  "{name} finished {book}": { "zh-TW": "{name} 讀完了《{book}》" },
   "Adding...": { "zh-TW": "加入中..." }, "✓ Added to shelf": { "zh-TW": "✓ 已加入書架" }, "Failed to add": { "zh-TW": "加入失敗" },
   "Submitting...": { "zh-TW": "送出中..." }, "Saving...": { "zh-TW": "儲存中..." },
   "Please sign in first.": { "zh-TW": "請先登入。" }, "Cannot locate this book in the catalog.": { "zh-TW": "找不到這本書的書庫資料。" },
@@ -1993,3 +2019,100 @@ document.getElementById("publicFollowBtn").addEventListener("click", async () =>
   } catch (e) { alert(t("Failed") + ": " + e.message); }
   btn.disabled = false;
 });
+
+// ══════════════════════════════════════════
+//  PHASE B-4b — 動態牆(全站事件流)
+// ══════════════════════════════════════════
+let feedCache = [];
+
+// 寫一筆公開動態事件
+async function logActivity(type, book, extra) {
+  if (!currentUser) return;
+  try {
+    await db.collection("activity").add({
+      uid:         currentUser.uid,
+      displayName: currentUser.displayName || (currentUser.email ? currentUser.email.split("@")[0] : "Reader"),
+      photoURL:    currentUser.photoURL || "",
+      type,
+      bookKey:   (book && book.key)   || "",
+      bookTitle: (book && book.title) || "",
+      bookCover: (book && book.cover) || "",
+      rating: (extra && extra.rating) || null,
+      text:   (extra && extra.text)   || "",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) { console.warn("logActivity:", e); }
+}
+
+async function loadFeed() {
+  const list = document.getElementById("feedList");
+  list.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
+  try {
+    const snap = await db.collection("activity").orderBy("createdAt", "desc").limit(80).get();
+    feedCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderFeed();
+  } catch (e) {
+    list.innerHTML = `<div class="feed-empty">${t("Failed to load")}: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function getFollowingSet() {
+  if (!currentUser) return new Set();
+  try {
+    const snap = await db.collection("users").doc(currentUser.uid).collection("following").get();
+    return new Set(snap.docs.map(d => d.id));
+  } catch (e) { return new Set(); }
+}
+
+async function renderFeed() {
+  const list = document.getElementById("feedList");
+  let items = feedCache;
+  if (feedSubtab === "following") {
+    const set = await getFollowingSet();
+    if (currentUser) set.add(currentUser.uid);   // 動態牆也含自己
+    items = feedCache.filter(a => set.has(a.uid));
+  }
+  if (!items.length) {
+    list.innerHTML = `<div class="feed-empty">${t(feedSubtab === "following" ? "No activity from people you follow yet" : "No activity yet")}</div>`;
+    return;
+  }
+  list.innerHTML = items.map(a => {
+    const initials = (a.displayName || "?").slice(0, 2).toUpperCase();
+    const avatar = a.photoURL
+      ? `<div class="feed-avatar" data-uid="${escHtml(a.uid)}"><img src="${escHtml(a.photoURL)}" alt=""></div>`
+      : `<div class="feed-avatar" data-uid="${escHtml(a.uid)}">${escHtml(initials)}</div>`;
+    const nameHtml = `<span class="feed-name" data-uid="${escHtml(a.uid)}">${escHtml(a.displayName || "Reader")}</span>`;
+    const bookHtml = `<span class="feed-book" data-key="${escHtml(a.bookKey)}">${escHtml(a.bookTitle || "")}</span>`;
+    let line;
+    if (a.type === "review")        line = t("{name} reviewed {book}", { name: nameHtml, book: bookHtml }) + (a.rating ? ` <span style="color:#f0a500">${starsHTML(a.rating)}</span>` : "");
+    else if (a.type === "now_reading") line = t("{name} is now reading {book}", { name: nameHtml, book: bookHtml });
+    else if (a.type === "finished")    line = t("{name} finished {book}", { name: nameHtml, book: bookHtml });
+    else line = `${nameHtml} · ${bookHtml}`;
+    const date  = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().toLocaleDateString() : "";
+    const cover = a.bookCover ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(a.bookCover)}" alt="">` : "";
+    return `<div class="feed-item">
+      ${avatar}
+      <div class="feed-body">
+        <div class="feed-text">${line}</div>
+        ${a.text ? `<div class="feed-review-text">${escHtml(a.text)}</div>` : ""}
+        <div class="feed-meta">${date}</div>
+      </div>
+      ${cover}
+    </div>`;
+  }).join("");
+
+  list.querySelectorAll(".feed-name, .feed-avatar").forEach(el => el.addEventListener("click", () => {
+    if (el.dataset.uid) loadPublicShelf(el.dataset.uid);
+  }));
+  list.querySelectorAll(".feed-book, .feed-cover").forEach(el => el.addEventListener("click", async () => {
+    const key = el.dataset.key;
+    if (!key) return;
+    try { const snap = await db.collection("catalog").doc(key).get(); if (snap.exists) openCatalogDetail({ key, ...snap.data() }); } catch (e) {}
+  }));
+}
+
+document.querySelectorAll(".feed-subtab").forEach(btn => btn.addEventListener("click", () => {
+  feedSubtab = btn.dataset.feed;
+  document.querySelectorAll(".feed-subtab").forEach(b => b.classList.toggle("active", b === btn));
+  renderFeed();
+}));
