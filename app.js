@@ -569,8 +569,10 @@ function computePageSize() {
   const innerW = grid.clientWidth  - padX;
   const innerH = grid.clientHeight - padY;
   const cols = Math.max(1, Math.floor((innerW + gap) / (cardW + gap)));
-  // 排數用四捨五入「貼齊」可視高度:寧可略微捲動也不要下方留一大片空白
-  const rows = Math.max(1, Math.round((innerH + gap) / (cardH + gap)));
+  // 排數「填滿偏向」:只要還有 ≥0.25 排的空間就進位塞滿(避免下方留白);
+  // 空隙極小(<0.25 排)才不塞,免得為一點點空間硬擠一整排狂捲動
+  const raw  = (innerH + gap) / (cardH + gap);
+  const rows = Math.max(1, (raw - Math.floor(raw)) >= 0.25 ? Math.ceil(raw) : Math.floor(raw));
   return cols * rows;
 }
 
