@@ -569,7 +569,8 @@ function computePageSize() {
   const innerW = grid.clientWidth  - padX;
   const innerH = grid.clientHeight - padY;
   const cols = Math.max(1, Math.floor((innerW + gap) / (cardW + gap)));
-  const rows = Math.max(1, Math.floor((innerH + gap) / (cardH + gap)));
+  // 排數用四捨五入「貼齊」可視高度:寧可略微捲動也不要下方留一大片空白
+  const rows = Math.max(1, Math.round((innerH + gap) / (cardH + gap)));
   return cols * rows;
 }
 
