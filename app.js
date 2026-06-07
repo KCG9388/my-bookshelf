@@ -411,7 +411,7 @@ function renderGrid() {
               <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
               <div class="progress-pct">${pct}%</div>
             </div>` : ""}
-          <div><span class="status-badge status-${escHtml(b.status)}">${escHtml(b.status)}</span></div>
+          <div><span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span></div>
         </div>
       </div>`;
   }).join("");
@@ -1750,7 +1750,7 @@ function renderPublicShelf(books) {
       <div class="book-info">
         <div class="book-title">${escHtml(b.title||"")}</div>
         <div class="book-author">${escHtml(b.author||"")}</div>
-        <div class="book-genre">${escHtml(b.status||"")}${pct ? ` · ${pct}%` : ""}</div>
+        <div class="book-genre">${escHtml(b.status ? t(b.status) : "")}${pct ? ` · ${pct}%` : ""}</div>
       </div>
     </div>`;
   }).join("");
