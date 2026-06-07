@@ -410,13 +410,12 @@ function renderGrid() {
         <div class="book-info">
           <div class="book-title">${escHtml(b.title)}</div>
           <div class="book-author">${escHtml(b.author || "")}</div>
-          ${b.genre ? `<div class="book-genre">${escHtml(b.genre)}</div>` : ""}
-          ${pct !== null ? `
-            <div class="progress-wrap">
+          <div class="book-genre">${escHtml(b.genre || "")}</div>
+          <div class="progress-wrap">${pct !== null ? `
               <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-              <div class="progress-pct">${pct}%</div>
-            </div>` : ""}
-          <div><span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span></div>
+              <div class="progress-pct">${pct}%</div>` : ""}
+          </div>
+          <div class="book-status-row"><span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span></div>
         </div>
       </div>`;
   }).join("");

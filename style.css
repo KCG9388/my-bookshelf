@@ -185,10 +185,22 @@ body {
 /* ── Main ── */
 .main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+
+/* 三個視圖各自填滿 main、內部自行捲動(grid/feed 捲、篩選列與分頁固定)*/
+#shelfView, #exploreView, #feedView {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.filter-bar { flex-shrink: 0; }
+.pagination { flex-shrink: 0; }
 
 .refresh-btn { transition: background .12s, color .12s, transform .3s; }
 .refresh-btn.spinning { animation: spin .7s linear infinite; }
@@ -196,8 +208,9 @@ body {
 
 .book-grid {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px 80px;
+  padding: 18px 24px 28px;
   display: grid;
   grid-template-columns: repeat(auto-fill, 160px);
   gap: 20px;
@@ -256,22 +269,39 @@ body {
   overflow: hidden;
 }
 
-.book-info { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.book-info { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 3px; }
 
 .book-title {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
+  height: 2.6em;            /* 固定 2 行,書名長短不影響下方對齊 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.book-author { font-size: 11.5px; color: #6b6b68; }
-.book-genre { font-size: 11px; color: #9b9a97; }
+.book-author {
+  font-size: 11.5px;
+  color: #6b6b68;
+  line-height: 1.35;
+  height: 1.35em;          /* 固定 1 行 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.book-genre {
+  font-size: 11px;
+  color: #9b9a97;
+  line-height: 1.4;
+  height: 1.4em;           /* 永遠保留 1 行,即使無類型 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
-.progress-wrap { margin-top: 6px; }
+.progress-wrap { height: 21px; margin-top: 5px; }   /* 固定高度,無進度也保留位置 */
 .progress-bar {
   height: 4px;
   background: #e8e8e6;
@@ -1361,7 +1391,7 @@ body {
   padding: 5px 14px; font-size: 13px; font-weight: 600; color: #6b6b68; cursor: pointer;
 }
 .feed-subtab.active { background: #37352f; color: #fff; border-color: #37352f; }
-.feed-list { padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 8px; max-width: 700px; }
+.feed-list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 24px 24px; display: flex; flex-direction: column; gap: 8px; max-width: 700px; }
 .feed-item {
   display: flex; gap: 12px; align-items: flex-start;
   background: #fff; border: 1px solid #e8e8e6; border-radius: 10px; padding: 12px 14px;
