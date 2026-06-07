@@ -8,10 +8,8 @@
 </head>
 <body>
 
-<!-- 頂部 Header(橫跨全寬) -->
+<!-- 右側 Header(只佔右側,透明共用背景) -->
 <header class="app-header" id="appHeader" style="display:none">
-  <div class="hdr-brand">📚 <span>Home Library</span></div>
-
   <nav class="nav-tabs">
     <button class="nav-tab active" data-view="shelf" data-i18n>My Shelf</button>
     <button class="nav-tab" data-view="explore" data-i18n>Explore</button>
@@ -57,10 +55,10 @@
   </div>
 </header>
 
-<div class="app-body" id="appBody" style="display:none">
+<!-- 左側欄(全高:品牌 + 篩選)-->
+<aside class="sidebar" id="sidebar" style="display:none">
+  <div class="sidebar-brand">📚 <span>Home Library</span></div>
 
-<!-- 側欄(只剩篩選)-->
-<aside class="sidebar" id="sidebar">
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Status</div>
     <ul class="filter-list" id="statusFilter">
@@ -96,6 +94,7 @@
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import from Notion</button>
 </aside>
 
+<div class="app-body" id="appBody" style="display:none">
 <!-- 主內容 -->
 <main class="main" id="mainContent">
   <!-- 我的書架(私人)-->
@@ -145,14 +144,6 @@
 
 <!-- 右下角:書卡縮放(resize icon + 三角拖曳條 + −/+)-->
 <div class="zoom-dock" id="zoomDock">
-  <span class="zoom-dock-ico" title="Card size">
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
-      <line x1="8.5" y1="15.5" x2="15.5" y2="8.5"/>
-      <polyline points="11,8.5 15.5,8.5 15.5,13"/>
-      <polyline points="13,15.5 8.5,15.5 8.5,11"/>
-    </svg>
-  </span>
   <button class="zoom-dock-btn" id="zoomOutBtn" title="Smaller cards">−</button>
   <div class="zoom-wedge">
     <input type="range" id="zoomRange" min="120" max="260" step="2" value="160" />

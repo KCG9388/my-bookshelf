@@ -59,10 +59,12 @@ auth.onAuthStateChanged(user => {
 
 function showApp() {
   document.getElementById("appHeader").style.display = "";
+  document.getElementById("sidebar").style.display   = "";
   document.getElementById("appBody").style.display   = "";
 }
 function hideApp() {
   document.getElementById("appHeader").style.display = "none";
+  document.getElementById("sidebar").style.display   = "none";
   document.getElementById("appBody").style.display   = "none";
 }
 function showAuthModal() { authModal.classList.add("open"); }

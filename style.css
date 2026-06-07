@@ -5,11 +5,15 @@ body {
   background: linear-gradient(rgba(250,247,243,.30), rgba(250,247,243,.30)),
               url("assets/background.jpg") center center / cover fixed no-repeat;
   color: #37352f;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto 1fr;   /* 側欄 | 右側 */
+  grid-template-rows: auto 1fr;      /* header | 內容 */
   height: 100vh;
   overflow: hidden;
 }
+.sidebar    { grid-column: 1; grid-row: 1 / 3; }  /* 側欄跨兩列 = 全高 */
+.app-header { grid-column: 2; grid-row: 1; }
+.app-body   { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; }
 
 /* ── 頂部 Header(橫跨全寬)── */
 .app-header {
@@ -18,26 +22,22 @@ body {
   align-items: center;
   gap: 16px;
   height: 68px;
-  padding: 0 20px;
-  background: rgba(255,255,255,.40);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border-bottom: 1px solid rgba(255,255,255,.55);
+  padding: 0 20px 0 24px;
+  background: transparent;     /* 共用背景,不另加底色 */
   flex-shrink: 0;
   z-index: 20;
 }
-.hdr-brand {
+.sidebar-brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 212px;            /* 固定寬,讓右側 nav 切齊書架第一本書(248px)*/
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 800;
   color: #37352f;
   white-space: nowrap;
-  flex-shrink: 0;
+  padding: 2px 4px 4px;
 }
-.hdr-brand span { letter-spacing: -.015em; }
+.sidebar-brand span { letter-spacing: -.015em; }
 
 .hdr-search {
   position: absolute;       /* 絕對置中於頁面上方 */
@@ -126,21 +126,20 @@ body {
 /* 右下角書卡縮放 dock */
 .zoom-dock {
   position: fixed;
-  right: 22px;
-  bottom: 20px;
+  right: 24px;
+  bottom: 16px;              /* 與底部分頁列同一水平線 */
   z-index: 80;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: rgba(255,255,255,.62);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  gap: 7px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,.6);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
   border: 1px solid rgba(255,255,255,.7);
-  border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(120,100,90,.24);
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(120,100,90,.20);
 }
-.zoom-dock-ico { color: #6b6b68; display: flex; align-items: center; margin-right: 2px; }
 .zoom-dock-btn {
   background: none; border: none; cursor: pointer;
   width: 22px; height: 26px; font-size: 18px; font-weight: 700;
@@ -1220,10 +1219,7 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 14px 24px;
-  background: rgba(255,255,255,.38);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border-top: 1px solid rgba(255,255,255,.5);
+  background: transparent;     /* 共用背景,不另加底色 */
   position: sticky;
   bottom: 0;
 }
@@ -1465,10 +1461,12 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 600px) {
+  body { display: flex; flex-direction: column; }   /* 手機改回直向堆疊,取消桌機 grid */
+  .sidebar, .app-header, .app-body { grid-column: auto; grid-row: auto; }
   .app-body { flex-direction: column; overflow: auto; }
   .app-header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
-  .hdr-search { width: 100%; max-width: none; order: 3; }
-  .hdr-brand { font-size: 14px; }
+  .hdr-search { position: static; transform: none; width: 100%; max-width: none; order: 3; }
+  .sidebar-brand { font-size: 16px; }
   .nav-tabs { flex: 1; }
   .sidebar {
     width: 100%;
