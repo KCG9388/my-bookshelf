@@ -1,52 +1,77 @@
 rules_version = '2';
 
 // ──────────────────────────────────────────────────────────────
-//  Bookshelf 安全規則（Phase B-1）
-//  原則：使用者檔案公開可讀（只放非敏感欄位）；書架私密；
-//        舊書庫鎖死；共享書庫大家可讀、評論只能改自己的。
+//  Bookshelf 安全規則（Phase B-4：社群互動）
+//  原則：使用者檔案/共享書庫/評論/追蹤/動態/討論皆公開可讀；
+//        私人書架預設私密;寫入一律只能寫「自己的」那一份。
 // ──────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ① 使用者公開檔案：顯示名稱 / 頭像 / 隱私開關
-    //    大家可讀（評論要顯示作者名、之後探索頁要顯示使用者），本人可寫。
-    //    email 等敏感資料不放這份文件，所以公開讀無妨。
+    // ① 使用者公開檔案
     match /users/{uid} {
       allow read:  if true;
       allow write: if request.auth != null && request.auth.uid == uid;
 
-      // 書架：本人永遠可讀寫；別人「只有當本人 shelfPublic=true」才可讀。
+      // 私人書架：本人永遠可讀寫;別人只有當本人 shelfPublic=true 才可讀
       match /books/{bookId} {
         allow write: if request.auth != null && request.auth.uid == uid;
         allow read:  if (request.auth != null && request.auth.uid == uid)
                      || (exists(/databases/$(database)/documents/users/$(uid))
                          && get(/databases/$(database)/documents/users/$(uid)).data.shelfPublic == true);
-
-        // 書架底下的舊「私人評論」子集合 — 維持本人專屬
         match /reviews/{rid} {
           allow read, write: if request.auth != null && request.auth.uid == uid;
         }
       }
+
+      // 追蹤：我管理「我追蹤誰」
+      match /following/{targetUid} {
+        allow read:  if true;
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+      // 粉絲:某人把「自己」加進/移出我的粉絲名單(追蹤我時)
+      match /followers/{followerUid} {
+        allow read:  if true;
+        allow write: if request.auth != null && request.auth.uid == followerUid;
+      }
     }
 
-    // ② 舊的扁平書庫（你的 189 本）→ 完全鎖死，誰都不能讀/寫/刪。
-    //    已不再使用，種子改由各使用者登入時從自己書架補進 catalog。
+    // ② 舊扁平書庫 → 完全鎖死
     match /books/{document=**} {
       allow read, write: if false;
     }
 
-    // ③ 共享書庫 catalog：匿名書目，大家可讀；登入者可建立 / 補資料。
+    // ③ 共享書庫
     match /catalog/{bookId} {
       allow read:  if true;
       allow write: if request.auth != null;
 
-      // 公開評論：用「評論者 uid」當文件 id → 天然保證一人一書一則。
-      //   大家都看得到；但只能新增 / 修改 / 刪除自己那一則。
+      // 公開評論：一人一書一則(uid 當 id),只能改自己的
       match /reviews/{reviewerUid} {
         allow read:                   if true;
-        allow create, update, delete: if request.auth != null
-                                       && request.auth.uid == reviewerUid;
+        allow create, update, delete: if request.auth != null && request.auth.uid == reviewerUid;
+
+        // 評論回覆:大家可讀,只能新增/改/刪自己寫的(uid 存在資料裡)
+        match /replies/{replyId} {
+          allow read:   if true;
+          allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+          allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
+        }
       }
+
+      // 每本書的公開「讀書會」討論區
+      match /discussion/{msgId} {
+        allow read:   if true;
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+        allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
+      }
+    }
+
+    // ④ 全站動態事件流(誰評了/在讀/讀完)
+    match /activity/{id} {
+      allow read:   if true;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
     }
   }
 }
