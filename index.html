@@ -8,16 +8,38 @@
 </head>
 <body>
 
-<!-- 側欄 -->
-<aside class="sidebar" id="sidebar" style="display:none">
-  <div class="sidebar-title">📚 Home Library</div>
+<!-- 頂部 Header(橫跨全寬) -->
+<header class="app-header" id="appHeader" style="display:none">
+  <div class="hdr-brand">📚 <span>Home Library</span></div>
 
-  <div class="nav-tabs">
-    <button class="nav-tab active" data-view="shelf" data-i18n>📚 My Shelf</button>
-    <button class="nav-tab" data-view="explore" data-i18n>🌐 Explore</button>
-    <button class="nav-tab" data-view="feed" data-i18n>📰 Feed</button>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-view="shelf" data-i18n>My Shelf</button>
+    <button class="nav-tab" data-view="explore" data-i18n>Explore</button>
+    <button class="nav-tab" data-view="feed" data-i18n>Feed</button>
+  </nav>
+
+  <div class="hdr-search">
+    <span class="hdr-search-icon">🔍</span>
+    <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
   </div>
 
+  <div class="hdr-actions">
+    <span class="book-count" id="bookCount">0 books</span>
+    <button class="icon-btn refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
+    <button class="icon-btn" id="openPrivacyBtn" title="Privacy">⚙</button>
+    <button class="lang-toggle" id="langToggle" title="Switch language">中</button>
+    <div class="user-info" id="userInfo" style="display:none">
+      <div class="user-avatar-sm" id="userAvatarSm"></div>
+      <span class="user-display-name" id="userDisplayName"></span>
+      <button class="btn-signout" id="signOutBtn" title="Sign out">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<div class="app-body" id="appBody" style="display:none">
+
+<!-- 側欄(只剩篩選)-->
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Status</div>
     <ul class="filter-list" id="statusFilter">
@@ -32,37 +54,20 @@
 
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Year</div>
-    <ul class="filter-list" id="yearFilter">
-      <li class="active" data-year="all">All Years</li>
-    </ul>
+    <select class="filter-select" id="yearFilter"></select>
   </div>
 
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Genre</div>
-    <ul class="filter-list" id="genreFilter">
-      <li class="active" data-genre="all">All Genres</li>
-    </ul>
+    <select class="filter-select" id="genreFilter"></select>
   </div>
 
   <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import from Notion</button>
-  <button class="settings-btn" id="openPrivacyBtn">⚙ Privacy</button>
 </aside>
 
 <!-- 主內容 -->
-<main class="main" id="mainContent" style="display:none">
-  <div class="top-bar">
-    <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
-    <span class="book-count" id="bookCount">0 books</span>
-    <button class="refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
-    <button class="lang-toggle" id="langToggle" title="Switch language">中</button>
-    <!-- 使用者資訊 -->
-    <div class="user-info" id="userInfo" style="display:none">
-      <div class="user-avatar-sm" id="userAvatarSm"></div>
-      <span class="user-display-name" id="userDisplayName"></span>
-      <button class="btn-signout" id="signOutBtn" title="Sign out">Sign out</button>
-    </div>
-  </div>
+<main class="main" id="mainContent">
   <!-- 我的書架(私人)-->
   <div id="shelfView">
     <div class="filter-bar">
@@ -130,6 +135,8 @@
     </div>
   </div>
 </main>
+
+</div><!-- /app-body -->
 
 <!-- Screenshot Crop Overlay -->
 <div class="screenshot-overlay" id="screenshotOverlay" style="display:none">

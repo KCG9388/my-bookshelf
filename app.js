@@ -58,12 +58,12 @@ auth.onAuthStateChanged(user => {
 });
 
 function showApp() {
-  document.getElementById("sidebar").style.display    = "";
-  document.getElementById("mainContent").style.display = "";
+  document.getElementById("appHeader").style.display = "";
+  document.getElementById("appBody").style.display   = "";
 }
 function hideApp() {
-  document.getElementById("sidebar").style.display    = "none";
-  document.getElementById("mainContent").style.display = "none";
+  document.getElementById("appHeader").style.display = "none";
+  document.getElementById("appBody").style.display   = "none";
 }
 function showAuthModal() { authModal.classList.add("open"); }
 function closeAuthModal() { authModal.classList.remove("open"); }
@@ -470,32 +470,23 @@ function rebuildSidebarFilters() {
   const genres = [...new Set(allBooks.map(b => b.genre).filter(Boolean))].sort();
 
   const yearFilter = document.getElementById("yearFilter");
-  yearFilter.innerHTML = `<li class="${currentFilter.year==="all"?"active":""}" data-year="all">${t("All Years")}</li>` +
-    years.map(y => `<li class="${currentFilter.year===String(y)?"active":""}" data-year="${y}">${y}</li>`).join("");
-  yearFilter.querySelectorAll("li").forEach(li => {
-    li.addEventListener("click", () => {
-      setFilter("year", li.dataset.year);
-      yearFilter.querySelectorAll("li").forEach(x => x.classList.remove("active"));
-      li.classList.add("active");
-    });
-  });
+  yearFilter.innerHTML = `<option value="all">${t("All Years")}</option>` +
+    years.map(y => `<option value="${y}">${y}</option>`).join("");
+  yearFilter.value = currentFilter.year;
+  yearFilter.onchange = () => setFilter("year", yearFilter.value);
 
   const genreFilter = document.getElementById("genreFilter");
-  genreFilter.innerHTML = `<li class="${currentFilter.genre==="all"?"active":""}" data-genre="all">${t("All Genres")}</li>` +
-    genres.map(g => `<li class="${currentFilter.genre===g?"active":""}" data-genre="${g}">${escHtml(g)}</li>`).join("");
-  genreFilter.querySelectorAll("li").forEach(li => {
-    li.addEventListener("click", () => {
-      setFilter("genre", li.dataset.genre);
-      genreFilter.querySelectorAll("li").forEach(x => x.classList.remove("active"));
-      li.classList.add("active");
-    });
-  });
+  genreFilter.innerHTML = `<option value="all">${t("All Genres")}</option>` +
+    genres.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join("");
+  genreFilter.value = currentFilter.genre;
+  genreFilter.onchange = () => setFilter("genre", genreFilter.value);
 }
 
 function setFilter(key, val) {
   currentFilter[key] = val;
   currentPage = 1;
   renderGrid();
+  updateActiveFilters();
 }
 
 document.getElementById("statusFilter").querySelectorAll("li").forEach(li => {
@@ -533,8 +524,10 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   document.getElementById("sortSelect").value = "createdAt_desc";
   currentSort = "createdAt_desc";
   currentPage = 1;
-  document.querySelectorAll(".filter-list li").forEach(li => li.classList.remove("active"));
-  document.querySelectorAll("#statusFilter li[data-filter='all'], #yearFilter li[data-year='all'], #genreFilter li[data-genre='all']").forEach(li => li.classList.add("active"));
+  document.querySelectorAll("#statusFilter li").forEach(li => li.classList.remove("active"));
+  document.querySelector("#statusFilter li[data-filter='all']").classList.add("active");
+  document.getElementById("yearFilter").value  = "all";
+  document.getElementById("genreFilter").value = "all";
   renderGrid();
   updateActiveFilters();
 });
@@ -1554,6 +1547,7 @@ function switchView(view) {
     t.classList.toggle("active", t.dataset.view === view));
   document.querySelectorAll(".shelf-only").forEach(el =>
     el.style.display = view === "shelf" ? "" : "none");
+  document.getElementById("sidebar").style.display = view === "shelf" ? "" : "none";
   document.getElementById("shelfView").style.display   = view === "shelf"   ? "" : "none";
   document.getElementById("exploreView").style.display = view === "explore" ? "" : "none";
   document.getElementById("feedView").style.display    = view === "feed"    ? "" : "none";
@@ -1744,6 +1738,7 @@ async function loadPublicShelf(uid) {
   currentView = "explore";
   document.querySelectorAll(".nav-tab").forEach(t => t.classList.toggle("active", t.dataset.view === "explore"));
   document.querySelectorAll(".shelf-only").forEach(el => el.style.display = "none");
+  document.getElementById("sidebar").style.display = "none";
   document.getElementById("shelfView").style.display   = "none";
   document.getElementById("exploreView").style.display = "";
   exploreLoaded = true;
@@ -1813,7 +1808,7 @@ let currentLang = "en";
 
 const DICT = {
   // 導覽 / 側欄
-  "📚 My Shelf": { "zh-TW": "📚 我的書架" }, "🌐 Explore": { "zh-TW": "🌐 探索" },
+  "My Shelf": { "zh-TW": "我的書架" }, "Explore": { "zh-TW": "探索" }, "Feed": { "zh-TW": "動態" },
   "Status": { "zh-TW": "狀態" }, "⬜ All": { "zh-TW": "⬜ 全部" },
   "⏳ Now Reading": { "zh-TW": "⏳ 正在閱讀" }, "⏭ TBR": { "zh-TW": "⏭ 待讀" },
   "📋 Want to Read": { "zh-TW": "📋 想讀" }, "✅ Finished": { "zh-TW": "✅ 已讀完" }, "🚫 DNF": { "zh-TW": "🚫 棄讀" },
