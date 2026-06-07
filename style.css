@@ -2,7 +2,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f7f7f5;
+  background: linear-gradient(rgba(250,247,243,.30), rgba(250,247,243,.30)),
+              url("assets/background.jpg") center center / cover fixed no-repeat;
   color: #37352f;
   display: flex;
   flex-direction: column;
@@ -15,11 +16,14 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 52px;
+  height: 56px;
   padding: 0 18px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e6;
+  background: rgba(255,255,255,.40);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-bottom: 1px solid rgba(255,255,255,.55);
   flex-shrink: 0;
+  z-index: 20;
 }
 .hdr-brand {
   display: flex;
@@ -50,15 +54,15 @@ body {
 }
 .search-input {
   width: 100%;
-  padding: 7px 12px 7px 30px;
-  border: 1px solid #e6e6e3;
-  border-radius: 8px;
+  padding: 8px 14px 8px 32px;
+  border: 1px solid rgba(255,255,255,.6);
+  border-radius: 22px;
   font-size: 13.5px;
-  background: #f4f4f2;
+  background: rgba(255,255,255,.55);
   outline: none;
-  transition: border-color .15s, background .15s;
+  transition: border-color .15s, background .15s, box-shadow .15s;
 }
-.search-input:focus { border-color: #b8b8b5; background: #fff; }
+.search-input:focus { border-color: rgba(124,92,255,.5); background: rgba(255,255,255,.85); box-shadow: 0 0 0 3px rgba(124,92,255,.12); }
 
 .hdr-actions {
   display: flex;
@@ -79,9 +83,40 @@ body {
   transition: background .12s, color .12s;
   flex-shrink: 0;
 }
-.icon-btn:hover { background: #efefed; color: #37352f; }
+.icon-btn:hover { background: rgba(255,255,255,.6); color: #37352f; }
 
-.book-count { font-size: 12px; color: #9b9a97; white-space: nowrap; }
+.book-count { font-size: 12px; color: #7a7873; white-space: nowrap; }
+
+/* 排序 / 版本浮層 */
+.sort-pop-wrap { position: relative; display: flex; }
+.sort-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 234px;
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid rgba(255,255,255,.75);
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(120,100,90,.24);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 60;
+}
+.sort-row { display: flex; flex-direction: column; gap: 5px; }
+.sort-row label {
+  font-size: 10.5px; font-weight: 600; color: #8a8784;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.sort-row select {
+  width: 100%; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid rgba(0,0,0,.10); background: rgba(255,255,255,.7);
+  font-size: 13px; color: #37352f; cursor: pointer; outline: none;
+}
+.sort-row select:focus { border-color: rgba(124,92,255,.5); }
 
 /* ── Body row(側欄 + 內容)── */
 .app-body {
@@ -92,15 +127,20 @@ body {
 
 /* ── Sidebar ── */
 .sidebar {
-  width: 208px;
-  min-width: 208px;
-  background: #fbfbfa;
-  border-right: 1px solid #e8e8e6;
+  width: 210px;
+  min-width: 210px;
+  margin: 14px 0 14px 14px;
+  background: rgba(255,253,250,.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(120,100,90,.12);
   display: flex;
   flex-direction: column;
-  padding: 18px 12px;
+  padding: 18px 14px;
   overflow-y: auto;
-  gap: 22px;
+  gap: 20px;
 }
 
 .sidebar-section { display: flex; flex-direction: column; gap: 3px; }
@@ -155,32 +195,33 @@ body {
 /* 篩選下拉(年份 / 類型)*/
 .filter-select {
   width: 100%;
-  padding: 7px 10px;
-  border: 1px solid #e6e6e3;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 11px;
   font-size: 13px;
   color: #37352f;
-  background: #fff;
+  background: rgba(255,255,255,.6);
   cursor: pointer;
   outline: none;
-  transition: border-color .15s;
+  transition: border-color .15s, background .15s;
 }
-.filter-select:hover { border-color: #cfcfcc; }
-.filter-select:focus { border-color: #2c5aa0; }
+.filter-select:hover { background: rgba(255,255,255,.78); }
+.filter-select:focus { border-color: rgba(124,92,255,.5); }
 
 .add-btn {
   margin-top: auto;
-  background: #2c5aa0;
+  background: linear-gradient(135deg, #8b5cf6 0%, #5b8def 100%);
   color: #fff;
   border: none;
-  border-radius: 7px;
-  padding: 9px 12px;
+  border-radius: 13px;
+  padding: 11px 12px;
   font-size: 13.5px;
   cursor: pointer;
-  font-weight: 600;
-  transition: background .15s;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(124,92,255,.32);
+  transition: filter .15s, transform .12s, box-shadow .15s;
 }
-.add-btn:hover { background: #24487f; }
+.add-btn:hover { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 10px 24px rgba(124,92,255,.40); }
 
 /* ── Main ── */
 .main {
@@ -224,16 +265,19 @@ body {
 
 /* ── Book Card ── */
 .book-card {
-  background: #fff;
-  border-radius: 8px;
+  background: rgba(255,255,255,.52);
+  backdrop-filter: blur(10px) saturate(135%);
+  -webkit-backdrop-filter: blur(10px) saturate(135%);
+  border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
-  border: 1px solid #e8e8e6;
+  border: 1px solid rgba(255,255,255,.6);
+  box-shadow: 0 6px 20px rgba(120,100,90,.12);
   transition: box-shadow .15s, transform .15s;
   display: flex;
   flex-direction: column;
 }
-.book-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); transform: translateY(-2px); }
+.book-card:hover { box-shadow: 0 12px 32px rgba(120,100,90,.20); transform: translateY(-3px); }
 
 .book-cover {
   width: 100%;
@@ -821,9 +865,11 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 24px;
-  border-bottom: 1px solid #e8e8e6;
-  background: #fbfbfa;
+  padding: 10px 24px;
+  border-bottom: 1px solid rgba(255,255,255,.5);
+  background: rgba(255,255,255,.30);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   flex-wrap: wrap;
 }
 .filter-group { display: flex; align-items: center; gap: 6px; }
@@ -1039,17 +1085,17 @@ body {
 
 /* ── Import Button ── */
 .import-btn {
-  background: none;
-  border: 1px solid #e0e0de;
-  border-radius: 6px;
-  padding: 7px 12px;
+  background: rgba(255,255,255,.45);
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 12px;
+  padding: 9px 12px;
   font-size: 12.5px;
   cursor: pointer;
   color: #6b6b68;
   transition: background .15s;
   text-align: left;
 }
-.import-btn:hover { background: #ebebea; color: #37352f; }
+.import-btn:hover { background: rgba(255,255,255,.7); color: #37352f; }
 
 /* ── Import Modal ── */
 .modal-import { max-width: 600px; }
@@ -1115,9 +1161,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 16px 24px;
-  background: #fbfbfa;
-  border-top: 1px solid #e8e8e6;
+  padding: 14px 24px;
+  background: rgba(255,255,255,.38);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-top: 1px solid rgba(255,255,255,.5);
   position: sticky;
   bottom: 0;
 }
@@ -1469,10 +1517,10 @@ body {
 
 /* 語言切換鈕 */
 .lang-toggle {
-  background: transparent;
-  border: 1px solid #e8e8e6;
-  border-radius: 6px;
-  padding: 5px 10px;
+  background: rgba(255,255,255,.4);
+  border: 1px solid rgba(255,255,255,.6);
+  border-radius: 10px;
+  padding: 6px 11px;
   font-size: 13px;
   font-weight: 700;
   color: #37352f;
@@ -1480,7 +1528,7 @@ body {
   white-space: nowrap;
   transition: background .15s;
 }
-.lang-toggle:hover { background: #ebebea; }
+.lang-toggle:hover { background: rgba(255,255,255,.7); }
 
 /* ════════════════ Phase B-3：探索 / 隱私設定 ════════════════ */
 
@@ -1488,8 +1536,9 @@ body {
 .nav-tabs {
   display: flex;
   gap: 2px;
-  background: #f0f0ee;
-  border-radius: 9px;
+  background: rgba(255,255,255,.32);
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: 12px;
   padding: 3px;
   flex-shrink: 0;
 }
@@ -1507,9 +1556,9 @@ body {
 }
 .nav-tab:hover { color: #37352f; }
 .nav-tab.active {
-  background: #fff;
-  color: #2c5aa0;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  background: rgba(255,255,255,.92);
+  color: #6a4ad8;
+  box-shadow: 0 1px 4px rgba(120,100,90,.16);
 }
 
 /* 隱私設定按鈕 */

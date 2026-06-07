@@ -25,6 +25,35 @@
 
   <div class="hdr-actions">
     <span class="book-count" id="bookCount">0 books</span>
+
+    <!-- 排序 / 版本:收進右上角浮層 -->
+    <div class="sort-pop-wrap shelf-only">
+      <button class="icon-btn" id="sortToggleBtn" title="Sort & filter">⇅</button>
+      <div class="sort-popover" id="sortPopover" style="display:none">
+        <div class="sort-row">
+          <label data-i18n>Sort by</label>
+          <select id="sortSelect">
+            <option value="createdAt_desc">Date Added ↓</option>
+            <option value="createdAt_asc">Date Added ↑</option>
+            <option value="title_asc">Title A → Z</option>
+            <option value="title_desc">Title Z → A</option>
+            <option value="author_asc">Author A → Z</option>
+            <option value="finishDate_desc">Date Finished ↓</option>
+            <option value="progress_desc">Progress ↓</option>
+            <option value="totalPages_desc">Pages ↓</option>
+          </select>
+        </div>
+        <div class="sort-row">
+          <label data-i18n>Format</label>
+          <select id="formatSelect">
+            <option value="all">All Formats</option>
+          </select>
+        </div>
+        <div class="filter-chips" id="activeFilters"></div>
+        <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
+      </div>
+    </div>
+
     <button class="icon-btn refresh-btn" id="refreshBtn" title="Refresh library">↻</button>
     <button class="icon-btn" id="openPrivacyBtn" title="Privacy">⚙</button>
     <button class="lang-toggle" id="langToggle" title="Switch language">中</button>
@@ -70,29 +99,6 @@
 <main class="main" id="mainContent">
   <!-- 我的書架(私人)-->
   <div id="shelfView">
-    <div class="filter-bar">
-      <div class="filter-group">
-        <label>Sort by</label>
-        <select id="sortSelect">
-          <option value="createdAt_desc">Date Added ↓</option>
-          <option value="createdAt_asc">Date Added ↑</option>
-          <option value="title_asc">Title A → Z</option>
-          <option value="title_desc">Title Z → A</option>
-          <option value="author_asc">Author A → Z</option>
-          <option value="finishDate_desc">Date Finished ↓</option>
-          <option value="progress_desc">Progress ↓</option>
-          <option value="totalPages_desc">Pages ↓</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Format</label>
-        <select id="formatSelect">
-          <option value="all">All Formats</option>
-        </select>
-      </div>
-      <div class="filter-chips" id="activeFilters"></div>
-      <button class="filter-clear-btn" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
-    </div>
     <div class="book-grid" id="bookGrid">
       <div class="loading">Loading...</div>
     </div>

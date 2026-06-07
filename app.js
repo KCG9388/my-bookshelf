@@ -531,6 +531,21 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   updateActiveFilters();
 });
 
+// 排序 / 版本浮層:點按鈕開關、點外面關閉
+(function setupSortPopover() {
+  const btn = document.getElementById("sortToggleBtn");
+  const pop = document.getElementById("sortPopover");
+  if (!btn || !pop) return;
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    pop.style.display = pop.style.display === "none" ? "" : "none";
+  });
+  document.addEventListener("click", e => {
+    if (pop.style.display !== "none" && !pop.contains(e.target) && e.target !== btn)
+      pop.style.display = "none";
+  });
+})();
+
 function updateActiveFilters() {
   const chips    = document.getElementById("activeFilters");
   const clearBtn = document.getElementById("clearFiltersBtn");
