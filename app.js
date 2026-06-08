@@ -1354,13 +1354,47 @@ const importFileInput = document.getElementById("importFileInput");
 const importDropZone  = document.getElementById("importDropZone");
 const startImportBtn  = document.getElementById("startImportBtn");
 let parsedBooks = [];
+// 匯入生命週期狀態機：idle → writing(逐本寫入) → awaitingDone(寫完待按Done) → updating(抓封面中) → idle
+let importPhase    = "idle";
+let importedIds    = [];      // 本次匯入寫進去的 doc id，供「中途跳出→回滾」用
+let importCancelled = false;  // 通知寫入迴圈中止
 
-document.getElementById("openImportModal").addEventListener("click", () => { resetImport(); importModal.classList.add("open"); });
+document.getElementById("openImportModal").addEventListener("click", () => {
+  resetImport(); importPhase = "idle"; importedIds = []; importCancelled = false;
+  importModal.classList.add("open");
+});
 document.getElementById("closeImportModal").addEventListener("click", closeImport);
 document.getElementById("cancelImport").addEventListener("click", closeImport);
 importModal.addEventListener("click", e => { if (e.target === importModal) closeImport(); });
 
-function closeImport() { importModal.classList.remove("open"); resetImport(); }
+// 中途跳出守門：寫入中 / 待按Done 時，用 X、取消、點背景關閉 → 先確認，確定就回滾清掉這次匯入的書
+async function closeImport() {
+  if (importPhase === "writing" || importPhase === "awaitingDone") {
+    if (!confirm(t("Import isn't finished — covers haven't been updated yet. Leaving now will remove the books you just imported. Exit anyway?"))) return;
+    if (importPhase === "writing") importCancelled = true;   // 迴圈會自行回滾
+    else await rollbackImport();                              // 已寫完，這裡直接回滾
+  }
+  importModal.classList.remove("open");
+  resetImport();
+}
+
+// 回滾：刪掉本次匯入新增的書
+async function rollbackImport() {
+  const ids = importedIds.slice();
+  importedIds = []; importPhase = "idle"; importCancelled = false;
+  if (!ids.length || !booksCol) return;
+  toast.classList.add("visible");
+  toastFill.style.width = "100%";
+  toastLabel.textContent = t("Cancelling import — removing {n} books...", { n: ids.length });
+  for (const id of ids) { try { await booksCol.doc(id).delete(); } catch {} }
+  toastLabel.textContent = t("Import cancelled. {n} books removed.", { n: ids.length });
+  setTimeout(() => toast.classList.remove("visible"), 3000);
+}
+
+// 離開頁面前，若匯入流程還沒結束，觸發瀏覽器原生「確定離開?」提示
+window.addEventListener("beforeunload", e => {
+  if (importPhase !== "idle") { e.preventDefault(); e.returnValue = ""; }
+});
 
 function resetImport() {
   parsedBooks = [];
@@ -1372,6 +1406,7 @@ function resetImport() {
   bindFileInput();
   startImportBtn.disabled  = true;
   startImportBtn.textContent = "Import Books";
+  startImportBtn.onclick = null;   // 清掉 Done 的臨時 handler，還原成預設匯入流程
 }
 
 function bindFileInput() {
@@ -1532,14 +1567,15 @@ async function runCoverFetch() {
     done++;
     const pct = Math.round((done / total) * 100);
     toastFill.style.width  = pct + "%";
-    toastLabel.textContent = `${done} / ${total} — ${item.title}`;
+    toastLabel.textContent = t("Updating covers (keep this page open)") + ` — ${done}/${total} ${item.title}`;
     await new Promise(r => setTimeout(r, 350));
   }
 
-  toastLabel.textContent = `✓ Finished updating covers!`;
+  toastLabel.textContent = t("✓ Finished updating covers!");
   toastFill.style.width  = "100%";
   setTimeout(() => toast.classList.remove("visible"), 3500);
   coverFetchRunning = false;
+  if (importPhase === "updating") importPhase = "idle";   // 封面更新完成 → 解除離開頁面警告
 }
 
 async function fetchCoverUrl(title, author) {
@@ -1562,7 +1598,9 @@ async function fetchCoverUrl(title, author) {
 }
 
 startImportBtn.addEventListener("click", async () => {
+  if (importPhase !== "idle") return;   // 防重入：寫入中/待Done/抓封面中不再觸發匯入
   if (!parsedBooks.length || !booksCol) return;
+  importPhase = "writing"; importedIds = []; importCancelled = false;
   startImportBtn.disabled = true;
   document.getElementById("importPreview").style.display  = "none";
   document.getElementById("importDropZone").style.display = "none";
@@ -1577,6 +1615,7 @@ startImportBtn.addEventListener("click", async () => {
   let success = 0, skipped = 0, failed = 0;
 
   for (let i = 0; i < parsedBooks.length; i++) {
+    if (importCancelled) break;   // 使用者中途確認跳出
     const pct  = Math.round(((i + 1) / parsedBooks.length) * 100);
     fillEl.style.width  = pct + "%";
     labelEl.textContent = t("Importing {i} / {total}...", { i: i + 1, total: parsedBooks.length });
@@ -1594,7 +1633,8 @@ startImportBtn.addEventListener("click", async () => {
 
     try {
       book.catalogKey = await upsertCatalog(book);   // 匯入的書也進共享書庫
-      await booksCol.add(book);
+      const ref = await booksCol.add(book);
+      importedIds.push(ref.id);                       // 記下來，跳出時可回滾
       existingTitles.add(book.title.trim().toLowerCase());
       success++;
       const line = document.createElement("div");
@@ -1612,13 +1652,22 @@ startImportBtn.addEventListener("click", async () => {
     if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
   }
 
+  if (importCancelled) { await rollbackImport(); return; }   // 寫到一半被取消 → 清掉已寫的
+
+  importPhase = "awaitingDone";
   labelEl.textContent = t("Done! ✓ {ok} imported", { ok: success })
     + (skipped ? t(", {n} skipped", { n: skipped }) : "")
     + (failed ? t(", ✗ {n} failed", { n: failed }) : "") + ".";
   labelEl.style.color = "#1a6632";
-  startImportBtn.textContent = "Close";
+  startImportBtn.textContent = t("Done");
   startImportBtn.disabled    = false;
-  startImportBtn.onclick     = () => { closeImport(); queueCoverFetch(allBooks); };
+  // 按下 Done = 正式完成:保留資料、關閉視窗、開始背景抓封面(此後不再回滾)
+  startImportBtn.onclick = () => {
+    importPhase = "updating"; importedIds = []; startImportBtn.onclick = null;
+    importModal.classList.remove("open");
+    resetImport();
+    queueCoverFetch(allBooks);
+  };
 });
 
 // ══════════════════════════════════════════
@@ -1957,6 +2006,12 @@ const DICT = {
   "or click to browse": { "zh-TW": "或點擊瀏覽" },
   "Click to change file": { "zh-TW": "點擊更換檔案" }, "Importing {i} / {total}...": { "zh-TW": "匯入中 {i} / {total}..." },
   "Done! ✓ {ok} imported": { "zh-TW": "完成!✓ 已匯入 {ok} 本" }, ", {n} skipped": { "zh-TW": ",跳過 {n} 本" }, ", ✗ {n} failed": { "zh-TW": ",✗ 失敗 {n} 本" },
+  "Done": { "zh-TW": "完成" },
+  "Import isn't finished — covers haven't been updated yet. Leaving now will remove the books you just imported. Exit anyway?": { "zh-TW": "匯入還沒完成——封面尚未更新。現在離開會清除你剛匯入的書。確定要跳出嗎?" },
+  "Cancelling import — removing {n} books...": { "zh-TW": "取消匯入中——正在移除 {n} 本書..." },
+  "Import cancelled. {n} books removed.": { "zh-TW": "已取消匯入,移除了 {n} 本書。" },
+  "Updating covers (keep this page open)": { "zh-TW": "更新封面中(請勿關閉此頁面)" },
+  "✓ Finished updating covers!": { "zh-TW": "✓ 封面更新完成!" },
   // 登入
   "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
