@@ -967,7 +967,9 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     if (currentDetailId && addModal.dataset.mode === "edit") {
       await booksCol.doc(currentDetailId).update({ ...book });
     } else {
-      await booksCol.add(book);
+      const ref = await booksCol.add(book);
+      // 新增書:背景補 popularity(+缺封面也補)→ 相容度算得準。失敗回 -1 不擋流程
+      queueCoverFetch([{ id: ref.id, title: book.title, author: book.author, cover: book.cover, popularity: null }], true);
     }
     // 動態事件(依隱私旗標)
     if (statusChanged) {
@@ -1557,10 +1559,14 @@ const toastFill  = document.getElementById("toastFill");
 const toastLabel = document.getElementById("toastLabel");
 document.getElementById("toastClose").addEventListener("click", () => toast.classList.remove("visible"));
 
-function queueCoverFetch(books) {
-  const noCover = books.filter(b => !b.cover && b.title);
-  if (!noCover.length) return;
-  coverFetchQueue.push(...noCover.map(b => ({ id: b.id, title: b.title, author: b.author || "" })));
+// withPop=true 時,除了缺封面,也把「缺 popularity」的書排進來(只在新增/匯入呼叫,load 不帶以免每次狂抓)
+function queueCoverFetch(books, withPop = false) {
+  const items = books
+    .filter(b => b.title && (!b.cover || (withPop && b.popularity == null)))
+    .map(b => ({ id: b.id, title: b.title, author: b.author || "",
+                 needCover: !b.cover, needPop: withPop && b.popularity == null }));
+  if (!items.length) return;
+  coverFetchQueue.push(...items);
   if (!coverFetchRunning) runCoverFetch();
 }
 
@@ -1573,11 +1579,16 @@ async function runCoverFetch() {
 
   while (coverFetchQueue.length > 0) {
     const item = coverFetchQueue.shift();
-    const book = allBooks.find(b => b.id === item.id);
-    if (book?.cover) { done++; continue; }
-
-    const cover = await fetchCoverUrl(item.title, item.author);
-    if (cover) await booksCol.doc(item.id).update({ cover });
+    const live = allBooks.find(b => b.id === item.id);
+    const updates = {};
+    if (item.needCover && !live?.cover) {
+      const cover = await fetchCoverUrl(item.title, item.author);
+      if (cover) updates.cover = cover;
+    }
+    if (item.needPop && (live ? live.popularity == null : true)) {
+      updates.popularity = await fetchPopularity(item.title, item.author);   // 失敗回 -1(未知),仍寫入避免重抓
+    }
+    if (Object.keys(updates).length) await booksCol.doc(item.id).update(updates);
 
     done++;
     const pct = Math.round((done / total) * 100);
@@ -1590,7 +1601,30 @@ async function runCoverFetch() {
   toastFill.style.width  = "100%";
   setTimeout(() => toast.classList.remove("visible"), 3500);
   coverFetchRunning = false;
-  if (importPhase === "updating") importPhase = "idle";   // 封面更新完成 → 解除離開頁面警告
+  if (importPhase === "updating") importPhase = "idle";   // 更新完成 → 解除離開頁面警告
+}
+
+// 全球流行度:OL readinglog 系統性低估暢銷書 → 雙查詢(含作者/純書名)取 max + edition_count 知名度地板。
+// 與 backfill_popularity.py 同一套複合公式。失敗回 -1(rarityWeight 當未知中段 1.2)。
+async function olSignals(query) {
+  const url = "https://openlibrary.org/search.json?" +
+    new URLSearchParams({ q: query, limit: "5", fields: "readinglog_count,edition_count" });
+  const d = await fetch(url).then(r => r.json());
+  const docs = d.docs || [];
+  if (!docs.length) return { rl: 0, ed: 0 };
+  return { rl: Math.max(0, ...docs.map(x => x.readinglog_count || 0)),
+           ed: Math.max(0, ...docs.map(x => x.edition_count   || 0)) };
+}
+async function fetchPopularity(title, author) {
+  try {
+    const [a, b] = await Promise.all([
+      olSignals(`${title} ${author}`.trim()),
+      olSignals(title),
+    ]);
+    const rl = Math.max(a.rl, b.rl), ed = Math.max(a.ed, b.ed);
+    const floor = ed >= 40 ? 9000 : ed >= 20 ? 3000 : ed >= 12 ? 1000 : 0;   // 版本數知名度地板,只墊高
+    return Math.max(rl, floor);
+  } catch { return -1; }
 }
 
 async function fetchCoverUrl(title, author) {
@@ -1681,7 +1715,7 @@ startImportBtn.addEventListener("click", async () => {
     importPhase = "updating"; importedIds = []; startImportBtn.onclick = null;
     importModal.classList.remove("open");
     resetImport();
-    queueCoverFetch(allBooks);
+    queueCoverFetch(allBooks, true);   // 匯入完:補封面 + 補 popularity(順手回填整庫缺 pop 的書)
   };
 });
 
