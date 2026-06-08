@@ -1604,24 +1604,33 @@ async function runCoverFetch() {
   if (importPhase === "updating") importPhase = "idle";   // 更新完成 → 解除離開頁面警告
 }
 
-// 全球流行度:OL readinglog 系統性低估暢銷書 → 雙查詢(含作者/純書名)取 max + edition_count 知名度地板。
-// 與 backfill_popularity.py 同一套複合公式。失敗回 -1(rarityWeight 當未知中段 1.2)。
-async function olSignals(query) {
+// 全球流行度:OL readinglog 系統性低估暢銷書 → edition_count 知名度地板補。失敗回 -1(rarityWeight 當未知 1.2)。
+// 取數:含作者查詢當主力(已被作者約束,常見字書名如 Pond 也能命中真書);
+//   ⚠️只有主查詢「退化」(ed≤2 且 rl 低 = 作者文字害匹配失敗,如三體 CJK 作者名)才用純書名救援,
+//   避免常見字書名的純書名查詢誤匹配到同名熱門書。
+async function olSignals(query) {                                   // 取前5筆 max
   const url = "https://openlibrary.org/search.json?" +
     new URLSearchParams({ q: query, limit: "5", fields: "readinglog_count,edition_count" });
-  const d = await fetch(url).then(r => r.json());
-  const docs = d.docs || [];
-  if (!docs.length) return { rl: 0, ed: 0 };
-  return { rl: Math.max(0, ...docs.map(x => x.readinglog_count || 0)),
-           ed: Math.max(0, ...docs.map(x => x.edition_count   || 0)) };
+  const docs = (await fetch(url).then(r => r.json())).docs || [];
+  return { rl: Math.max(0, ...docs.map(x => x.readinglog_count || 0), 0),
+           ed: Math.max(0, ...docs.map(x => x.edition_count   || 0), 0) };
+}
+const _TITLE_STOP = new Set(["the","a","an","of","and","or","to","in","on","for"]);
+function distinctiveTitle(title) {   // 去掉冠詞/介系詞後 ≥2 個實詞(≥3字)= 獨特多字書名
+  const toks = (title || "").toLowerCase().normalize("NFKD")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ").split(/\s+/)
+    .filter(w => w.length >= 3 && !_TITLE_STOP.has(w));
+  return toks.length >= 2;
 }
 async function fetchPopularity(title, author) {
   try {
-    const [a, b] = await Promise.all([
-      olSignals(`${title} ${author}`.trim()),
-      olSignals(title),
-    ]);
-    const rl = Math.max(a.rl, b.rl), ed = Math.max(a.ed, b.ed);
+    let { rl, ed } = await olSignals(`${title} ${author}`.trim());
+    // 純書名救援只給「獨特多字書名」(如三體):它的純書名查詢都指向同一本,安全;
+    // 單字/常見書名(如 Pond)的純書名查詢會誤匹配同名熱門書 → 不救援,只信含作者查詢。
+    if (ed <= 2 && rl < 50 && distinctiveTitle(title)) {
+      const alt = await olSignals(title);
+      rl = Math.max(rl, alt.rl); ed = Math.max(ed, alt.ed);
+    }
     const floor = ed >= 40 ? 9000 : ed >= 20 ? 3000 : ed >= 12 ? 1000 : 0;   // 版本數知名度地板,只墊高
     return Math.max(rl, floor);
   } catch { return -1; }
