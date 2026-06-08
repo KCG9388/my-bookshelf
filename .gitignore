@@ -5,3 +5,8 @@ PROJECT_CONTEXT.md
 ExportBlock-*.zip
 .testuser.json
 image/
+seed_dve.py
+patch_covers.py
+backfill_popularity.py
+seed_curator.py
+seed_social.py
