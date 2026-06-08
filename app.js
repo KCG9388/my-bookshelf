@@ -1937,18 +1937,21 @@ function computeCompatibility(mine, theirs) {
   mine.forEach(b => { const k = compatKeyOf(b); if (k && !myMap.has(k)) myMap.set(k, b); });
   theirs.forEach(b => { const k = compatKeyOf(b); if (k && !thMap.has(k)) thMap.set(k, b); });
 
-  // ① 書名重疊(流行度加權,分母 = 我的書庫權重和 → 不對稱、以「我」為中心)
+  // ① 書名重疊(流行度加權)。分母 = 較專精(權重較小)那邊的書庫
+  //    → 答「他讀的東西跟我多合」(=該不該信他的推薦),不被廣讀者的大書庫稀釋。
   let myWeight = 0; myMap.forEach(b => myWeight += rarityWeight(b.popularity));
+  let theirWeight = 0; thMap.forEach(b => theirWeight += rarityWeight(b.popularity));
   const shared = [];
   myMap.forEach((b, k) => { if (thMap.has(k)) shared.push({ book: b, w: rarityWeight(b.popularity) }); });
   const sharedWeight = shared.reduce((s, x) => s + x.w, 0);
-  const titleOverlap = myWeight > 0 ? Math.min(1, sharedWeight / myWeight) : 0;
+  const denom = Math.min(myWeight, theirWeight) || 1;
+  const titleOverlap = Math.min(1, sharedWeight / denom);
 
   // ③ 類型輪廓相似(補書名稀疏)
   const genreSim = cosineSim(genreVector([...myMap.values()]), genreVector([...thMap.values()]));
 
-  // 合成(MVP 無評分訊號 → 自適應:0.7×① + 0.3×③)
-  const score = 0.7 * titleOverlap + 0.3 * genreSim;
+  // 合成(MVP 無評分訊號 → 0.55×① + 0.45×③;評分一致是 Phase 2)
+  const score = 0.55 * titleOverlap + 0.45 * genreSim;
 
   // 信心 ≠ 分數:共同書夠不夠多(分開、不相乘)
   const confidence = Math.min(1, shared.length / 15);
