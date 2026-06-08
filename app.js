@@ -2030,10 +2030,12 @@ function computeCompatibility(mine, theirs) {
   const ratingAgreement = agreeW > 0 ? agreeNum / agreeW : 0;
   const coRated = rated.length;
 
-  // 自適應合成:②的權重隨「共同評分書數」爬升(資料夠才採信),其餘按 0.55/0.45 給①③。
-  //   無評分資料 → w2=0 → 完全退回 Phase 1 的 0.55①+0.45③。
-  const w2 = 0.35 * Math.min(coRated / 6, 1);
-  const score = (1 - w2) * (0.55 * titleOverlap + 0.45 * genreSim) + w2 * ratingAgreement;
+  // 合成:①③ 是「拉得開」的核心鑑別訊號;② 評分一致只當「以基線(0.8)為中心的微調」。
+  //   理由:人只評讀過又偏愛的書,一致度天生高基線(~0.85),當正項混入會把大家一起拉高、壓掉高低差。
+  //   所以只有「高於基線(在分歧書上也合)」才加分,「真分歧(他愛你恨)」才扣分;幅度隨評分資料量縮放。
+  const base = 0.55 * titleOverlap + 0.45 * genreSim;
+  const ratingAdj = coRated ? (ratingAgreement - 0.8) * Math.min(coRated / 6, 1) * 0.35 : 0;
+  const score = Math.max(0, Math.min(1, base + ratingAdj));
 
   // 信心 ≠ 分數:共同書 + 共同評分書越多越有把握(分開、不相乘)
   const confidence = Math.min(1, (shared.length + coRated) / 15);
