@@ -1887,6 +1887,7 @@ async function loadPublicShelf(uid) {
     const name  = pdata.displayName || "Reader";
     setupFollowButton(uid);
     if (!pdata.shelfPublic) {
+      document.getElementById("compatPanel").style.display = "none";
       banner.style.display = "flex"; pbText.textContent = t("🔒 {name}'s library is private", { name });
       grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
       return;
@@ -1895,10 +1896,99 @@ async function loadPublicShelf(uid) {
     const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     banner.style.display = "flex"; pbText.textContent = t("📖 {name}'s library ({n} books)", { name, n: books.length });
     renderPublicShelf(books);
+    renderCompatPanel(books, name);
   } catch (e) {
+    document.getElementById("compatPanel").style.display = "none";
     banner.style.display = "flex"; pbText.textContent = t("🔒 Cannot load this shelf");
     grid.innerHTML = `<div class="loading">${t("Could not load — they may have made it private")}</div>`;
   }
+}
+
+// ══════════════════════════════════════════
+//  閱讀相容度引擎(口味比對)
+// ══════════════════════════════════════════
+// 流行度(Open Library 閱讀記錄人數,存在 book.popularity;-1/未知=當中段)→ 稀有度權重(6級)。
+// 冷門書權重高、國民書幾乎不算 → 共鳴在冷門書上才是真品味。
+function rarityWeight(pop) {
+  if (pop == null || pop < 0) return 1.2;   // 未知 → 中段,不爆掉
+  if (pop > 20000) return 0.1;              // 國民書(原子習慣/哈利波特級)
+  if (pop > 8000)  return 0.3;              // 很熱門(1984 級)
+  if (pop > 3000)  return 0.6;              // 熱門(沙丘/大亨小傳級)
+  if (pop > 800)   return 1.2;              // 中段
+  if (pop > 150)   return 1.8;              // 較少人讀
+  return 2.5;                               // 冷門
+}
+function compatKeyOf(b) { return b.catalogKey || catalogKeyFor(b.title, b.author); }
+function genreVector(books) {
+  const v = {};
+  books.forEach(b => { const g = (b.genre || "").trim(); if (g) v[g] = (v[g] || 0) + 1; });
+  return v;
+}
+function cosineSim(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  new Set([...Object.keys(a), ...Object.keys(b)]).forEach(k => { dot += (a[k]||0) * (b[k]||0); });
+  Object.values(a).forEach(x => na += x*x);
+  Object.values(b).forEach(y => nb += y*y);
+  return (na && nb) ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+}
+// 核心:我的書庫 vs 對方書庫 → 相容度 + 信心 + 拆解
+function computeCompatibility(mine, theirs) {
+  const myMap = new Map(), thMap = new Map();
+  mine.forEach(b => { const k = compatKeyOf(b); if (k && !myMap.has(k)) myMap.set(k, b); });
+  theirs.forEach(b => { const k = compatKeyOf(b); if (k && !thMap.has(k)) thMap.set(k, b); });
+
+  // ① 書名重疊(流行度加權,分母 = 我的書庫權重和 → 不對稱、以「我」為中心)
+  let myWeight = 0; myMap.forEach(b => myWeight += rarityWeight(b.popularity));
+  const shared = [];
+  myMap.forEach((b, k) => { if (thMap.has(k)) shared.push({ book: b, w: rarityWeight(b.popularity) }); });
+  const sharedWeight = shared.reduce((s, x) => s + x.w, 0);
+  const titleOverlap = myWeight > 0 ? Math.min(1, sharedWeight / myWeight) : 0;
+
+  // ③ 類型輪廓相似(補書名稀疏)
+  const genreSim = cosineSim(genreVector([...myMap.values()]), genreVector([...thMap.values()]));
+
+  // 合成(MVP 無評分訊號 → 自適應:0.7×① + 0.3×③)
+  const score = 0.7 * titleOverlap + 0.3 * genreSim;
+
+  // 信心 ≠ 分數:共同書夠不夠多(分開、不相乘)
+  const confidence = Math.min(1, shared.length / 15);
+
+  shared.sort((a, b) => b.w - a.w);   // 權重高(越冷門)排前 → 最強共鳴
+  return {
+    score, confidence, sharedCount: shared.length,
+    myCount: myMap.size, theirCount: thMap.size,
+    nicheShared: shared.filter(x => x.w >= 1.5).slice(0, 3).map(x => x.book.title),
+    topShared:   shared.slice(0, 4).map(x => x.book.title),
+  };
+}
+function renderCompatPanel(theirBooks, name) {
+  const panel = document.getElementById("compatPanel");
+  if (!panel) return;
+  const mine = (typeof allBooks !== "undefined") ? allBooks : [];
+  // 沒登入 / 自己的書太少 / 看自己 → 不顯示面板
+  if (!currentUser || viewingPublicUid === currentUser.uid || mine.length < 5 || !theirBooks.length) {
+    panel.style.display = "none"; return;
+  }
+  const r = computeCompatibility(mine, theirBooks);
+  const pct = Math.round(r.score * 100);
+  const lowData = r.myCount < 10 || r.sharedCount < 4;
+  const conf = lowData ? t("Low — for reference only")
+             : r.confidence >= 0.8 ? t("High")
+             : r.confidence >= 0.4 ? t("Medium") : t("Low — for reference only");
+  const niche = r.nicheShared.length
+    ? `<div class="cp-row">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>` : "";
+  const shared = r.sharedCount
+    ? `<div class="cp-row">📚 ${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""}</div>` : "";
+  panel.style.display = "block";
+  panel.innerHTML = `
+    <div class="cp-head">
+      <span class="cp-title">${t("Reading compatibility with {name}", { name: escHtml(name) })}</span>
+      <span class="cp-pct">${pct}%</span>
+    </div>
+    <div class="cp-bar"><div class="cp-fill" style="width:${pct}%"></div></div>
+    <div class="cp-conf">${t("Confidence")}: ${conf}</div>
+    ${shared}${niche}
+    ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}`;
 }
 
 function renderPublicShelf(books) {
@@ -1931,6 +2021,7 @@ function renderPublicShelf(books) {
 document.getElementById("publicBackBtn").addEventListener("click", () => {
   viewingPublicUid = null;
   document.getElementById("publicBanner").style.display = "none";
+  document.getElementById("compatPanel").style.display = "none";
   loadExplore();
 });
 
@@ -2012,6 +2103,13 @@ const DICT = {
   "Import cancelled. {n} books removed.": { "zh-TW": "已取消匯入,移除了 {n} 本書。" },
   "Updating covers (keep this page open)": { "zh-TW": "更新封面中(請勿關閉此頁面)" },
   "✓ Finished updating covers!": { "zh-TW": "✓ 封面更新完成!" },
+  // 閱讀相容度
+  "Reading compatibility with {name}": { "zh-TW": "與 {name} 的閱讀相容度" },
+  "Confidence": { "zh-TW": "信心" }, "High": { "zh-TW": "高" }, "Medium": { "zh-TW": "中" },
+  "Low — for reference only": { "zh-TW": "低 — 僅供參考" },
+  "You both read niche": { "zh-TW": "你們都讀過冷門的" },
+  "{n} books in common": { "zh-TW": "共同讀過 {n} 本" },
+  "No overlap yet — taste match is based on genres only": { "zh-TW": "尚無共同書 — 相容度僅依類型推估" },
   // 登入
   "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
