@@ -1149,9 +1149,11 @@ function currentCatalogKey() { return activeCatalogKey; }
 async function applyReviewToCatalog(catalogKey, uid, reviewData) {
   const catRef = db.collection("catalog").doc(catalogKey);
   const revRef = catRef.collection("reviews").doc(uid);
+  let isNew = false;
   await db.runTransaction(async tx => {
     const catSnap = await tx.get(catRef);
     const revSnap = await tx.get(revRef);
+    isNew = !revSnap.exists;
     let sum   = (catSnap.exists && catSnap.data().ratingSum)   || 0;
     let count = (catSnap.exists && catSnap.data().ratingCount) || 0;
     const newR = reviewData.rating || 0;
@@ -1168,16 +1170,19 @@ async function applyReviewToCatalog(catalogKey, uid, reviewData) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   });
+  return { isNew };
 }
 
 // 刪除自己的公開評論，並用交易回扣平均分
 async function removeReviewFromCatalog(catalogKey, uid) {
   const catRef = db.collection("catalog").doc(catalogKey);
   const revRef = catRef.collection("reviews").doc(uid);
+  let removed = false;
   await db.runTransaction(async tx => {
     const revSnap = await tx.get(revRef);
     const catSnap = await tx.get(catRef);
     if (!revSnap.exists) return;
+    removed = true;
     const r = revSnap.data().rating || 0;
     let sum   = (catSnap.exists && catSnap.data().ratingSum)   || 0;
     let count = (catSnap.exists && catSnap.data().ratingCount) || 0;
@@ -1188,6 +1193,10 @@ async function removeReviewFromCatalog(catalogKey, uid) {
       updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   });
+  // 刪評論 → reviewCount -1(本人寫自己)
+  if (removed) db.collection("users").doc(uid)
+    .update({ reviewCount: firebase.firestore.FieldValue.increment(-1) }).catch(() => {});
+  return { removed };
 }
 
 // 讀取某本書的「全站公開評論」
@@ -1295,7 +1304,7 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
   const btn = document.getElementById("submitReviewBtn");
   btn.disabled = true; btn.textContent = t("Submitting...");
   try {
-    await applyReviewToCatalog(catalogKey, currentUser.uid, {
+    const { isNew } = await applyReviewToCatalog(catalogKey, currentUser.uid, {
       uid:          currentUser.uid,
       reviewerName: name,
       rating:       selectedRating,
@@ -1305,6 +1314,9 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
+    // 新評論 → 自己 profile 的 reviewCount +1(本人寫自己,規則本就允許;discovery 排序即時反映)
+    if (isNew) db.collection("users").doc(currentUser.uid)
+      .update({ reviewCount: firebase.firestore.FieldValue.increment(1) }).catch(() => {});
     // 同步把評分寫到自己書架的該本書 → 相容度②(評分一致)即時吃得到真實評分
     const myBook = allBooks.find(b => (b.catalogKey || catalogKeyFor(b.title, b.author)) === catalogKey);
     if (myBook && booksCol) booksCol.doc(myBook.id).update({ rating: selectedRating }).catch(() => {});
@@ -2338,15 +2350,19 @@ async function isFollowing(targetUid) {
 async function toggleFollow(targetUid) {
   const meRef   = db.collection("users").doc(currentUser.uid).collection("following").doc(targetUid);
   const themRef = db.collection("users").doc(targetUid).collection("followers").doc(currentUser.uid);
+  const profRef = db.collection("users").doc(targetUid);
+  const inc = d => profRef.update({ followerCount: firebase.firestore.FieldValue.increment(d) }).catch(() => {});
   const snap = await meRef.get();
   if (snap.exists) {
     await meRef.delete();
     await themRef.delete().catch(() => {});
+    inc(-1);   // 取消追蹤 → 對方 followerCount −1(窄規則允許;種子底數之上即時遞減)
     return false;
   }
   const ts = firebase.firestore.FieldValue.serverTimestamp();
   await meRef.set({ createdAt: ts });
   await themRef.set({ createdAt: ts, displayName: currentUser.displayName || "", photoURL: currentUser.photoURL || "" }).catch(() => {});
+  inc(1);      // 追蹤 → 對方 followerCount +1
   return true;
 }
 

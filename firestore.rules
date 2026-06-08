@@ -10,8 +10,17 @@ service cloud.firestore {
 
     // ① 使用者公開檔案
     match /users/{uid} {
-      allow read:  if true;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read:           if true;
+      allow create, delete: if request.auth != null && request.auth.uid == uid;
+      // 更新:本人可改任何欄位;別人「只」能對 followerCount 做 ±1(追蹤計數,denormalized)
+      allow update: if request.auth != null && (
+        request.auth.uid == uid
+        || ( request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followerCount'])
+             && request.resource.data.followerCount is int
+             && request.resource.data.followerCount >= 0
+             && ( request.resource.data.followerCount == resource.data.get('followerCount', 0) + 1
+               || request.resource.data.followerCount == resource.data.get('followerCount', 0) - 1 ) )
+      );
 
       // 私人書架：本人永遠可讀寫;別人只有當本人 shelfPublic=true 才可讀
       match /books/{bookId} {
