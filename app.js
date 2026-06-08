@@ -1686,12 +1686,81 @@ function switchView(view) {
   document.getElementById("exploreView").style.display = view === "explore" ? "" : "none";
   document.getElementById("feedView").style.display    = view === "feed"    ? "" : "none";
   if (view === "explore") {
-    document.getElementById("publicBanner").style.display = "none";
-    if (!exploreLoaded || viewingPublicUid) { viewingPublicUid = null; loadExplore(); }
-    exploreLoaded = true;
+    viewingPublicUid = null;
+    switchExploreSubtab(exploreSubtab || "people");
   }
   if (view === "feed") loadFeed();
 }
+
+// ── 探索子頁:書評人(找人) / 書籍(共享書庫) ──
+let exploreSubtab = "people";
+let peopleList = [];
+function setExploreMode(mode) {   // 'people' | 'books' | 'shelf'
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? "" : "none"; };
+  show("exploreSubtabBar", mode !== "shelf");
+  show("exPeople",  mode === "people");
+  show("exBooksBar", mode === "books");
+  show("exploreGrid", mode !== "people");
+  if (mode !== "shelf") {
+    document.getElementById("publicBanner").style.display = "none";
+    document.getElementById("compatPanel").style.display = "none";
+  }
+}
+function switchExploreSubtab(which) {
+  exploreSubtab = which;
+  document.querySelectorAll("#exploreSubtabBar .feed-subtab").forEach(b =>
+    b.classList.toggle("active", b.dataset.esub === which));
+  setExploreMode(which);
+  if (which === "people") loadPeople();
+  else if (exploreBooks && exploreBooks.length) renderExplore();
+  else loadExplore();
+}
+// 載入公開使用者,依人氣分(追蹤數 + 評論數*5,獎勵發言)排序
+async function loadPeople() {
+  const grid = document.getElementById("peopleGrid");
+  const se = document.getElementById("peopleSearch"); if (se) se.placeholder = t("Search curators...");
+  grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
+  try {
+    const snap = await db.collection("users").get();
+    const me = currentUser ? currentUser.uid : null;
+    const users = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+      .filter(u => u.shelfPublic && u.uid !== me);
+    users.forEach(u => { u._score = (u.followerCount || 0) + (u.reviewCount || 0) * 5; });
+    users.sort((a, b) => b._score - a._score);
+    peopleList = users;
+    renderPeople();
+  } catch (e) {
+    grid.innerHTML = `<div class="loading">${t("Failed to load")}: ${escHtml(e.message)}</div>`;
+  }
+}
+function fmtCount(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : "" + n; }
+function renderPeople() {
+  const grid = document.getElementById("peopleGrid");
+  const q = (document.getElementById("peopleSearch").value || "").trim().toLowerCase();
+  let list = q ? peopleList.filter(u => (u.displayName || "").toLowerCase().includes(q)) : peopleList;
+  if (!list.length) { grid.innerHTML = `<div class="loading">${t("No curators found")}</div>`; return; }
+  grid.innerHTML = list.map(u => {
+    const initial = (u.displayName || "?").trim().charAt(0).toUpperCase();
+    const avatar = u.photoURL
+      ? `<img class="pcard-av" src="${escHtml(u.photoURL)}" alt="" loading="lazy" />`
+      : `<div class="pcard-av pcard-av-ph">${escHtml(initial)}</div>`;
+    const stats = [u.followerCount ? `👥 ${fmtCount(u.followerCount)}` : "",
+                   u.reviewCount   ? `💬 ${u.reviewCount}` : ""].filter(Boolean).join("　·　");
+    return `<div class="pcard" data-uid="${escHtml(u.uid)}">
+      ${avatar}
+      <div class="pcard-body">
+        <div class="pcard-name">${escHtml(u.displayName || "Reader")}</div>
+        <div class="pcard-stats">${stats || t("New reader")}</div>
+      </div>
+      <span class="pcard-go">›</span>
+    </div>`;
+  }).join("");
+  grid.querySelectorAll(".pcard").forEach(c =>
+    c.addEventListener("click", () => loadPublicShelf(c.dataset.uid)));
+}
+document.querySelectorAll("#exploreSubtabBar .feed-subtab").forEach(b =>
+  b.addEventListener("click", () => switchExploreSubtab(b.dataset.esub)));
+(() => { const se = document.getElementById("peopleSearch"); if (se) se.addEventListener("input", renderPeople); })();
 document.querySelectorAll(".nav-tab").forEach(tab =>
   tab.addEventListener("click", () => switchView(tab.dataset.view)));
 document.getElementById("exploreSortSelect").addEventListener("change", renderExplore);
@@ -1877,6 +1946,7 @@ async function loadPublicShelf(uid) {
   document.getElementById("exploreView").style.display = "";
   exploreLoaded = true;
   viewingPublicUid = uid;
+  setExploreMode("shelf");
   const grid   = document.getElementById("exploreGrid");
   const banner = document.getElementById("publicBanner");
   const pbText = banner.querySelector(".pb-text");
@@ -2023,9 +2093,7 @@ function renderPublicShelf(books) {
 
 document.getElementById("publicBackBtn").addEventListener("click", () => {
   viewingPublicUid = null;
-  document.getElementById("publicBanner").style.display = "none";
-  document.getElementById("compatPanel").style.display = "none";
-  loadExplore();
+  switchExploreSubtab(exploreSubtab || "people");
 });
 
 // ══════════════════════════════════════════
@@ -2113,6 +2181,10 @@ const DICT = {
   "You both read niche": { "zh-TW": "你們都讀過冷門的" },
   "{n} books in common": { "zh-TW": "共同讀過 {n} 本" },
   "No overlap yet — taste match is based on genres only": { "zh-TW": "尚無共同書 — 相容度僅依類型推估" },
+  // 書評人探索
+  "Curators": { "zh-TW": "書評人" }, "Books": { "zh-TW": "書籍" },
+  "Search curators...": { "zh-TW": "搜尋書評人…" },
+  "No curators found": { "zh-TW": "找不到符合的書評人" }, "New reader": { "zh-TW": "新讀者" },
   // 登入
   "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },

@@ -1753,3 +1753,35 @@ body {
 .cp-row { font-size: 13px; color: #5a5468; margin-top: 5px; line-height: 1.5; }
 .cp-row b { color: #6a4ad8; font-weight: 700; }
 .cp-dim { color: #9b96a8; }
+
+/* ── 書評人探索(找人 + 搜尋) ── */
+.people-search-wrap { position: relative; margin: 6px 24px 14px; }
+.people-search-wrap .ps-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: .6; pointer-events: none; }
+.people-search {
+  width: 100%; box-sizing: border-box;
+  padding: 11px 16px 11px 38px; font-size: 15px;
+  border: 1px solid rgba(0, 0, 0, .08); border-radius: 24px;
+  background: rgba(255, 255, 255, .6); backdrop-filter: blur(10px);
+  outline: none; color: #37352f;
+}
+.people-search:focus { border-color: #b9a8f0; background: rgba(255, 255, 255, .8); }
+.people-grid { display: flex; flex-direction: column; gap: 10px; padding: 0 24px 28px; }
+.pcard {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px; cursor: pointer;
+  background: rgba(255, 255, 255, .58); backdrop-filter: blur(12px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, .5); border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(120, 110, 150, .10);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.pcard:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(120, 110, 150, .18); }
+.pcard-av { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.pcard-av-ph {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 800; color: #fff;
+  background: linear-gradient(135deg, #8b5cf6, #5b8def);
+}
+.pcard-body { flex: 1; min-width: 0; }
+.pcard-name { font-size: 15.5px; font-weight: 700; color: #37352f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-stats { font-size: 13px; color: #7a7488; margin-top: 2px; }
+.pcard-go { font-size: 22px; color: #b9b4c4; flex-shrink: 0; }

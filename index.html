@@ -113,7 +113,26 @@
       <button class="pb-back" id="publicBackBtn">← Back to Explore</button>
     </div>
     <div class="compat-panel" id="compatPanel" style="display:none"></div>
-    <div class="filter-bar">
+
+    <!-- 探索子頁切換:書評人 | 書籍 -->
+    <div class="filter-bar" id="exploreSubtabBar">
+      <div class="feed-subtabs">
+        <button class="feed-subtab active" data-esub="people" data-i18n>Curators</button>
+        <button class="feed-subtab" data-esub="books" data-i18n>Books</button>
+      </div>
+    </div>
+
+    <!-- 書評人子頁:搜尋 + 人氣排序清單 -->
+    <div id="exPeople">
+      <div class="people-search-wrap">
+        <span class="ps-icon">🔍</span>
+        <input type="text" id="peopleSearch" class="people-search" placeholder="Search curators..." />
+      </div>
+      <div class="people-grid" id="peopleGrid"><div class="loading">Loading...</div></div>
+    </div>
+
+    <!-- 書籍子頁:排序 + 共享書庫 -->
+    <div class="filter-bar" id="exBooksBar" style="display:none">
       <div class="filter-group">
         <label>Sort by</label>
         <select id="exploreSortSelect">
@@ -124,7 +143,7 @@
       </div>
       <span class="book-count" id="exploreCount"></span>
     </div>
-    <div class="book-grid" id="exploreGrid">
+    <div class="book-grid" id="exploreGrid" style="display:none">
       <div class="loading">Loading...</div>
     </div>
   </div>
