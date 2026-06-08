@@ -1753,6 +1753,7 @@ body {
 .cp-row { font-size: 13px; color: #5a5468; margin-top: 5px; line-height: 1.5; }
 .cp-row b { color: #6a4ad8; font-weight: 700; }
 .cp-dim { color: #9b96a8; }
+.cp-clash { color: #b07219; }
 
 /* ── 書評人探索(找人 + 搜尋) ── */
 .people-search-wrap { position: relative; margin: 6px 24px 14px; }

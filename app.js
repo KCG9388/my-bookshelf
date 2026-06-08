@@ -1305,6 +1305,9 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
+    // 同步把評分寫到自己書架的該本書 → 相容度②(評分一致)即時吃得到真實評分
+    const myBook = allBooks.find(b => (b.catalogKey || catalogKeyFor(b.title, b.author)) === catalogKey);
+    if (myBook && booksCol) booksCol.doc(myBook.id).update({ rating: selectedRating }).catch(() => {});
     logActivity("review",
       { key: catalogKey, title: document.getElementById("detailTitle").textContent, cover: document.getElementById("detailCover").src },
       { rating: selectedRating, text });
@@ -2012,7 +2015,7 @@ function computeCompatibility(mine, theirs) {
   let myWeight = 0; myMap.forEach(b => myWeight += rarityWeight(b.popularity));
   let theirWeight = 0; thMap.forEach(b => theirWeight += rarityWeight(b.popularity));
   const shared = [];
-  myMap.forEach((b, k) => { if (thMap.has(k)) shared.push({ book: b, w: rarityWeight(b.popularity) }); });
+  myMap.forEach((b, k) => { if (thMap.has(k)) shared.push({ book: b, them: thMap.get(k), w: rarityWeight(b.popularity) }); });
   const sharedWeight = shared.reduce((s, x) => s + x.w, 0);
   const denom = Math.min(myWeight, theirWeight) || 1;
   const titleOverlap = Math.min(1, sharedWeight / denom);
@@ -2020,18 +2023,35 @@ function computeCompatibility(mine, theirs) {
   // ③ 類型輪廓相似(補書名稀疏)
   const genreSim = cosineSim(genreVector([...myMap.values()]), genreVector([...thMap.values()]));
 
-  // 合成(MVP 無評分訊號 → 0.55×① + 0.45×③;評分一致是 Phase 2)
-  const score = 0.55 * titleOverlap + 0.45 * genreSim;
+  // ② 評分一致(兩人都評過分的共同書;星差越小越合,冷門書加權;含負向=他愛你恨拖低)
+  const rated = shared.filter(x => x.book.rating > 0 && x.them.rating > 0);
+  let agreeW = 0, agreeNum = 0;
+  rated.forEach(x => { agreeW += x.w; agreeNum += x.w * (1 - Math.abs(x.book.rating - x.them.rating) / 4); });
+  const ratingAgreement = agreeW > 0 ? agreeNum / agreeW : 0;
+  const coRated = rated.length;
 
-  // 信心 ≠ 分數:共同書夠不夠多(分開、不相乘)
-  const confidence = Math.min(1, shared.length / 15);
+  // 自適應合成:②的權重隨「共同評分書數」爬升(資料夠才採信),其餘按 0.55/0.45 給①③。
+  //   無評分資料 → w2=0 → 完全退回 Phase 1 的 0.55①+0.45③。
+  const w2 = 0.35 * Math.min(coRated / 6, 1);
+  const score = (1 - w2) * (0.55 * titleOverlap + 0.45 * genreSim) + w2 * ratingAgreement;
+
+  // 信心 ≠ 分數:共同書 + 共同評分書越多越有把握(分開、不相乘)
+  const confidence = Math.min(1, (shared.length + coRated) / 15);
 
   shared.sort((a, b) => b.w - a.w);   // 權重高(越冷門)排前 → 最強共鳴
+  const bothLoved = rated.filter(x => x.book.rating >= 4 && x.them.rating >= 4)
+                         .sort((a, b) => b.w - a.w).map(x => x.book.title);
+  let topClash = null, maxDiff = 0;
+  rated.forEach(x => { const d = Math.abs(x.book.rating - x.them.rating);
+    if (d > maxDiff) { maxDiff = d; topClash = { title: x.book.title, mine: x.book.rating, theirs: x.them.rating }; } });
   return {
     score, confidence, sharedCount: shared.length,
     myCount: myMap.size, theirCount: thMap.size,
+    coRated, ratingAgreement,
     nicheShared: shared.filter(x => x.w >= 1.5).slice(0, 3).map(x => x.book.title),
     topShared:   shared.slice(0, 4).map(x => x.book.title),
+    bothLoved:   bothLoved.slice(0, 2),
+    topClash:    maxDiff >= 2 ? topClash : null,   // 差 ≥2 星才算「分歧」
   };
 }
 function renderCompatPanel(theirBooks, name) {
@@ -2052,6 +2072,12 @@ function renderCompatPanel(theirBooks, name) {
     ? `<div class="cp-row">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>` : "";
   const shared = r.sharedCount
     ? `<div class="cp-row">📚 ${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""}</div>` : "";
+  const agree = r.coRated
+    ? `<div class="cp-row">🎯 ${t("Rating agreement")}: <b>${Math.round(r.ratingAgreement * 100)}%</b> ${t("over {n} co-rated", { n: r.coRated })}</div>` : "";
+  const loved = r.bothLoved.length
+    ? `<div class="cp-row">💜 ${t("You both rated highly")}: <b>${r.bothLoved.map(escHtml).join("、")}</b></div>` : "";
+  const clash = r.topClash
+    ? `<div class="cp-row cp-clash">⚡ ${t("Taste clash")}: ${escHtml(r.topClash.title)} — ${t("them")} ${"★".repeat(r.topClash.theirs)} / ${t("you")} ${"★".repeat(r.topClash.mine)}</div>` : "";
   panel.style.display = "block";
   panel.innerHTML = `
     <div class="cp-head">
@@ -2060,7 +2086,7 @@ function renderCompatPanel(theirBooks, name) {
     </div>
     <div class="cp-bar"><div class="cp-fill" style="width:${pct}%"></div></div>
     <div class="cp-conf">${t("Confidence")}: ${conf}</div>
-    ${shared}${niche}
+    ${shared}${agree}${niche}${loved}${clash}
     ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}`;
 }
 
@@ -2181,6 +2207,9 @@ const DICT = {
   "You both read niche": { "zh-TW": "你們都讀過冷門的" },
   "{n} books in common": { "zh-TW": "共同讀過 {n} 本" },
   "No overlap yet — taste match is based on genres only": { "zh-TW": "尚無共同書 — 相容度僅依類型推估" },
+  "Rating agreement": { "zh-TW": "評分一致度" }, "over {n} co-rated": { "zh-TW": "(共 {n} 本都評過)" },
+  "You both rated highly": { "zh-TW": "你們都給高分" }, "Taste clash": { "zh-TW": "品味分歧" },
+  "them": { "zh-TW": "他" }, "you": { "zh-TW": "你" },
   // 書評人探索
   "Curators": { "zh-TW": "書評人" }, "Books": { "zh-TW": "書籍" },
   "Search curators...": { "zh-TW": "搜尋書評人…" },
