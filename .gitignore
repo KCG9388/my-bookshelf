@@ -10,3 +10,4 @@ patch_covers.py
 backfill_popularity.py
 seed_curator.py
 seed_social.py
+seed_ratings.py
