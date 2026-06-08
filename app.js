@@ -164,15 +164,21 @@ async function ensureProfile(user) {
     if (!snap.exists) {
       const init = {
         ...base,
-        shelfPublic: false,   // 隱私預設：書庫不公開
-        showReading: false,   // 隱私預設：不顯示「正在閱讀」
-        createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+        shelfPublic:  false,  // 隱私預設：書庫不公開
+        showReading:  false,  // 隱私預設：不顯示「正在閱讀」
+        followerCount: 0,     // 初始化 → discovery 的 orderBy(followerCount) 才排得到
+        reviewCount:   0,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
       };
       await ref.set(init);
       myProfile = init;
     } else {
-      await ref.set(base, { merge: true });  // 只更新名稱/頭像，不動隱私開關
-      myProfile = { ...snap.data(), ...base };
+      const d = snap.data();
+      const patch = { ...base };               // 只更新名稱/頭像，不動隱私開關
+      if (d.followerCount == null) patch.followerCount = 0;   // 自我修復:補上缺的計數欄
+      if (d.reviewCount   == null) patch.reviewCount   = 0;   //  → 公開後在 discovery 排得到
+      await ref.set(patch, { merge: true });
+      myProfile = { ...d, ...patch };
     }
   } catch (e) { console.warn("ensureProfile failed:", e); }
 }
@@ -1753,6 +1759,8 @@ function switchView(view) {
 // ── 探索子頁:書評人(找人) / 書籍(共享書庫) ──
 let exploreSubtab = "people";
 let peopleList = [];
+let peopleCursor = null, peopleHasMore = false, peopleLoading = false;
+const PEOPLE_PAGE = 24;
 function setExploreMode(mode) {   // 'people' | 'books' | 'shelf'
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? "" : "none"; };
   show("exploreSubtabBar", mode !== "shelf");
@@ -1773,48 +1781,72 @@ function switchExploreSubtab(which) {
   else if (exploreBooks && exploreBooks.length) renderExplore();
   else loadExplore();
 }
-// 載入公開使用者,依人氣分(追蹤數 + 評論數*5,獎勵發言)排序
-async function loadPeople() {
+// 載入公開使用者:server 端 where(公開)+orderBy(粉絲數)+limit 分頁,只讀一頁(免撈全庫)。
+// 顯示時頁內再以完整人氣分(追蹤+評論*5)次排序,保留「獎勵發言」語意;搜尋只搜已載入頁(規模大需搜尋服務)。
+async function loadPeople(reset = true) {
   const grid = document.getElementById("peopleGrid");
   const se = document.getElementById("peopleSearch"); if (se) se.placeholder = t("Search curators...");
-  grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
+  if (peopleLoading) return;
+  peopleLoading = true;
+  if (reset) { peopleList = []; peopleCursor = null; peopleHasMore = false;
+    grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`; }
   try {
-    const snap = await db.collection("users").get();
+    let q = db.collection("users").where("shelfPublic", "==", true)
+              .orderBy("followerCount", "desc").limit(PEOPLE_PAGE);
+    if (peopleCursor) q = q.startAfter(peopleCursor);
+    const snap = await q.get();
     const me = currentUser ? currentUser.uid : null;
-    const users = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
-      .filter(u => u.shelfPublic && u.uid !== me);
-    users.forEach(u => { u._score = (u.followerCount || 0) + (u.reviewCount || 0) * 5; });
-    users.sort((a, b) => b._score - a._score);
-    peopleList = users;
+    snap.docs.forEach(d => {
+      if (d.id === me || peopleList.some(u => u.uid === d.id)) return;
+      const u = { uid: d.id, ...d.data() };
+      u._score = (u.followerCount || 0) + (u.reviewCount || 0) * 5;
+      peopleList.push(u);
+    });
+    if (snap.docs.length) peopleCursor = snap.docs[snap.docs.length - 1];
+    peopleHasMore = snap.docs.length === PEOPLE_PAGE;
     renderPeople();
   } catch (e) {
     grid.innerHTML = `<div class="loading">${t("Failed to load")}: ${escHtml(e.message)}</div>`;
-  }
+  } finally { peopleLoading = false; }
 }
 function fmtCount(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : "" + n; }
 function renderPeople() {
   const grid = document.getElementById("peopleGrid");
   const q = (document.getElementById("peopleSearch").value || "").trim().toLowerCase();
-  let list = q ? peopleList.filter(u => (u.displayName || "").toLowerCase().includes(q)) : peopleList;
-  if (!list.length) { grid.innerHTML = `<div class="loading">${t("No curators found")}</div>`; return; }
-  grid.innerHTML = list.map(u => {
-    const initial = (u.displayName || "?").trim().charAt(0).toUpperCase();
-    const avatar = u.photoURL
-      ? `<img class="pcard-av" src="${escHtml(u.photoURL)}" alt="" loading="lazy" />`
-      : `<div class="pcard-av pcard-av-ph">${escHtml(initial)}</div>`;
-    const stats = [u.followerCount ? `👥 ${fmtCount(u.followerCount)}` : "",
-                   u.reviewCount   ? `💬 ${u.reviewCount}` : ""].filter(Boolean).join("　·　");
-    return `<div class="pcard" data-uid="${escHtml(u.uid)}">
-      ${avatar}
-      <div class="pcard-body">
-        <div class="pcard-name">${escHtml(u.displayName || "Reader")}</div>
-        <div class="pcard-stats">${stats || t("New reader")}</div>
-      </div>
-      <span class="pcard-go">›</span>
-    </div>`;
-  }).join("");
-  grid.querySelectorAll(".pcard").forEach(c =>
-    c.addEventListener("click", () => loadPublicShelf(c.dataset.uid)));
+  const sorted = [...peopleList].sort((a, b) => b._score - a._score);   // 頁內依完整人氣分排
+  let list = q ? sorted.filter(u => (u.displayName || "").toLowerCase().includes(q)) : sorted;
+  if (!list.length) {
+    grid.innerHTML = `<div class="loading">${t("No curators found")}</div>`;
+  } else {
+    grid.innerHTML = list.map(u => {
+      const initial = (u.displayName || "?").trim().charAt(0).toUpperCase();
+      const avatar = u.photoURL
+        ? `<img class="pcard-av" src="${escHtml(u.photoURL)}" alt="" loading="lazy" />`
+        : `<div class="pcard-av pcard-av-ph">${escHtml(initial)}</div>`;
+      const stats = [u.followerCount ? `👥 ${fmtCount(u.followerCount)}` : "",
+                     u.reviewCount   ? `💬 ${u.reviewCount}` : ""].filter(Boolean).join("　·　");
+      return `<div class="pcard" data-uid="${escHtml(u.uid)}">
+        ${avatar}
+        <div class="pcard-body">
+          <div class="pcard-name">${escHtml(u.displayName || "Reader")}</div>
+          <div class="pcard-stats">${stats || t("New reader")}</div>
+        </div>
+        <span class="pcard-go">›</span>
+      </div>`;
+    }).join("");
+    grid.querySelectorAll(".pcard").forEach(c =>
+      c.addEventListener("click", () => loadPublicShelf(c.dataset.uid)));
+  }
+  // 「載入更多」鈕(搜尋中隱藏,因為搜尋只涵蓋已載入頁)
+  let more = document.getElementById("peopleMore");
+  if (!more) {
+    more = document.createElement("button");
+    more.id = "peopleMore"; more.className = "people-more";
+    more.addEventListener("click", () => loadPeople(false));
+    grid.parentNode.appendChild(more);
+  }
+  more.textContent = peopleLoading ? t("Loading...") : t("Load more");
+  more.style.display = (peopleHasMore && !q) ? "" : "none";
 }
 document.querySelectorAll("#exploreSubtabBar .feed-subtab").forEach(b =>
   b.addEventListener("click", () => switchExploreSubtab(b.dataset.esub)));
@@ -2271,6 +2303,7 @@ const DICT = {
   "Curators": { "zh-TW": "書評人" }, "Books": { "zh-TW": "書籍" },
   "Search curators...": { "zh-TW": "搜尋書評人…" },
   "No curators found": { "zh-TW": "找不到符合的書評人" }, "New reader": { "zh-TW": "新讀者" },
+  "Load more": { "zh-TW": "載入更多" },
   // 登入
   "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
