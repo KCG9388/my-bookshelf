@@ -12,3 +12,4 @@ seed_curator.py
 seed_social.py
 seed_ratings.py
 seed_niche.py
+MEETING_*.md
