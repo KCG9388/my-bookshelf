@@ -879,6 +879,18 @@ body {
 .page-edit-row button:hover { background: #1a6cc5; }
 .page-edit-row #markDoneBtn { background: #16a34a; }
 .page-edit-row #markDoneBtn:hover { background: #128a3e; }
+
+/* 三評分並列:他的自評 / 我的 / 平均 */
+.triple-rating { display: flex; gap: 8px; margin: 4px 0 2px; }
+.triple-rating .tr-cell {
+  flex: 1; text-align: center; padding: 7px 4px;
+  background: rgba(255,255,255,.55); border: 1px solid #ececea; border-radius: 10px;
+}
+.triple-rating .tr-label { font-size: 11px; color: #9b9a97; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.triple-rating .tr-val { font-size: 14px; font-weight: 700; color: #d99a1c; }
+.triple-rating .tr-val .tr-count { font-size: 11px; font-weight: 400; color: #b0afab; }
+.triple-rating .tr-owner .tr-val { color: #7c3aed; }
+.triple-rating .tr-me .tr-val { color: #2383e2; }
 .page-edit-row #progressMode {
   padding: 5px 6px; border: 1px solid #e0e0de; border-radius: 5px;
   font-size: 13px; background: #fff; cursor: pointer; color: #37352f;

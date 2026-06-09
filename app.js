@@ -1108,6 +1108,35 @@ detailModal.addEventListener("click", e => {
 
 let selectedRating = 0;
 let reviewsUnsub   = null;
+// 公開書架主人(看別人書時才有值)→ 三評分面板的「他的評分」來源
+let publicShelfOwner = { uid: null, name: "", rating: null };
+
+// 三評分並列:他的自評(看別人書架時)/ 我的評分 / 平均分。資料優先用 catalog reviews,缺則回退書架自評。
+function renderTripleRating(reviews, avg, count) {
+  const el = document.getElementById("tripleRating");
+  if (!el) return;
+  const star = v => (v > 0 ? `★ ${Number(v).toFixed(1)}` : "—");
+  // 我的評分:我的 review,否則我書架上同一本的自評
+  let myRating = 0;
+  const myReview = currentUser && reviews.find(r => r.uid === currentUser.uid || r.id === currentUser.uid);
+  if (myReview && myReview.rating > 0) myRating = myReview.rating;
+  else { const mb = allBooks.find(b => (b.catalogKey || catalogKeyFor(b.title, b.author)) === activeCatalogKey); if (mb && mb.rating > 0) myRating = mb.rating; }
+  // 他的評分:只在「正在看別人公開書架」時顯示
+  let ownerRating = null, ownerName = "";
+  if (detailMode === "catalog" && viewingPublicUid && publicShelfOwner.uid === viewingPublicUid) {
+    ownerName = publicShelfOwner.name || t("them");
+    const oRev = reviews.find(r => r.uid === viewingPublicUid);
+    ownerRating = (oRev && oRev.rating > 0) ? oRev.rating : (publicShelfOwner.rating || 0);
+  }
+  const cell = (label, val, cls) => `<div class="tr-cell ${cls||""}"><div class="tr-label">${escHtml(label)}</div><div class="tr-val">${val}</div></div>`;
+  let html = "";
+  if (ownerRating !== null) html += cell(ownerName, star(ownerRating), "tr-owner");
+  html += cell(t("You"), star(myRating), "tr-me");
+  html += cell(t("Average"), avg > 0 ? `${star(avg)} <span class="tr-count">(${count||0})</span>` : "—", "tr-avg");
+  el.innerHTML = html;
+  // 完全無資料就不顯示
+  el.style.display = (ownerRating || myRating || avg > 0) ? "flex" : "none";
+}
 
 // Build quarter-star picker
 (function buildStarPicker() {
@@ -1256,6 +1285,7 @@ function renderReviews(reviews) {
     aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = t("No reviews yet");
     ratingBars.innerHTML = "";
     reviewsList.innerHTML = `<div class="reviews-empty">${t("📝 No reviews yet — be the first!")}</div>`;
+    renderTripleRating([], 0, 0);
     return;
   }
 
@@ -1264,6 +1294,7 @@ function renderReviews(reviews) {
   aggScore.textContent = avg.toFixed(1);
   aggStars.innerHTML   = starsHTML(avg);
   aggCount.textContent = t(reviews.length === 1 ? "{n} review" : "{n} reviews", { n: reviews.length });
+  renderTripleRating(reviews, avg, withRating.length);
 
   const counts = [0,0,0,0,0,0];
   withRating.forEach(r => { const n = Math.round(r.rating); if (n >= 1 && n <= 5) counts[n]++; });
@@ -2105,6 +2136,7 @@ async function loadPublicShelf(uid) {
     const prof  = await db.collection("users").doc(uid).get();
     const pdata = prof.exists ? prof.data() : {};
     const name  = pdata.displayName || "Reader";
+    publicShelfOwner = { uid, name, rating: null };   // 供三評分面板的「他的評分」
     setupFollowButton(uid);
     if (!pdata.shelfPublic) {
       document.getElementById("compatPanel").style.display = "none";
@@ -2260,6 +2292,9 @@ function renderPublicShelf(books) {
   grid.querySelectorAll(".book-card").forEach(card =>
     card.addEventListener("click", async () => {
       try {
+        // 記下這本書在「主人書架上的自評」→ 三評分面板顯示「他的評分」
+        const ob = books.find(x => (x.catalogKey || catalogKeyFor(x.title, x.author)) === card.dataset.key);
+        publicShelfOwner.rating = ob ? (ob.rating || 0) : 0;
         const snap = await db.collection("catalog").doc(card.dataset.key).get();
         if (snap.exists) openCatalogDetail({ key: card.dataset.key, ...snap.data() });
       } catch (e) { console.warn(e); }
@@ -2363,6 +2398,7 @@ const DICT = {
   "Rating agreement": { "zh-TW": "評分一致度" }, "over {n} co-rated": { "zh-TW": "(共 {n} 本都評過)" },
   "You both rated highly": { "zh-TW": "你們都給高分" }, "Taste clash": { "zh-TW": "品味分歧" },
   "them": { "zh-TW": "他" }, "you": { "zh-TW": "你" },
+  "You": { "zh-TW": "我的評分" }, "Average": { "zh-TW": "平均" },
   // 書評人探索
   "Curators": { "zh-TW": "書評人" }, "Books": { "zh-TW": "書籍" },
   "Search curators...": { "zh-TW": "搜尋書評人…" },
