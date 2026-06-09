@@ -714,62 +714,76 @@ document.getElementById("bookSearchInput").addEventListener("keydown", e => { if
 async function fetchBookInfo() {
   const query = document.getElementById("bookSearchInput").value.trim();
   if (!query) return;
-  fetchStatus.textContent = "Searching...";
+  fetchStatus.textContent = t("Searching...");
+  const resultsEl = document.getElementById("bookSearchResults");
+  if (resultsEl) resultsEl.innerHTML = "";
 
-  const isISBN  = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
+  const isISBN    = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
   const cleanISBN = query.replace(/[\s\-]/g, "");
+  const results   = [];
 
-  // 1. Open Library by ISBN
-  if (isISBN) {
+  // 主來源 Google Books(封面/metadata 最齊)。抓多筆,讓使用者自己挑,不再盲填第一筆(=之前跳成別本書的根因)
+  try {
+    const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
+    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=8&key=${GBOOKS_KEY}`);
+    const data = await res.json();
+    (data.items || []).forEach(it => {
+      const info = it.volumeInfo || {};
+      results.push({
+        title: info.title || "",
+        author: (info.authors || []).join(", "),
+        genre: (info.categories || []).join(", "),
+        totalPages: info.pageCount || "",
+        cover: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail || "").replace("http://","https://") : "",
+        year: (info.publishedDate || "").slice(0, 4),
+      });
+    });
+  } catch {}
+
+  // 補:Open Library(Google 沒結果時)
+  if (!results.length) {
     try {
-      const res  = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanISBN}&format=json&jscmd=data`);
+      const url = isISBN
+        ? `https://openlibrary.org/search.json?isbn=${cleanISBN}&limit=8`
+        : `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8`;
+      const res  = await fetch(url);
       const data = await res.json();
-      const key  = `ISBN:${cleanISBN}`;
-      if (data[key]) {
-        const info    = data[key];
-        const cover   = info.cover ? (info.cover.large || info.cover.medium || info.cover.small || "") : "";
-        const authors = (info.authors || []).map(a => a.name).join(", ");
-        const subjects= (info.subjects || []).map(s => s.name || s).slice(0, 2).join(", ");
-        fillForm({ title: info.title || "", author: authors, genre: subjects, totalPages: info.number_of_pages || "", cover });
-        fetchStatus.textContent = `Found: "${info.title}"`;
-        return;
-      }
+      (data.docs || []).forEach(doc => {
+        results.push({
+          title: doc.title || "",
+          author: (doc.author_name || []).slice(0, 2).join(", "),
+          genre: (doc.subject || []).slice(0, 2).join(", "),
+          totalPages: doc.number_of_pages_median || "",
+          cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "",
+          year: doc.first_publish_year || "",
+        });
+      });
     } catch {}
   }
 
-  // 2. Google Books
-  try {
-    const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
-    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=1&key=${GBOOKS_KEY}`);
-    const data = await res.json();
-    if (data.items && data.items.length > 0) {
-      const info  = data.items[0].volumeInfo;
-      const cover = info.imageLinks
-        ? (info.imageLinks.extraLarge || info.imageLinks.large || info.imageLinks.thumbnail || "").replace("http://","https://")
-        : "";
-      fillForm({ title: info.title || "", author: (info.authors || []).join(", "), genre: (info.categories || []).join(", "), totalPages: info.pageCount || "", cover });
-      fetchStatus.textContent = `Found: "${info.title}"`;
-      return;
-    }
-  } catch {}
+  if (!results.length) { fetchStatus.textContent = t("No results found. Fill in manually."); return; }
+  fetchStatus.textContent = t("Pick the right book:");
+  renderSearchResults(results);
+}
 
-  // 3. Open Library by title search
-  try {
-    const res  = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1`);
-    const data = await res.json();
-    if (data.docs && data.docs.length > 0) {
-      const doc     = data.docs[0];
-      const coverId = doc.cover_i;
-      const cover   = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : "";
-      const authors = (doc.author_name || []).slice(0, 2).join(", ");
-      const subjects= (doc.subject || []).slice(0, 2).join(", ");
-      fillForm({ title: doc.title || "", author: authors, genre: subjects, totalPages: doc.number_of_pages_median || "", cover });
-      fetchStatus.textContent = `Found: "${doc.title}"`;
-      return;
-    }
-  } catch {}
-
-  fetchStatus.textContent = "No results found. Fill in manually.";
+// 列出搜尋結果,點一筆才填表(取代盲填第一筆 → 不再跳成別本書)
+function renderSearchResults(list) {
+  const el = document.getElementById("bookSearchResults");
+  if (!el) return;
+  el.innerHTML = list.map((r, i) => `
+    <div class="bsr-item" data-i="${i}">
+      ${r.cover ? `<img class="bsr-cover" src="${escHtml(r.cover)}" alt="" loading="lazy">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
+      <div class="bsr-meta">
+        <div class="bsr-title">${escHtml(r.title)}</div>
+        <div class="bsr-sub">${escHtml(r.author || "?")}${r.year ? " · " + escHtml(String(r.year)) : ""}${r.totalPages ? " · " + r.totalPages + "p" : ""}</div>
+      </div>
+    </div>`).join("");
+  el.querySelectorAll(".bsr-item").forEach(item => item.addEventListener("click", () => {
+    const r = list[parseInt(item.dataset.i)];
+    fillForm({ title: r.title, author: r.author, genre: r.genre, totalPages: r.totalPages, cover: r.cover });
+    el.innerHTML = "";
+    fetchStatus.textContent = t("Selected") + `: "${r.title}"`;
+  }));
 }
 
 function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {}) {
@@ -957,6 +971,7 @@ function resetAddForm() {
   document.getElementById("bookStatus").value = "Want to Read";
   setCover(""); closePicker();
   fetchStatus.textContent = "";
+  const sr = document.getElementById("bookSearchResults"); if (sr) sr.innerHTML = "";
 }
 
 // ── Save Book ──
@@ -2339,6 +2354,8 @@ const DICT = {
   // 新增書籍 Modal
   "Add Book": { "zh-TW": "新增書籍" }, "Edit Book": { "zh-TW": "編輯書籍" },
   "Enter ISBN or book title...": { "zh-TW": "輸入 ISBN 或書名..." }, "Search": { "zh-TW": "搜尋" },
+  "Searching...": { "zh-TW": "搜尋中..." }, "No results found. Fill in manually.": { "zh-TW": "找不到結果,請手動填寫。" },
+  "Pick the right book:": { "zh-TW": "點選正確的那一本:" }, "Selected": { "zh-TW": "已選" },
   "Cover": { "zh-TW": "封面" }, "No Cover": { "zh-TW": "無封面" },
   "🖼 Change Cover": { "zh-TW": "🖼 更換封面" }, "🔄 Re-fetch": { "zh-TW": "🔄 重新抓取" },
   "🎨 Gallery": { "zh-TW": "🎨 圖庫" }, "📁 Upload": { "zh-TW": "📁 上傳" }, "🔗 Link": { "zh-TW": "🔗 連結" }, "✂️ Screenshot": { "zh-TW": "✂️ 截圖" },

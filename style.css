@@ -511,6 +511,20 @@ body {
   color: #6b6b68;
 }
 
+/* 書籍搜尋結果清單(點選正確那本,不再盲填第一筆) */
+.book-search-results { padding: 0 24px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.book-search-results:not(:empty) { margin-top: 6px; }
+.bsr-item {
+  display: flex; gap: 10px; align-items: center; padding: 6px 8px;
+  border: 1px solid #ececea; border-radius: 8px; cursor: pointer; background: #fff;
+}
+.bsr-item:hover { background: #f3f1ee; border-color: #d8d8d6; }
+.bsr-cover { width: 34px; height: 50px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: #f0eee9; }
+.bsr-nocover { display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.bsr-meta { min-width: 0; }
+.bsr-title { font-size: 13px; font-weight: 600; color: #37352f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bsr-sub { font-size: 11px; color: #9b9a97; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .modal-form { padding: 14px 24px; display: flex; flex-direction: column; gap: 12px; }
 
 .form-row { display: flex; flex-direction: column; gap: 12px; }
