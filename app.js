@@ -376,7 +376,7 @@ function filterBooks() {
   if (field === "progress") {
     books = books.filter(b => {
       if (b.status === "Now Reading") return true;
-      const p = calcPct(b.currentPage, b.totalPages);
+      const p = bookPct(b);
       return p !== null && p > 0 && p < 100 && b.status !== "Finished" && b.status !== "DNF";
     });
   }
@@ -387,8 +387,8 @@ function filterBooks() {
     } else if (field === "finishDate") {
       va = a.finishDate || ""; vb = b.finishDate || "";
     } else if (field === "progress") {
-      va = calcPct(a.currentPage, a.totalPages) ?? -1;
-      vb = calcPct(b.currentPage, b.totalPages) ?? -1;
+      va = bookPct(a) ?? -1;
+      vb = bookPct(b) ?? -1;
     } else if (field === "totalPages") {
       va = a.totalPages || 0; vb = b.totalPages || 0;
     } else {
@@ -416,7 +416,7 @@ function renderGrid() {
   const pageBooks = books.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   bookGrid.innerHTML = pageBooks.map(b => {
-    const pct = calcPct(b.currentPage, b.totalPages);
+    const pct = bookPct(b);
     const coverHTML = b.cover
       ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" onerror="this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title)}</div></div>`;
@@ -473,6 +473,14 @@ function calcPct(current, total) {
   if (!total || total <= 0) return null;
   if (!current || current <= 0) return 0;
   return Math.min(100, Math.round((current / total) * 100));
+}
+// 一本書的完成度 %:優先用獨立的 progressPct(電子書/手動 % 用,不需頁數),否則用頁數推算
+function bookPct(b) {
+  if (b && b.progressPct != null && b.progressPct !== "") {
+    const p = Math.round(Number(b.progressPct));
+    return isNaN(p) ? null : Math.max(0, Math.min(100, p));
+  }
+  return calcPct(b ? b.currentPage : 0, b ? b.totalPages : 0);
 }
 
 function escHtml(str) {
@@ -1026,14 +1034,20 @@ function openDetail(id) {
   const statusEl = document.getElementById("detailStatus");
   statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span>`;
 
-  const pct = calcPct(b.currentPage, b.totalPages);
+  const pct = bookPct(b);
+  const byPct = b.progressPct != null && b.progressPct !== "";   // 這本是用 % 追蹤?
   document.getElementById("detailProgressBar").style.width  = pct !== null ? pct + "%" : "0%";
-  document.getElementById("detailProgressText").textContent = pct !== null
-    ? `${b.currentPage || 0} / ${b.totalPages} pages (${pct}%)`
-    : "No page info";
+  document.getElementById("detailProgressText").textContent = pct === null ? t("No page info")
+    : byPct ? `${pct}%`
+    : `${b.currentPage || 0} / ${b.totalPages} pages (${pct}%)`;
 
+  // 進度編輯:依「頁數 / %」模式切換輸入框
+  const mode = byPct || !b.totalPages ? "pct" : "page";   // 沒頁數(電子書)預設用 %
+  document.getElementById("progressMode").value              = mode;
   document.getElementById("detailCurrentPage").value         = b.currentPage || 0;
   document.getElementById("detailTotalPages").textContent    = `/ ${b.totalPages || "?"} pages`;
+  document.getElementById("detailProgressPct").value         = byPct ? pct : (pct ?? 0);
+  setProgressMode(mode);
 
   const coverEl = document.getElementById("detailCover");
   if (b.cover) {
@@ -1067,7 +1081,7 @@ function openDetail(id) {
   }
 
   // Auto read %
-  const reviewPct = calcPct(b.currentPage, b.totalPages) ?? 0;
+  const reviewPct = bookPct(b) ?? 0;
   document.getElementById("reviewPct").value = reviewPct;
   const readInfoEl = document.getElementById("reviewReadInfo");
   if (b.totalPages) {
@@ -1350,12 +1364,34 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
   btn.disabled = false; btn.textContent = t("Submit Review");
 });
 
+// 切換「頁數 / %」進度輸入框的顯示
+function setProgressMode(mode) {
+  const isPct = mode === "pct";
+  document.getElementById("detailCurrentPage").style.display = isPct ? "none" : "";
+  document.getElementById("detailTotalPages").style.display  = isPct ? "none" : "";
+  document.getElementById("detailProgressPct").style.display = isPct ? "" : "none";
+  document.getElementById("detailPctSign").style.display     = isPct ? "" : "none";
+}
+document.getElementById("progressMode").addEventListener("change", e => setProgressMode(e.target.value));
+
 document.getElementById("updatePageBtn").addEventListener("click", async () => {
   if (!currentDetailId || !booksCol) return;
-  const newPage = parseInt(document.getElementById("detailCurrentPage").value) || 0;
   const b = allBooks.find(x => x.id === currentDetailId);
-  const updates = { currentPage: newPage };
-  if (b && b.totalPages && newPage >= b.totalPages) updates.status = "Finished";
+  const mode = document.getElementById("progressMode").value;
+  const updates = {};
+  if (mode === "pct") {
+    // 用 % 追蹤(電子書/無固定頁數):存獨立 progressPct
+    let pct = parseInt(document.getElementById("detailProgressPct").value) || 0;
+    pct = Math.max(0, Math.min(100, pct));
+    updates.progressPct = pct;
+    if (pct >= 100) updates.status = "Finished";
+  } else {
+    // 用頁數:存 currentPage,並清掉 progressPct(回到頁數推算)
+    const newPage = parseInt(document.getElementById("detailCurrentPage").value) || 0;
+    updates.currentPage = newPage;
+    updates.progressPct = null;
+    if (b && b.totalPages && newPage >= b.totalPages) updates.status = "Finished";
+  }
   await booksCol.doc(currentDetailId).update(updates);
   openDetail(currentDetailId);
 });
@@ -2276,6 +2312,8 @@ const DICT = {
   // 詳情 / 評論
   "Book Detail": { "zh-TW": "書籍詳情" }, "Progress": { "zh-TW": "進度" },
   "Update current page:": { "zh-TW": "更新目前頁數:" }, "Update": { "zh-TW": "更新" },
+  "Update progress:": { "zh-TW": "更新進度:" }, "By page": { "zh-TW": "用頁數" }, "By %": { "zh-TW": "用 %" },
+  "No page info": { "zh-TW": "尚無進度資料" },
   "Edit": { "zh-TW": "編輯" }, "Delete": { "zh-TW": "刪除" }, "➕ Add to My Shelf": { "zh-TW": "➕ 加入我的書架" },
   "✍️ Write a Review": { "zh-TW": "✍️ 寫評論" }, "Your name or nickname": { "zh-TW": "你的名字或暱稱" },
   "Select rating": { "zh-TW": "選擇評分" }, "Share your thoughts... (optional)": { "zh-TW": "分享你的想法...(選填)" }, "Submit Review": { "zh-TW": "送出評論" },

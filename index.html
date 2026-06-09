@@ -365,10 +365,16 @@
         </div>
 
         <div class="detail-page-edit detail-shelf-only">
-          <label>Update current page:</label>
+          <label>Update progress:</label>
           <div class="page-edit-row">
+            <select id="progressMode">
+              <option value="page">By page</option>
+              <option value="pct">By %</option>
+            </select>
             <input type="number" id="detailCurrentPage" min="0" />
             <span id="detailTotalPages"></span>
+            <input type="number" id="detailProgressPct" min="0" max="100" style="display:none" />
+            <span id="detailPctSign" style="display:none">%</span>
             <button id="updatePageBtn">Update</button>
           </div>
         </div>
