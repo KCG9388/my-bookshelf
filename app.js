@@ -1396,6 +1396,17 @@ document.getElementById("updatePageBtn").addEventListener("click", async () => {
   openDetail(currentDetailId);
 });
 
+// 一鍵「已完成」:不必填到 100%,直接標讀完(會議結論)
+document.getElementById("markDoneBtn").addEventListener("click", async () => {
+  if (!currentDetailId || !booksCol) return;
+  const b = allBooks.find(x => x.id === currentDetailId);
+  const updates = { status: "Finished" };
+  if (b && b.totalPages > 0) { updates.currentPage = b.totalPages; updates.progressPct = null; }
+  else { updates.progressPct = 100; }
+  await booksCol.doc(currentDetailId).update(updates);
+  openDetail(currentDetailId);
+});
+
 document.getElementById("editBookBtn").addEventListener("click", () => {
   const b = allBooks.find(x => x.id === currentDetailId);
   if (!b) return;
@@ -2313,6 +2324,7 @@ const DICT = {
   "Book Detail": { "zh-TW": "書籍詳情" }, "Progress": { "zh-TW": "進度" },
   "Update current page:": { "zh-TW": "更新目前頁數:" }, "Update": { "zh-TW": "更新" },
   "Update progress:": { "zh-TW": "更新進度:" }, "By page": { "zh-TW": "用頁數" }, "By %": { "zh-TW": "用 %" },
+  "✓ Done": { "zh-TW": "✓ 已讀完" },
   "No page info": { "zh-TW": "尚無進度資料" },
   "Edit": { "zh-TW": "編輯" }, "Delete": { "zh-TW": "刪除" }, "➕ Add to My Shelf": { "zh-TW": "➕ 加入我的書架" },
   "✍️ Write a Review": { "zh-TW": "✍️ 寫評論" }, "Your name or nickname": { "zh-TW": "你的名字或暱稱" },
