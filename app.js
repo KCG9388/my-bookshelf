@@ -372,6 +372,14 @@ function filterBooks() {
   });
 
   const [field, dir] = currentSort.split("_");
+  // 進度排序只顯示「正在讀」的書:否則永遠只看到 100% 讀完的(會議結論)
+  if (field === "progress") {
+    books = books.filter(b => {
+      if (b.status === "Now Reading") return true;
+      const p = calcPct(b.currentPage, b.totalPages);
+      return p !== null && p > 0 && p < 100 && b.status !== "Finished" && b.status !== "DNF";
+    });
+  }
   books.sort((a, b) => {
     let va, vb;
     if (field === "title" || field === "author") {
@@ -2238,6 +2246,7 @@ const DICT = {
   "Title A → Z": { "zh-TW": "書名 A → Z" }, "Title Z → A": { "zh-TW": "書名 Z → A" },
   "Author A → Z": { "zh-TW": "作者 A → Z" }, "Date Finished ↓": { "zh-TW": "讀完日期 ↓" },
   "Progress ↓": { "zh-TW": "進度 ↓" }, "Pages ↓": { "zh-TW": "頁數 ↓" },
+  "Progress ↓ (currently reading)": { "zh-TW": "進度 ↓(正在讀)" },
   "Format": { "zh-TW": "版本" }, "All Formats": { "zh-TW": "所有版本" },
   "✕ Clear filters": { "zh-TW": "✕ 清除篩選" },
   "Rating ↓": { "zh-TW": "評分 ↓" }, "Popularity ↓": { "zh-TW": "熱度 ↓" }, "Recently Added": { "zh-TW": "最新加入" },
