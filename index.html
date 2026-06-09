@@ -418,8 +418,14 @@
     <!-- 讀書會討論 -->
     <div class="discussion-section">
       <div class="discussion-title">💬 Book Club Discussion</div>
+      <div class="disc-progress-row" id="discProgressRow" style="display:none">
+        <label class="disc-progress-label">I've read up to:</label>
+        <select id="discussionProgress"></select>
+      </div>
       <div class="discussion-list" id="discussionList"></div>
       <div class="discussion-input-row" id="discussionInputRow">
+        <input type="text" id="discussionSection" class="disc-section-input" list="discSectionOptions" placeholder="Chapter (optional)" maxlength="40" />
+        <datalist id="discSectionOptions"></datalist>
         <input type="text" id="discussionInput" placeholder="Join the discussion..." maxlength="500" />
         <button id="discussionSend">Send</button>
       </div>

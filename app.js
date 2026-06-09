@@ -949,6 +949,9 @@ document.getElementById("saveBook").addEventListener("click", async () => {
   const title = document.getElementById("bookTitle").value.trim();
   if (!title) { alert(t("Title is required.")); return; }
 
+  const isEdit   = currentDetailId && addModal.dataset.mode === "edit";
+  const existing = isEdit ? allBooks.find(b => b.id === currentDetailId) : null;
+
   const startDate = document.getElementById("bookStartDate").value;
   const book = {
     title,
@@ -961,16 +964,18 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     startDate,
     finishDate:  document.getElementById("bookFinishDate").value,
     notes:       document.getElementById("bookNotes").value.trim(),
-    startYear:   startDate ? new Date(startDate).getFullYear() : new Date().getFullYear(),
+    // 年份只跟「開始讀日期」走;編輯時沒填日期 → 保留原年份，不要被刷成今年
+    startYear:   startDate ? new Date(startDate).getFullYear()
+                          : (existing?.startYear ?? new Date().getFullYear()),
     userId:      currentUser?.uid || null,
-    createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
   };
+  // createdAt(加入時間)只在「新增」蓋章;編輯不動它，否則加入日期會被刷成現在
+  if (!isEdit) book.createdAt = firebase.firestore.FieldValue.serverTimestamp();
 
   try {
-    const existing = (currentDetailId && addModal.dataset.mode === "edit") ? allBooks.find(b => b.id === currentDetailId) : null;
     const statusChanged = !existing || existing.status !== book.status;
     book.catalogKey = await upsertCatalog(book);   // 同步進共享書庫，並記下指向 catalog 的鑰匙
-    if (currentDetailId && addModal.dataset.mode === "edit") {
+    if (isEdit) {
       await booksCol.doc(currentDetailId).update({ ...book });
     } else {
       const ref = await booksCol.add(book);
@@ -2328,6 +2333,10 @@ const DICT = {
   "No replies yet": { "zh-TW": "還沒有回覆" },
   "💬 Book Club Discussion": { "zh-TW": "💬 讀書會討論" }, "Join the discussion...": { "zh-TW": "加入討論..." },
   "Be the first to start the discussion!": { "zh-TW": "搶第一個開始討論吧!" },
+  "Chapter (optional)": { "zh-TW": "章節(可不填)" }, "I've read up to:": { "zh-TW": "我讀到:" },
+  "— not started —": { "zh-TW": "— 還沒開始 —" }, "Whole book": { "zh-TW": "全書" },
+  "Whole book (general)": { "zh-TW": "全書討論(未分章)" },
+  "may contain spoilers — click to open": { "zh-TW": "可能含爆雷,點開查看" },
   "Adding...": { "zh-TW": "加入中..." }, "✓ Added to shelf": { "zh-TW": "✓ 已加入書架" }, "Failed to add": { "zh-TW": "加入失敗" },
   "Submitting...": { "zh-TW": "送出中..." }, "Saving...": { "zh-TW": "儲存中..." },
   "Please sign in first.": { "zh-TW": "請先登入。" }, "Cannot locate this book in the catalog.": { "zh-TW": "找不到這本書的書庫資料。" },
@@ -2632,53 +2641,135 @@ async function renderReplies(reviewUid) {
 // ══════════════════════════════════════════
 //  PHASE B-4d — 讀書會討論
 // ══════════════════════════════════════════
+// 章節排序鍵:從標籤抓第一個數字 → 有數字依數字(第1-5章→1);空標籤=全書放最前;
+// 沒數字的(結局/後記)沉到最後 = 最會爆雷的尾段。讓「自由標籤」也能排出前→後。
+function discSectionOrder(label) {
+  if (!label) return -Infinity;
+  const m = String(label).match(/\d+/);
+  return m ? parseInt(m[0]) : Infinity;
+}
+
+let discSections    = [];      // [{label, posts, order}] 已排序
+let discReadUpToIdx = 0;       // 讀者目前讀到第幾段(含)展開,之後摺疊
+let discCurrentKey  = null;
+
 async function loadDiscussion(catalogKey) {
   const list = document.getElementById("discussionList");
+  const progRow = document.getElementById("discProgressRow");
   if (!list) return;
-  if (!catalogKey) { list.innerHTML = ""; return; }
+  if (!catalogKey) { list.innerHTML = ""; if (progRow) progRow.style.display = "none"; return; }
+  if (catalogKey !== discCurrentKey) { discReadUpToIdx = 0; discCurrentKey = catalogKey; }  // 換書重置進度
   list.innerHTML = `<div class="discussion-empty">${t("Loading...")}</div>`;
   let docs;
   try { docs = (await db.collection("catalog").doc(catalogKey).collection("discussion").orderBy("createdAt", "asc").get()).docs; }
-  catch (e) { list.innerHTML = `<div class="discussion-empty">${t("Failed to load")}</div>`; return; }
-  if (!docs.length) { list.innerHTML = `<div class="discussion-empty">${t("Be the first to start the discussion!")}</div>`; return; }
-  list.innerHTML = docs.map(d => {
+  catch (e) { list.innerHTML = `<div class="discussion-empty">${t("Failed to load")}</div>`; if (progRow) progRow.style.display = "none"; return; }
+
+  // 既有標籤 → datalist 建議(降低填法不一)
+  const labelsUsed = [...new Set(docs.map(d => (d.data().section || "").trim()).filter(Boolean))]
+                       .sort((a, b) => discSectionOrder(a) - discSectionOrder(b));
+  const dl = document.getElementById("discSectionOptions");
+  if (dl) dl.innerHTML = labelsUsed.map(l => `<option value="${escHtml(l)}">`).join("");
+
+  if (!docs.length) {
+    list.innerHTML = `<div class="discussion-empty">${t("Be the first to start the discussion!")}</div>`;
+    if (progRow) progRow.style.display = "none";
+    return;
+  }
+
+  // 依章節標籤分組
+  const groups = new Map();
+  docs.forEach(d => {
     const m = d.data();
-    const initials = (m.displayName || "?").slice(0, 2).toUpperCase();
-    const date = m.createdAt && m.createdAt.toDate ? m.createdAt.toDate().toLocaleDateString() : "";
-    const mine = currentUser && m.uid === currentUser.uid;
-    const avatar = m.photoURL
-      ? `<div class="disc-avatar" data-uid="${escHtml(m.uid)}"><img src="${escHtml(m.photoURL)}" alt=""></div>`
-      : `<div class="disc-avatar" data-uid="${escHtml(m.uid)}">${escHtml(initials)}</div>`;
-    return `<div class="disc-item">
-      ${avatar}
-      <div class="disc-body">
-        <div class="disc-head"><span class="disc-name clickable" data-uid="${escHtml(m.uid)}">${escHtml(m.displayName || "Reader")}</span><span class="disc-date">${date}</span>${mine ? `<button class="disc-del" data-id="${d.id}" title="Delete">🗑</button>` : ""}</div>
-        <div class="disc-text">${escHtml(m.text)}</div>
-      </div>
+    const label = (m.section || "").trim();
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ id: d.id, ...m });
+  });
+  discSections = [...groups.entries()]
+    .map(([label, posts]) => ({ label, posts, order: discSectionOrder(label) }))
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+
+  // 進度下拉(只有多於一段才需要)
+  if (progRow) {
+    if (discSections.length > 1) {
+      progRow.style.display = "";
+      const sel = document.getElementById("discussionProgress");
+      sel.innerHTML = `<option value="-1">${t("— not started —")}</option>` +
+        discSections.map((s, i) => `<option value="${i}">${escHtml(s.label || t("Whole book"))}</option>`).join("");
+      if (discReadUpToIdx >= discSections.length) discReadUpToIdx = 0;
+      sel.value = String(discReadUpToIdx);
+      sel.onchange = () => { discReadUpToIdx = parseInt(sel.value); renderDiscussionGroups(catalogKey); };
+    } else {
+      progRow.style.display = "none";
+      discReadUpToIdx = 0;
+    }
+  }
+  renderDiscussionGroups(catalogKey);
+}
+
+function discItemHtml(m) {
+  const initials = (m.displayName || "?").slice(0, 2).toUpperCase();
+  const date = m.createdAt && m.createdAt.toDate ? m.createdAt.toDate().toLocaleDateString() : "";
+  const mine = currentUser && m.uid === currentUser.uid;
+  const avatar = m.photoURL
+    ? `<div class="disc-avatar" data-uid="${escHtml(m.uid)}"><img src="${escHtml(m.photoURL)}" alt=""></div>`
+    : `<div class="disc-avatar" data-uid="${escHtml(m.uid)}">${escHtml(initials)}</div>`;
+  return `<div class="disc-item">
+    ${avatar}
+    <div class="disc-body">
+      <div class="disc-head"><span class="disc-name clickable" data-uid="${escHtml(m.uid)}">${escHtml(m.displayName || "Reader")}</span><span class="disc-date">${date}</span>${mine ? `<button class="disc-del" data-id="${m.id}" title="Delete">🗑</button>` : ""}</div>
+      <div class="disc-text">${escHtml(m.text)}</div>
+    </div>
+  </div>`;
+}
+
+function renderDiscussionGroups(catalogKey) {
+  const list = document.getElementById("discussionList");
+  if (!list) return;
+  list.innerHTML = discSections.map((s, i) => {
+    const open   = i <= discReadUpToIdx;     // 後段預設摺疊
+    const header = `${s.label || t("Whole book (general)")} · ${s.posts.length}`;
+    const warn   = open ? "" : `<span class="disc-spoiler-warn">⚠️ ${t("may contain spoilers — click to open")}</span>`;
+    const body   = s.posts.map(discItemHtml).join("");
+    return `<div class="disc-group ${open ? "open" : ""}" data-idx="${i}">
+      <div class="disc-group-head"><span class="disc-group-toggle">${open ? "▾" : "▸"}</span><span class="disc-group-label">📖 ${escHtml(header)}</span>${warn}</div>
+      <div class="disc-group-body">${body}</div>
     </div>`;
   }).join("");
-  list.querySelectorAll(".disc-del").forEach(b => b.addEventListener("click", async () => {
+  // 點標頭摺疊/展開(覆寫預設)
+  list.querySelectorAll(".disc-group-head").forEach(h => h.addEventListener("click", () => {
+    const g = h.closest(".disc-group");
+    g.classList.toggle("open");
+    const tog = h.querySelector(".disc-group-toggle");
+    if (tog) tog.textContent = g.classList.contains("open") ? "▾" : "▸";
+    const w = h.querySelector(".disc-spoiler-warn");
+    if (w && g.classList.contains("open")) w.remove();
+  }));
+  list.querySelectorAll(".disc-del").forEach(b => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
     try { await db.collection("catalog").doc(catalogKey).collection("discussion").doc(b.dataset.id).delete(); loadDiscussion(catalogKey); } catch (e) {}
   }));
-  list.querySelectorAll(".disc-name.clickable, .disc-avatar").forEach(n => n.addEventListener("click", () => {
+  list.querySelectorAll(".disc-name.clickable, .disc-avatar").forEach(n => n.addEventListener("click", (e) => {
+    e.stopPropagation();
     if (n.dataset.uid) { detailModal.classList.remove("open"); loadPublicShelf(n.dataset.uid); }
   }));
 }
 
 async function sendDiscussion() {
   if (!currentUser) { alert(t("Please sign in first.")); return; }
-  const input = document.getElementById("discussionInput");
-  const text  = input.value.trim();
-  const key   = currentCatalogKey();
+  const input   = document.getElementById("discussionInput");
+  const secInput = document.getElementById("discussionSection");
+  const text    = input.value.trim();
+  const section = (secInput?.value || "").trim();
+  const key     = currentCatalogKey();
   if (!text || !key) return;
   const btn = document.getElementById("discussionSend");
   btn.disabled = true;
   try {
     await db.collection("catalog").doc(key).collection("discussion").add({
       uid: currentUser.uid, displayName: myDisplayName(), photoURL: currentUser.photoURL || "",
-      text, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      text, section, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    input.value = "";
+    input.value = "";   // 保留 section,方便連續發同章節
     await loadDiscussion(key);
   } catch (e) { alert(t("Failed") + ": " + e.message); }
   btn.disabled = false;

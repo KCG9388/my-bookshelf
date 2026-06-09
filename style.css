@@ -1572,6 +1572,26 @@ body {
   background: #37352f; color: #fff; border: none; border-radius: 8px;
   padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
+.disc-section-input { flex: 0 0 130px !important; }
+
+/* 讀書會:分章節 + 防雷摺疊 */
+.disc-progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.disc-progress-label { font-size: 12px; color: #6b6b68; }
+.disc-progress-row select {
+  border: 1px solid #e8e8e6; border-radius: 8px; padding: 5px 10px; font-size: 12px;
+  background: #fff; color: #37352f; cursor: pointer;
+}
+.disc-group { border: 1px solid #eee; border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+.disc-group-head {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 9px 12px; background: #faf9f7; user-select: none;
+}
+.disc-group-head:hover { background: #f3f1ee; }
+.disc-group-toggle { font-size: 11px; color: #9b9a97; width: 12px; }
+.disc-group-label { font-size: 13px; font-weight: 600; color: #37352f; }
+.disc-spoiler-warn { font-size: 11px; color: #c2884a; margin-left: auto; }
+.disc-group-body { display: none; flex-direction: column; gap: 12px; padding: 12px; }
+.disc-group.open .disc-group-body { display: flex; }
 
 /* 語言切換鈕 */
 .lang-toggle {
