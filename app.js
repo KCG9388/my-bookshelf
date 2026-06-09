@@ -418,7 +418,7 @@ function renderGrid() {
         <div class="book-info">
           <div class="book-title">${escHtml(b.title)}</div>
           <div class="book-author">${escHtml(b.author || "")}</div>
-          <div class="book-genre">${escHtml(b.genre || "")}</div>
+          <div class="book-genre">${escHtml(genreLabel(b.genre))}</div>
           <div class="progress-wrap">${pct !== null ? `
               <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
               <div class="progress-pct">${pct}%</div>` : ""}
@@ -484,7 +484,7 @@ function rebuildSidebarFilters() {
 
   const genreFilter = document.getElementById("genreFilter");
   genreFilter.innerHTML = `<option value="all">${t("All Genres")}</option>` +
-    genres.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join("");
+    genres.map(g => `<option value="${escHtml(g)}">${escHtml(genreLabel(g))}</option>`).join("");
   genreFilter.value = currentFilter.genre;
   genreFilter.onchange = () => setFilter("genre", genreFilter.value);
 }
@@ -1013,7 +1013,7 @@ function openDetail(id) {
 
   document.getElementById("detailTitle").textContent  = b.title;
   document.getElementById("detailAuthor").textContent = b.author || "";
-  document.getElementById("detailGenre").textContent  = b.genre  || "";
+  document.getElementById("detailGenre").textContent  = genreLabel(b.genre);
 
   const statusEl = document.getElementById("detailStatus");
   statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span>`;
@@ -1923,7 +1923,7 @@ function openCatalogDetail(c) {
 
   document.getElementById("detailTitle").textContent  = c.title  || "";
   document.getElementById("detailAuthor").textContent = c.author || "";
-  document.getElementById("detailGenre").textContent  = c.genre  || "";
+  document.getElementById("detailGenre").textContent  = genreLabel(c.genre);
   document.getElementById("detailStatus").innerHTML   = "";
   const coverImg = document.getElementById("detailCover");
   coverImg.src = c.cover || "";
@@ -2375,6 +2375,25 @@ function t(en, vars) {
   let s = (currentLang !== "en" && DICT[en] && DICT[en][currentLang]) ? DICT[en][currentLang] : en;
   if (vars) for (const k in vars) s = s.split("{" + k + "}").join(vars[k]);
   return s;
+}
+
+// 常見類型英文→中文「顯示」對照(資料底層仍存英文;不在表內的冷門/自創類型原樣顯示)
+const GENRE_DICT = {
+  "Fantasy": "奇幻", "Mystery": "推理", "Thriller": "驚悚", "Romance": "愛情",
+  "Literary Fiction": "文學小說", "Historical Fiction": "歷史小說", "Historic": "歷史",
+  "History": "歷史", "Sci-Fi": "科幻", "Science Fiction": "科幻", "Horror": "恐怖",
+  "Myth": "神話", "Mythology": "神話", "Memoir": "回憶錄", "Biography": "傳記",
+  "Self Growth": "自我成長", "Self-Help": "自我成長", "Anthropology": "人類學",
+  "Philosophy": "哲學", "Poetry": "詩集", "Non-Fiction": "非虛構", "Nonfiction": "非虛構",
+  "Fiction": "小說", "Classics": "經典", "Young Adult": "青少年", "Contemporary": "當代",
+  "Graphic Novel": "圖像小說", "Dystopian": "反烏托邦", "Crime": "犯罪",
+  "Business": "商業", "Psychology": "心理學",
+};
+function genreLabel(g) {
+  if (!g) return "";
+  if (currentLang === "en") return g;
+  const k = g.trim();
+  return GENRE_DICT[k] || g;
 }
 
 // 翻譯靜態 DOM(葉節點文字 + placeholder),跳過動態書格與使用者資料
