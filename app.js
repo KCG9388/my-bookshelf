@@ -2571,6 +2571,9 @@ const DICT = {
   "Start Date": { "zh-TW": "開始日期" }, "Finish Date": { "zh-TW": "讀完日期" },
   "Notes": { "zh-TW": "筆記" }, "Your thoughts...": { "zh-TW": "你的想法..." },
   "Cancel": { "zh-TW": "取消" }, "Save Book": { "zh-TW": "儲存書籍" }, "Save": { "zh-TW": "儲存" },
+  // 頁尾 / 法律頁
+  "Privacy Policy": { "zh-TW": "隱私權政策" }, "Terms of Service": { "zh-TW": "服務條款" },
+  "Privacy": { "zh-TW": "隱私權" }, "Terms": { "zh-TW": "條款" }, "Contact": { "zh-TW": "聯絡我們" },
   // 詳情 / 評論
   "About this book": { "zh-TW": "簡介" },
   "Read more": { "zh-TW": "顯示更多" }, "Show less": { "zh-TW": "收合" },
