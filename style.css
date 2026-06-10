@@ -840,16 +840,24 @@ body {
   padding: 28px 32px 20px;
 }
 
-.detail-cover-col { flex-shrink: 0; }
+.detail-cover-col {
+  flex-shrink: 0;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .detail-cover-col img {
-  width: 200px;
-  height: 300px;
+  width: 220px;
+  height: 330px;
   object-fit: cover;
   border-radius: 10px;
   border: 1px solid #e8e8e6;
   background: #e8e8e6;
   box-shadow: 0 10px 28px rgba(0, 0, 0, .18);
 }
+/* 進度區搬到封面下方:欄寬 220px,更新列允許換行 */
+.detail-cover-col .page-edit-row { flex-wrap: wrap; }
 
 .detail-info-col {
   flex: 1;
@@ -875,7 +883,7 @@ body {
   border: 1px solid #e8e8e6;
   border-radius: 12px;
   padding: 14px 18px;
-  margin-top: 4px;
+  margin: 4px 12px 0;
 }
 .desc-label {
   font-size: 11px;
@@ -908,24 +916,37 @@ body {
 }
 .desc-more:hover { text-decoration: underline; }
 
-/* 評論 / 讀書會:桌面雙欄並排,手機分頁籤(籤列預設藏)。
+/* 評論 / 讀書會:桌面與手機同款「分頁籤兩頁式」切換。
    class 避開 "social" 字眼:會被廣告攔截器的社群過濾清單隱藏 */
-.community-tabs { display: none; }
-.detail-community {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: start;
+.community-tabs {
+  display: flex;
   border-top: 2px solid #e8e8e6;
-  background: #fafaf9;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
+.community-tab {
+  flex: 1;
+  padding: 11px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #9b9a97;
+  cursor: pointer;
+}
+.community-tab.active { color: #37352f; border-bottom-color: #37352f; }
+.detail-community { background: #fafaf9; }
 .detail-community .reviews-section { border-top: none; }
 .detail-community .discussion-section {
   border-top: none;
-  border-left: 1px solid #e8e8e6;
   margin-top: 0;
   padding: 24px;
-  align-self: stretch;
 }
+.modal-detail:not(.disc-open) .discussion-section { display: none; }
+.modal-detail.disc-open .reviews-section { display: none; }
 .detail-genre { font-size: 13px; color: #9b9a97; }
 .detail-status-badge .status-badge { font-size: 12px; padding: 3px 9px; }
 
@@ -1600,36 +1621,11 @@ body {
   .main { overflow: auto; }
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .detail-body { flex-direction: column; padding: 20px 16px 14px; gap: 14px; }
-  .detail-cover-col { align-self: center; }
-  .detail-cover-col img { width: 130px; height: 195px; }
+  .detail-cover-col { width: auto; align-self: stretch; }
+  .detail-cover-col img { width: 130px; height: 195px; margin: 0 auto; display: block; }
   .detail-title { font-size: 20px; text-align: center; padding-right: 0; }
   .detail-info-col { gap: 6px; }
-
-  /* 手機:評論 / 讀書會 改分頁籤,單欄一次只顯示一區 */
-  .detail-community { display: block; }
-  .detail-community .discussion-section { border-left: none; }
-  .community-tabs {
-    display: flex;
-    border-top: 2px solid #e8e8e6;
-    background: #fff;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-  }
-  .community-tab {
-    flex: 1;
-    padding: 11px 0;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    font-size: 14px;
-    font-weight: 600;
-    color: #9b9a97;
-    cursor: pointer;
-  }
-  .community-tab.active { color: #37352f; border-bottom-color: #37352f; }
-  .modal-detail:not(.disc-open) .discussion-section { display: none; }
-  .modal-detail.disc-open .reviews-section { display: none; }
+  .detail-desc-card { margin: 4px 0 0; }
 
   .form-row.two-col { flex-direction: column; }
 }
