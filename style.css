@@ -908,17 +908,18 @@ body {
 }
 .desc-more:hover { text-decoration: underline; }
 
-/* 評論 / 讀書會:桌面雙欄並排,手機分頁籤(籤列預設藏) */
-.social-tabs { display: none; }
-.detail-social {
+/* 評論 / 讀書會:桌面雙欄並排,手機分頁籤(籤列預設藏)。
+   class 避開 "social" 字眼:會被廣告攔截器的社群過濾清單隱藏 */
+.community-tabs { display: none; }
+.detail-community {
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: start;
   border-top: 2px solid #e8e8e6;
   background: #fafaf9;
 }
-.detail-social .reviews-section { border-top: none; }
-.detail-social .discussion-section {
+.detail-community .reviews-section { border-top: none; }
+.detail-community .discussion-section {
   border-top: none;
   border-left: 1px solid #e8e8e6;
   margin-top: 0;
@@ -1605,9 +1606,9 @@ body {
   .detail-info-col { gap: 6px; }
 
   /* 手機:評論 / 讀書會 改分頁籤,單欄一次只顯示一區 */
-  .detail-social { display: block; }
-  .detail-social .discussion-section { border-left: none; }
-  .social-tabs {
+  .detail-community { display: block; }
+  .detail-community .discussion-section { border-left: none; }
+  .community-tabs {
     display: flex;
     border-top: 2px solid #e8e8e6;
     background: #fff;
@@ -1615,7 +1616,7 @@ body {
     top: 0;
     z-index: 2;
   }
-  .social-tab {
+  .community-tab {
     flex: 1;
     padding: 11px 0;
     background: transparent;
@@ -1626,7 +1627,7 @@ body {
     color: #9b9a97;
     cursor: pointer;
   }
-  .social-tab.active { color: #37352f; border-bottom-color: #37352f; }
+  .community-tab.active { color: #37352f; border-bottom-color: #37352f; }
   .modal-detail:not(.disc-open) .discussion-section { display: none; }
   .modal-detail.disc-open .reviews-section { display: none; }
 

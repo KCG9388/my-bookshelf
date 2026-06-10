@@ -399,13 +399,14 @@
       </div>
     </div>
 
-    <!-- 手機版:評論 / 讀書會 分頁籤(桌面隱藏,雙欄並排) -->
-    <div class="social-tabs" id="socialTabs">
-      <button class="social-tab active" id="tabReviews">Reviews</button>
-      <button class="social-tab" id="tabClub">Book Club</button>
+    <!-- 手機版:評論 / 讀書會 分頁籤(桌面隱藏,雙欄並排)。
+         注意:class 不能含 "social" 字眼,會被使用者的廣告攔截器(社群過濾清單)整塊隱藏 -->
+    <div class="community-tabs" id="communityTabs">
+      <button class="community-tab active" id="tabReviews">Reviews</button>
+      <button class="community-tab" id="tabClub">Book Club</button>
     </div>
 
-    <div class="detail-social">
+    <div class="detail-community">
     <!-- Ratings & Reviews -->
     <div class="reviews-section">
       <div class="reviews-header">
@@ -451,7 +452,7 @@
         <button id="discussionSend">Send</button>
       </div>
     </div>
-    </div><!-- /.detail-social -->
+    </div><!-- /.detail-community -->
   </div>
 </div>
 

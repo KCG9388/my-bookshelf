@@ -206,13 +206,15 @@ function catalogKeyFor(title, author) {
   return k || "unknown";
 }
 
-// 洗掉 Google Books 簡介裡夾帶的 HTML 標籤,只留純文字
+// 洗掉 Google Books 簡介裡夾帶的 HTML 標籤,只留純文字;
+// 太短的多半是「Originally published: ...」之類的出版 metadata,不是真簡介 → 不採用
 function cleanDesc(d) {
-  return String(d || "")
+  const txt = String(d || "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .trim();
+  return txt.length >= 60 ? txt : "";
 }
 
 // 把一本書 upsert 進共享 catalog（匿名，不含任何使用者資訊）
