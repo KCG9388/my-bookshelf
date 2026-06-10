@@ -2402,12 +2402,21 @@ function renderPublicShelf(books) {
   grid.querySelectorAll(".book-card").forEach(card =>
     card.addEventListener("click", async () => {
       try {
+        const key = card.dataset.key;
         // 記下這本書在「主人書架上的自評」→ 三評分面板顯示「他的評分」
-        const ob = books.find(x => (x.catalogKey || catalogKeyFor(x.title, x.author)) === card.dataset.key);
+        const ob = books.find(x => (x.catalogKey || catalogKeyFor(x.title, x.author)) === key);
         publicShelfOwner.rating = ob ? (ob.rating || 0) : 0;
-        const snap = await db.collection("catalog").doc(card.dataset.key).get();
-        if (snap.exists) openCatalogDetail({ key: card.dataset.key, ...snap.data() });
-      } catch (e) { console.warn(e); }
+        const snap = await db.collection("catalog").doc(key).get();
+        if (snap.exists) {
+          openCatalogDetail({ key, ...snap.data() });
+        } else if (ob) {
+          // catalog 文件還沒建(早期用腳本灌的種子帳號,書沒 upsert 進共享書庫)→
+          // 改用書本身資料開詳情,並順手補建 catalog(自我修復;catalog 寫入規則允許任何登入者)。
+          openCatalogDetail({ key, title: ob.title || "", author: ob.author || "",
+            genre: ob.genre || "", cover: ob.cover || "", totalPages: ob.totalPages || 0 });
+          upsertCatalog(ob).catch(() => {});
+        }
+      } catch (e) { console.warn("open public book failed:", e); }
     }));
 }
 
