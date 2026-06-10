@@ -4,9 +4,139 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Concento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+<!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
+<div id="landingView" style="display:none">
+  <nav class="ld-nav">
+    <div class="ld-brand">📚 Concento</div>
+    <div class="ld-nav-right">
+      <button class="ld-lang" id="ldLangBtn">EN</button>
+      <button class="ld-signin" id="ldSignInBtn">Sign In</button>
+    </div>
+  </nav>
+
+  <section class="ld-hero ld-hero-video">
+    <video class="ld-hero-bg" autoplay muted loop playsinline preload="auto" poster="video/hero-poster.jpg" aria-hidden="true">
+      <source src="video/hero-loop.mp4" type="video/mp4" />
+    </video>
+    <div class="ld-hero-veil" aria-hidden="true"></div>
+    <div class="ld-hero-inner">
+      <div class="ld-eyebrow">✦ Social reading, built on trust</div>
+      <h1 class="ld-headline" data-i18n-html="ld-headline">Find readers who <em>read like you</em></h1>
+      <p class="ld-sub">Track your books, share reviews, and see how compatible another reader's taste is with yours — before you take their recommendations.</p>
+      <div class="ld-cta-row">
+        <button class="ld-cta" id="ldCtaHero">Get started — free</button>
+        <button class="ld-ghost" id="ldLearnBtn">See how it works</button>
+      </div>
+      <div class="ld-trust">Free · 中文 / English · No credit card</div>
+    </div>
+  </section>
+
+  <div class="ld-fade"></div>
+
+  <section class="ld-mock-section">
+    <div class="ld-shot-frame ld-mock" aria-hidden="true">
+      <div class="ld-mock-bar"><span></span><span></span><span></span></div>
+      <div class="ld-mock-body">
+        <div class="ld-mock-side">
+          <div class="ld-mock-logo">📚</div>
+          <div class="ld-mock-pill on"></div>
+          <div class="ld-mock-pill"></div>
+          <div class="ld-mock-pill"></div>
+          <div class="ld-mock-pill short"></div>
+        </div>
+        <div class="ld-mock-grid">
+          <div class="ld-mock-book"><i style="background:#5A7052"></i><b style="width:70%"></b><u style="width:62%"></u></div>
+          <div class="ld-mock-book"><i style="background:#A98B6B"></i><b style="width:55%"></b><u style="width:88%"></u></div>
+          <div class="ld-mock-book"><i style="background:#B5654A"></i><b style="width:80%"></b><u style="width:35%"></u></div>
+          <div class="ld-mock-book"><i style="background:#46523F"></i><b style="width:60%"></b><u style="width:100%"></u></div>
+          <div class="ld-mock-book"><i style="background:#C9A227"></i><b style="width:74%"></b><u style="width:52%"></u></div>
+          <div class="ld-mock-book"><i style="background:#7E6A8A"></i><b style="width:48%"></b><u style="width:20%"></u></div>
+          <div class="ld-mock-book"><i style="background:#8F7355"></i><b style="width:66%"></b><u style="width:76%"></u></div>
+          <div class="ld-mock-book"><i style="background:#5C7C8A"></i><b style="width:58%"></b><u style="width:44%"></u></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ld-features" id="ldFeatures">
+    <div class="ld-eyebrow on-light">How it works</div>
+    <h2 class="ld-section-title">Why Concento?</h2>
+    <div class="ld-feature-grid">
+      <div class="ld-feature">
+        <span class="ld-feature-num">01</span>
+        <div class="ld-feature-icon">🤝</div>
+        <h3>Reading compatibility</h3>
+        <p>A trust score between you and any reviewer — see how well their taste matches yours before following their picks.</p>
+      </div>
+      <div class="ld-feature">
+        <span class="ld-feature-num">02</span>
+        <div class="ld-feature-icon">📚</div>
+        <h3>Your shelf</h3>
+        <p>Track what you've read, are reading, and want to read — with progress, ratings, and yearly stats.</p>
+      </div>
+      <div class="ld-feature">
+        <span class="ld-feature-num">03</span>
+        <div class="ld-feature-icon">🔭</div>
+        <h3>Discover reviewers</h3>
+        <p>Browse public shelves and follow curators whose taste you actually trust.</p>
+      </div>
+      <div class="ld-feature">
+        <span class="ld-feature-num">04</span>
+        <div class="ld-feature-icon">💬</div>
+        <h3>Book clubs</h3>
+        <p>Chapter-by-chapter discussions with spoiler protection, on every book.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="ld-fade-down"></div>
+
+  <section class="ld-showcase ld-dark-band">
+    <div class="ld-showcase-text">
+      <div class="ld-eyebrow">The trust score</div>
+      <h2>Know who to trust</h2>
+      <p>Concento compares shared books, genres, and ratings to show a compatibility score with any reader — recommendations finally come with context.</p>
+    </div>
+    <div class="ld-shot-frame ld-shot-small ld-compat-mock" aria-hidden="true">
+      <div class="ld-cm-head">
+        <div class="ld-cm-avatars"><span>文</span><span class="me">你</span></div>
+        <div class="ld-cm-score">78%</div>
+      </div>
+      <div class="ld-cm-track"><div class="ld-cm-fill" style="width:78%"></div></div>
+      <div class="ld-cm-row"><b style="width:46%"></b></div>
+      <div class="ld-cm-row"><b style="width:64%"></b></div>
+      <div class="ld-cm-row"><b style="width:38%"></b></div>
+    </div>
+  </section>
+
+  <div class="ld-fade"></div>
+
+  <section class="ld-bottom-cta">
+    <div class="ld-cta-card">
+      <h2>Start building your shelf today</h2>
+      <p class="ld-cta-sub">One minute to set up. Free for readers.</p>
+      <button class="ld-cta" id="ldCtaBottom">Create a free account</button>
+    </div>
+  </section>
+
+  <footer class="ld-footer">
+    <div class="ld-footer-links">
+      <a href="privacy.html" target="_blank">Privacy Policy</a>
+      <span>·</span>
+      <a href="terms.html" target="_blank">Terms of Service</a>
+      <span>·</span>
+      <a href="mailto:contact@concento.io">Contact</a>
+    </div>
+    <div>© 2026 Concento</div>
+  </footer>
+</div>
 
 <!-- 右側 Header(只佔右側,透明共用背景) -->
 <header class="app-header" id="appHeader" style="display:none">

@@ -60,16 +60,54 @@ auth.onAuthStateChanged(user => {
   } else {
     closeVerifyGate();
     hideApp();
-    showAuthModal();
+    showLanding();          // 未登入 → 產品介紹首頁(按 CTA 才彈登入框)
     if (booksUnsub) { booksUnsub(); booksUnsub = null; }
     allBooks = [];
   }
+});
+
+// ── Landing(未登入首頁)──
+function showLanding() { document.getElementById("landingView").style.display = ""; }
+function hideLanding() { document.getElementById("landingView").style.display = "none"; }
+["ldSignInBtn", "ldCtaHero", "ldCtaBottom"].forEach(id =>
+  document.getElementById(id).addEventListener("click", () => showAuthModal()));
+// 從 landing 打開登入框後,點背景可關回 landing
+document.getElementById("authModal").addEventListener("click", e => {
+  if (e.target.id === "authModal" && !currentUser) closeAuthModal();
+});
+// 試裝開關:網址加 ?hero=b / ?hero=c 換影片版本(挑片用,定案後移除)
+const heroPick = new URLSearchParams(location.search).get("hero");
+if (heroPick === "b" || heroPick === "c") {
+  const hv = document.querySelector(".ld-hero-bg");
+  hv.querySelector("source").src = `video/hero-loop-${heroPick}.mp4`;
+  hv.load();
+  if (heroPick === "b") {
+    // B 版整體偏亮,暗化加重以保文字對比
+    document.querySelector(".ld-hero-veil").style.background =
+      "linear-gradient(rgba(24,21,16,.55), rgba(24,21,16,.48) 55%, #221E17 100%)";
+  }
+}
+// 「看看怎麼運作」平滑捲到特色區
+document.getElementById("ldLearnBtn").addEventListener("click", () =>
+  document.getElementById("ldFeatures").scrollIntoView({ behavior: "smooth" }));
+// 區塊捲動進場動畫
+const ldObserver = new IntersectionObserver(
+  entries => entries.forEach(en => { if (en.isIntersecting) en.target.classList.add("in"); }),
+  { threshold: 0.12 });
+// 只動畫「內容物」,不動 section 本身(section 帶背景色,整塊藏起來會露出深底閃爍)
+document.querySelectorAll(
+  "#landingView .ld-shot-frame, #landingView .ld-feature, #landingView .ld-section-title," +
+  "#landingView .ld-eyebrow.on-light, #landingView .ld-showcase-text, #landingView .ld-cta-card"
+).forEach(el => {
+  el.classList.add("ld-reveal");
+  ldObserver.observe(el);
 });
 
 // 通過驗證關卡後正式進入 app
 function enterApp(user) {
   closeVerifyGate();
   closeAuthModal();
+  hideLanding();
   showApp();
   booksCol = db.collection("users").doc(user.uid).collection("books");
   updateUserUI(user);
@@ -2571,6 +2609,28 @@ const DICT = {
   "Start Date": { "zh-TW": "開始日期" }, "Finish Date": { "zh-TW": "讀完日期" },
   "Notes": { "zh-TW": "筆記" }, "Your thoughts...": { "zh-TW": "你的想法..." },
   "Cancel": { "zh-TW": "取消" }, "Save Book": { "zh-TW": "儲存書籍" }, "Save": { "zh-TW": "儲存" },
+  // Landing(未登入首頁)
+  "✦ Social reading, built on trust": { "zh-TW": "✦ 建立在信任上的社群閱讀" },
+  "Track your books, share reviews, and see how compatible another reader's taste is with yours — before you take their recommendations.": { "zh-TW": "記錄你的書架、分享評論——參考任何人的推薦之前,先看看他的閱讀品味跟你有多合。" },
+  "See how it works": { "zh-TW": "看看怎麼運作" },
+  "Free · 中文 / English · No credit card": { "zh-TW": "免費 · 中英介面 · 不需信用卡" },
+  "How it works": { "zh-TW": "怎麼運作" },
+  "The trust score": { "zh-TW": "信任分數" },
+  "One minute to set up. Free for readers.": { "zh-TW": "一分鐘完成設定,讀者免費使用。" },
+  "Get started — free": { "zh-TW": "免費開始使用" },
+  "Create a free account": { "zh-TW": "免費註冊帳號" },
+  "Why Concento?": { "zh-TW": "為什麼選 Concento?" },
+  "Reading compatibility": { "zh-TW": "閱讀相容度" },
+  "A trust score between you and any reviewer — see how well their taste matches yours before following their picks.": { "zh-TW": "你和任何書評人之間的信任分數——先看品味合不合,再決定要不要參考他的書單。" },
+  "Your shelf": { "zh-TW": "你的書架" },
+  "Track what you've read, are reading, and want to read — with progress, ratings, and yearly stats.": { "zh-TW": "記錄讀過、正在讀、想讀的每一本書,附進度、評分與年度統計。" },
+  "Discover reviewers": { "zh-TW": "探索書評人" },
+  "Browse public shelves and follow curators whose taste you actually trust.": { "zh-TW": "瀏覽公開書架,追蹤你真正信得過的選書人。" },
+  "Book clubs": { "zh-TW": "讀書會" },
+  "Chapter-by-chapter discussions with spoiler protection, on every book.": { "zh-TW": "每本書都有分章節討論區,防爆雷設計,讀到哪聊到哪。" },
+  "Know who to trust": { "zh-TW": "知道該信誰" },
+  "Concento compares shared books, genres, and ratings to show a compatibility score with any reader — recommendations finally come with context.": { "zh-TW": "Concento 比對你們的共同書目、類型與評分,算出你跟任何讀者的相容度——推薦終於有了脈絡。" },
+  "Start building your shelf today": { "zh-TW": "今天就開始建立你的書架" },
   // 頁尾 / 法律頁
   "Privacy Policy": { "zh-TW": "隱私權政策" }, "Terms of Service": { "zh-TW": "服務條款" },
   "Privacy": { "zh-TW": "隱私權" }, "Terms": { "zh-TW": "條款" }, "Contact": { "zh-TW": "聯絡我們" },
@@ -2670,6 +2730,9 @@ const DICT = {
 
 // 含 HTML 標籤的整塊內容(無法用純文字翻)
 const HTML_DICT = {
+  "ld-headline": {
+    "zh-TW": `找到跟你<em>閱讀同頻</em>的人`
+  },
   "cover-upload-browse": {
     "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#5A7052;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`
   },
@@ -2727,7 +2790,7 @@ function translateStatic(lang) {
     if (!el.dataset.i18nOrig) el.dataset.i18nOrig = el.innerHTML;
     el.innerHTML = (lang !== "en" && HTML_DICT[key] && HTML_DICT[key][lang]) ? HTML_DICT[key][lang] : el.dataset.i18nOrig;
   });
-  document.querySelectorAll("button, label, span, option, li, h2, h3, p, div, a").forEach(el => {
+  document.querySelectorAll("button, label, span, option, li, h1, h2, h3, p, div, a").forEach(el => {
     if (el.children.length) return;
     if (el.closest("[data-i18n-html], #bookGrid, #exploreGrid, #reviewsList, #galleryGrid, #previewTable, #importLog, .filter-chips, #yearFilter, #genreFilter, #formatSelect")) return;
     const key = el.dataset.i18nKey || el.textContent.trim();
@@ -2750,6 +2813,8 @@ function setLang(lang) {
   translateStatic(lang);
   const btn = document.getElementById("langToggle");
   if (btn) btn.textContent = lang === "en" ? "中" : "EN";
+  const ldBtn = document.getElementById("ldLangBtn");
+  if (ldBtn) ldBtn.textContent = lang === "en" ? "中" : "EN";
   // 重新渲染含動態文字的可見區塊
   try {
     if (allBooks.length) { rebuildSidebarFilters(); rebuildFormatFilter(); }
@@ -2759,6 +2824,8 @@ function setLang(lang) {
 }
 
 document.getElementById("langToggle").addEventListener("click", () =>
+  setLang(currentLang === "en" ? "zh-TW" : "en"));
+document.getElementById("ldLangBtn").addEventListener("click", () =>
   setLang(currentLang === "en" ? "zh-TW" : "en"));
 
 setLang(detectLang());
