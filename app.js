@@ -206,10 +206,20 @@ function catalogKeyFor(title, author) {
   return k || "unknown";
 }
 
+// 洗掉 Google Books 簡介裡夾帶的 HTML 標籤,只留純文字
+function cleanDesc(d) {
+  return String(d || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .trim();
+}
+
 // 把一本書 upsert 進共享 catalog（匿名，不含任何使用者資訊）
-async function upsertCatalog(book) {
+async function upsertCatalog(book, desc) {
   const key = catalogKeyFor(book.title, book.author);
   const ref = db.collection("catalog").doc(key);
+  const d   = cleanDesc(desc);
   try {
     const snap = await ref.get();
     if (!snap.exists) {
@@ -219,15 +229,17 @@ async function upsertCatalog(book) {
         genre:      book.genre  || "",
         totalPages: book.totalPages || 0,
         cover:      book.cover  || "",
+        description: d,
         ratingCount: 0,
         ratingSum:   0,
         createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt:  firebase.firestore.FieldValue.serverTimestamp(),
       });
     } else {
-      // 已存在：只補「原本沒有的封面」，絕不覆蓋評分聚合
+      // 已存在：只補「原本沒有的封面/簡介」，絕不覆蓋評分聚合
       const patch = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
       if (!snap.data().cover && book.cover) patch.cover = book.cover;
+      if (!snap.data().description && d)    patch.description = d;
       await ref.set(patch, { merge: true });
     }
   } catch (e) { console.warn("catalog upsert failed:", e); }
@@ -794,6 +806,9 @@ function closeAddModal() { addModal.classList.remove("open"); }
 document.getElementById("fetchBookBtn").addEventListener("click", fetchBookInfo);
 document.getElementById("bookSearchInput").addEventListener("keydown", e => { if (e.key === "Enter") fetchBookInfo(); });
 
+// 從搜尋結果挑書時暫存的簡介(隨儲存寫進共享書庫)
+let pendingBookDesc = "";
+
 async function fetchBookInfo() {
   const query = document.getElementById("bookSearchInput").value.trim();
   if (!query) return;
@@ -819,6 +834,7 @@ async function fetchBookInfo() {
         totalPages: info.pageCount || "",
         cover: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail || "").replace("http://","https://") : "",
         year: (info.publishedDate || "").slice(0, 4),
+        description: cleanDesc(info.description || ""),
       });
     });
   } catch {}
@@ -864,6 +880,7 @@ function renderSearchResults(list) {
   el.querySelectorAll(".bsr-item").forEach(item => item.addEventListener("click", () => {
     const r = list[parseInt(item.dataset.i)];
     fillForm({ title: r.title, author: r.author, genre: r.genre, totalPages: r.totalPages, cover: r.cover });
+    pendingBookDesc = r.description || "";   // 暫存簡介,儲存時跟著進共享書庫(不進私人書 doc,避免每本書都拖一大段文字)
     el.innerHTML = "";
     fetchStatus.textContent = t("Selected") + `: "${r.title}"`;
   }));
@@ -1066,6 +1083,7 @@ function resetAddForm() {
   document.getElementById("bookStatus").value = "Want to Read";
   setCover(""); closePicker();
   fetchStatus.textContent = "";
+  pendingBookDesc = "";
   const sr = document.getElementById("bookSearchResults"); if (sr) sr.innerHTML = "";
 }
 
@@ -1100,7 +1118,8 @@ document.getElementById("saveBook").addEventListener("click", async () => {
 
   try {
     const statusChanged = !existing || existing.status !== book.status;
-    book.catalogKey = await upsertCatalog(book);   // 同步進共享書庫，並記下指向 catalog 的鑰匙
+    book.catalogKey = await upsertCatalog(book, pendingBookDesc);   // 同步進共享書庫，並記下指向 catalog 的鑰匙
+    pendingBookDesc = "";
     if (isEdit) {
       await booksCol.doc(currentDetailId).update({ ...book });
     } else {
@@ -1123,6 +1142,66 @@ document.getElementById("saveBook").addEventListener("click", async () => {
 // ══════════════════════════════════════════
 //  DETAIL MODAL
 // ══════════════════════════════════════════
+
+// ── 簡介:渲染(折疊 + 顯示更多)──
+function renderDescription(text) {
+  const card = document.getElementById("detailDescCard");
+  const p    = document.getElementById("detailDesc");
+  const btn  = document.getElementById("descMoreBtn");
+  const txt  = (text || "").trim();
+  card.style.display = txt ? "" : "none";
+  p.classList.remove("expanded");
+  p.textContent = txt;
+  btn.textContent = t("Read more");
+  btn.style.display = "none";
+  if (!txt) return;
+  // 等版面排好才量得到高度 → 折疊後有溢出才需要「顯示更多」鈕
+  requestAnimationFrame(() => {
+    if (p.scrollHeight > p.clientHeight + 2) btn.style.display = "";
+  });
+}
+
+document.getElementById("descMoreBtn").addEventListener("click", () => {
+  const p   = document.getElementById("detailDesc");
+  const btn = document.getElementById("descMoreBtn");
+  const open = p.classList.toggle("expanded");
+  btn.textContent = open ? t("Show less") : t("Read more");
+});
+
+// ── 簡介:載入。優先用手上資料 → 讀 catalog → 都沒有就查 Google Books 並寫回 catalog 快取
+//   (第一個點開的人觸發補抓,之後全站直接讀;與封面/catalog 自我修復同套路)
+let descReqKey = null;   // 防止快速連點兩本書時,慢的那筆回來蓋掉新的
+async function loadDescription(key, title, author, preset) {
+  descReqKey = key;
+  if (preset && preset.trim()) { renderDescription(preset); return; }
+  renderDescription("");
+  let desc = "";
+  try {
+    const snap = await db.collection("catalog").doc(key).get();
+    if (snap.exists) desc = cleanDesc(snap.data().description || "");
+  } catch {}
+  if (!desc && title) {
+    try {
+      const q   = encodeURIComponent(`intitle:"${title}"` + (author ? ` inauthor:"${author.split(",")[0].trim()}"` : ""));
+      const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
+      const data = await res.json();
+      desc = cleanDesc(data.items?.[0]?.volumeInfo?.description || "");
+      if (desc && currentUser) {
+        db.collection("catalog").doc(key).set({ description: desc }, { merge: true }).catch(() => {});
+      }
+    } catch {}
+  }
+  if (descReqKey === key) renderDescription(desc);
+}
+
+// ── 手機版分頁籤:評論 / 讀書會 切換(桌面雙欄並排,籤列隱藏)──
+function setSocialTab(showClub) {
+  document.querySelector("#detailModal .modal-detail").classList.toggle("disc-open", showClub);
+  document.getElementById("tabReviews").classList.toggle("active", !showClub);
+  document.getElementById("tabClub").classList.toggle("active", showClub);
+}
+document.getElementById("tabReviews").addEventListener("click", () => setSocialTab(false));
+document.getElementById("tabClub").addEventListener("click", () => setSocialTab(true));
 
 function openDetail(id) {
   currentDetailId = id;
@@ -1175,6 +1254,8 @@ function openDetail(id) {
   document.getElementById("detailNotes").textContent = b.notes || "";
 
   detailModal.classList.add("open");
+  setSocialTab(false);
+  loadDescription(activeCatalogKey, b.title, b.author, "");
   loadReviews(b.catalogKey || catalogKeyFor(b.title, b.author));
   loadDiscussion(b.catalogKey || catalogKeyFor(b.title, b.author));
 
@@ -2144,6 +2225,8 @@ function openCatalogDetail(c) {
   document.getElementById("reviewText").value = "";
 
   detailModal.classList.add("open");
+  setSocialTab(false);
+  loadDescription(c.key, c.title || "", c.author || "", c.description || "");
   loadReviews(c.key);
   loadDiscussion(c.key);
 }
@@ -2487,6 +2570,9 @@ const DICT = {
   "Notes": { "zh-TW": "筆記" }, "Your thoughts...": { "zh-TW": "你的想法..." },
   "Cancel": { "zh-TW": "取消" }, "Save Book": { "zh-TW": "儲存書籍" }, "Save": { "zh-TW": "儲存" },
   // 詳情 / 評論
+  "About this book": { "zh-TW": "簡介" },
+  "Read more": { "zh-TW": "顯示更多" }, "Show less": { "zh-TW": "收合" },
+  "Reviews": { "zh-TW": "評論" }, "Book Club": { "zh-TW": "讀書會" },
   "Book Detail": { "zh-TW": "書籍詳情" }, "Progress": { "zh-TW": "進度" },
   "Update current page:": { "zh-TW": "更新目前頁數:" }, "Update": { "zh-TW": "更新" },
   "Update progress:": { "zh-TW": "更新進度:" }, "By page": { "zh-TW": "用頁數" }, "By %": { "zh-TW": "用 %" },

@@ -345,20 +345,30 @@
 <!-- 書籍詳情 / 編輯 Modal -->
 <div class="modal-overlay" id="detailModal">
   <div class="modal modal-detail">
-    <div class="modal-header">
-      <h2 id="detailTitle">Book Detail</h2>
-      <button class="modal-close" id="closeDetailModal">✕</button>
-    </div>
+    <button class="modal-close detail-close" id="closeDetailModal">✕</button>
     <div class="detail-body">
       <div class="detail-cover-col">
         <img id="detailCover" src="" alt="cover" />
       </div>
       <div class="detail-info-col">
+        <h2 class="detail-title" id="detailTitle">Book Detail</h2>
         <div class="detail-author" id="detailAuthor"></div>
         <div class="detail-genre" id="detailGenre"></div>
         <div class="detail-status-badge" id="detailStatus"></div>
 
+        <div class="detail-actions">
+          <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
+          <button class="btn-delete detail-shelf-only" id="deleteBookBtn">Delete</button>
+          <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ Add to My Shelf</button>
+        </div>
+
         <div class="triple-rating" id="tripleRating" style="display:none"></div>
+
+        <div class="detail-desc-card" id="detailDescCard" style="display:none">
+          <div class="desc-label">About this book</div>
+          <p class="desc-text" id="detailDesc"></p>
+          <button class="desc-more" id="descMoreBtn" style="display:none">Read more</button>
+        </div>
 
         <div class="detail-progress-section detail-shelf-only">
           <label>Progress</label>
@@ -386,15 +396,16 @@
 
         <div class="detail-dates detail-shelf-only" id="detailDates"></div>
         <div class="detail-notes detail-shelf-only" id="detailNotes"></div>
-
-        <div class="detail-actions">
-          <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
-          <button class="btn-delete detail-shelf-only" id="deleteBookBtn">Delete</button>
-          <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ Add to My Shelf</button>
-        </div>
       </div>
     </div>
 
+    <!-- 手機版:評論 / 讀書會 分頁籤(桌面隱藏,雙欄並排) -->
+    <div class="social-tabs" id="socialTabs">
+      <button class="social-tab active" id="tabReviews">Reviews</button>
+      <button class="social-tab" id="tabClub">Book Club</button>
+    </div>
+
+    <div class="detail-social">
     <!-- Ratings & Reviews -->
     <div class="reviews-section">
       <div class="reviews-header">
@@ -440,6 +451,7 @@
         <button id="discussionSend">Send</button>
       </div>
     </div>
+    </div><!-- /.detail-social -->
   </div>
 </div>
 
