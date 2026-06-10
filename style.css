@@ -2391,3 +2391,15 @@ body {
 .ld-feature h3 { font-size: 18px; margin-bottom: 10px; }
 .ld-feature p { font-size: 14.5px; line-height: 1.75; }
 .ld-feature-grid { max-width: 1140px; }
+
+/* 特色卡:上圖下文版型(取代 emoji icon) */
+.ld-feature { padding: 0; min-height: 0; overflow: hidden; }
+.ld-feature-img { position: relative; }
+.ld-feature-img img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+.ld-feature-img .ld-feature-num { top: 12px; right: 14px; }
+.ld-feature-body { padding: 18px 22px 24px; }
