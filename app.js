@@ -2466,7 +2466,7 @@ const DICT = {
   "🎨 Gallery": { "zh-TW": "🎨 圖庫" }, "📁 Upload": { "zh-TW": "📁 上傳" }, "🔗 Link": { "zh-TW": "🔗 連結" }, "✂️ Screenshot": { "zh-TW": "✂️ 截圖" },
   "click to browse": { "zh-TW": "點擊瀏覽" }, "or Ctrl+V to paste an image": { "zh-TW": "或按 Ctrl+V 貼上圖片" },
   "Paste an image URL...": { "zh-TW": "貼上圖片網址..." }, "Submit": { "zh-TW": "送出" },
-  "Works with any image URL from the web.": { "zh-TW": "可用網路上任何圖片網址。" },
+  "Paste the image's URL (not the product page). Right-click a book's cover image, choose Copy image address, then paste it above.": { "zh-TW": "請貼「圖片本身」的網址,不是商品頁網址。在博客來、誠品等網站的書封圖片上按右鍵 →「複製圖片位址」,再貼到上方欄位即可。" },
   "Capture any area of your screen as a book cover.": { "zh-TW": "擷取螢幕任一區域當作書封。" },
   "📸 Start Screen Capture": { "zh-TW": "📸 開始截取螢幕" },
   "🗑 Remove cover": { "zh-TW": "🗑 移除封面" }, "Close": { "zh-TW": "關閉" },
