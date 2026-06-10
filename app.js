@@ -501,7 +501,7 @@ function renderGrid() {
   bookGrid.innerHTML = pageBooks.map(b => {
     const pct = bookPct(b);
     const coverHTML = b.cover
-      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" onerror="this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
+      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title)}</div></div>`;
     return `
       <div class="book-card" data-id="${b.id}">
@@ -855,7 +855,7 @@ function renderSearchResults(list) {
   if (!el) return;
   el.innerHTML = list.map((r, i) => `
     <div class="bsr-item" data-i="${i}">
-      ${r.cover ? `<img class="bsr-cover" src="${escHtml(r.cover)}" alt="" loading="lazy">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
+      ${r.cover ? `<img class="bsr-cover" src="${escHtml(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
       <div class="bsr-meta">
         <div class="bsr-title">${escHtml(r.title)}</div>
         <div class="bsr-sub">${escHtml(r.author || "?")}${r.year ? " · " + escHtml(String(r.year)) : ""}${r.totalPages ? " · " + r.totalPages + "p" : ""}</div>
@@ -899,6 +899,18 @@ const GALLERY_GRADIENTS = [
   "linear-gradient(135deg,#fddb92,#d1fdff)",
 ];
 
+// 封面載入容錯:外部圖載入失敗時(多半是台灣電商防盜連擋外站),
+// 自動改走 images.weserv.nl 圖片代理重試一次(代理 server 端抓圖、無 referrer,可繞過防盜連)。
+// 只對 http(s) 外部圖生效、每張只重試一次;data:/漸層 不碰。回傳 true=已換代理(略過原本的 No Cover 後援)。
+window.__retryProxy = function (img) {
+  const orig = img.dataset.orig || img.getAttribute("src") || "";
+  if (img.dataset.proxied || !/^https?:\/\//i.test(orig)) return false;
+  img.dataset.orig = orig;
+  img.dataset.proxied = "1";
+  img.src = "https://images.weserv.nl/?url=" + encodeURIComponent(orig);
+  return true;
+};
+
 function setCover(value) {
   document.getElementById("coverUrl").value = value;
   if (!value) {
@@ -909,7 +921,7 @@ function setCover(value) {
     coverPreview.style.background = value;
   } else {
     coverPreview.style.background = "";
-    coverPreview.innerHTML = `<img src="${escHtml(value)}" alt="cover" onerror="this.parentElement.innerHTML='<span>No Cover</span>'" />`;
+    coverPreview.innerHTML = `<img src="${escHtml(value)}" alt="cover" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<span>No Cover</span>'" />`;
   }
 }
 
@@ -2077,7 +2089,7 @@ function renderExplore() {
   grid.innerHTML = list.map(c => {
     const avg   = avgOf(c);
     const cover = c.cover
-      ? `<div class="book-cover"><img src="${escHtml(c.cover)}" alt="" loading="lazy" /></div>`
+      ? `<div class="book-cover"><img src="${escHtml(c.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(c.title||"")}</div></div>`;
     const rating = c.ratingCount
       ? `<div class="card-rating"><span class="cr-star">${starsHTML(avg)}</span><span>${avg.toFixed(1)}</span><span class="cr-count">(${c.ratingCount})</span></div>`
@@ -2375,7 +2387,7 @@ function renderPublicShelf(books) {
   if (!books.length) { grid.innerHTML = `<div class="loading">${t("This shelf is empty")}</div>`; return; }
   grid.innerHTML = books.map(b => {
     const cover = b.cover
-      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="" loading="lazy" /></div>`
+      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title||"")}</div></div>`;
     const pct = (b.totalPages && b.currentPage) ? Math.min(100, Math.round(b.currentPage / b.totalPages * 100)) : 0;
     return `<div class="book-card" data-key="${escHtml(b.catalogKey || catalogKeyFor(b.title, b.author))}">
@@ -2770,7 +2782,7 @@ async function renderFeed() {
     else if (a.type === "finished")    line = t("{name} finished {book}", { name: nameHtml, book: bookHtml });
     else line = `${nameHtml} · ${bookHtml}`;
     const date  = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().toLocaleDateString() : "";
-    const cover = a.bookCover ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(a.bookCover)}" alt="">` : "";
+    const cover = a.bookCover ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(a.bookCover)}" alt="" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : "";
     return `<div class="feed-item">
       ${avatar}
       <div class="feed-body">
