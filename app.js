@@ -2570,6 +2570,12 @@ const DICT = {
 
 // 含 HTML 標籤的整塊內容(無法用純文字翻)
 const HTML_DICT = {
+  "cover-upload-browse": {
+    "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#2383e2;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`
+  },
+  "cover-screenshot-note": {
+    "zh-TW": `瀏覽器會詢問要分享哪個視窗/畫面。<br/>截取後,拖曳框選你要當封面的區域。`
+  },
   "import-steps": {
     "zh-TW": `<li>在 Notion 打開你的書籍資料庫頁面</li><li>點右上角 <strong>⋯</strong> → <strong>Export</strong>(匯出)</li><li>格式(Format)選 <strong>CSV</strong></li><li>點 <strong>Export</strong> 並儲存檔案</li><li>在下方上傳 <code>.csv</code> 檔</li>`
   },

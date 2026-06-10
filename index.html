@@ -230,24 +230,25 @@
           <!-- Cover Picker Panel -->
           <div class="cover-picker-panel" id="coverPickerPanel" style="display:none">
             <div class="picker-tabs">
-              <button class="picker-tab active" data-tab="gallery">🎨 Gallery</button>
-              <button class="picker-tab" data-tab="upload">📁 Upload</button>
+              <button class="picker-tab active" data-tab="upload">📁 Upload</button>
               <button class="picker-tab" data-tab="link">🔗 Link</button>
               <button class="picker-tab" data-tab="screenshot">✂️ Screenshot</button>
-            </div>
-
-            <!-- Gallery -->
-            <div class="picker-pane" id="pane-gallery">
-              <div class="gallery-grid" id="galleryGrid"></div>
+              <button class="picker-tab" data-tab="gallery">🎨 Gallery</button>
             </div>
 
             <!-- Upload -->
-            <div class="picker-pane" id="pane-upload" style="display:none">
+            <div class="picker-pane" id="pane-upload">
               <div class="upload-drop-zone" id="coverDropZone">
                 <div class="upload-icon">📂</div>
-                <div>Drag &amp; drop or <label style="color:#2383e2;cursor:pointer;text-decoration:underline">click to browse<input type="file" id="coverFileInput" accept="image/*" style="display:none"/></label></div>
+                <div data-i18n-html="cover-upload-browse">Drag &amp; drop or <label for="coverFileInput" style="color:#2383e2;cursor:pointer;text-decoration:underline">click to browse</label></div>
+                <input type="file" id="coverFileInput" accept="image/*" style="display:none"/>
                 <div style="font-size:11.5px;color:#9b9a97;margin-top:4px">or Ctrl+V to paste an image</div>
               </div>
+            </div>
+
+            <!-- Gallery -->
+            <div class="picker-pane" id="pane-gallery" style="display:none">
+              <div class="gallery-grid" id="galleryGrid"></div>
             </div>
 
             <!-- Link -->
@@ -264,7 +265,7 @@
               <div class="screenshot-pane">
                 <div class="screenshot-desc">Capture any area of your screen as a book cover.</div>
                 <button id="startScreenshotBtn">📸 Start Screen Capture</button>
-                <div class="screenshot-note">Your browser will ask which window/screen to share.<br/>After capture, drag to select the area you want.</div>
+                <div class="screenshot-note" data-i18n-html="cover-screenshot-note">Your browser will ask which window/screen to share.<br/>After capture, drag to select the area you want.</div>
               </div>
             </div>
 
