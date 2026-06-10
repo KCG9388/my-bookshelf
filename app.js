@@ -99,8 +99,8 @@ function showVerifyMsg(msg, ok = false) {
   const el = document.getElementById("verifyMsg");
   el.textContent = msg;
   el.style.display = "";
-  el.style.background = ok ? "#d4edda" : "#fde8e8";
-  el.style.color      = ok ? "#1a6632" : "#c0392b";
+  el.style.background = ok ? "#DCE8D2" : "#fde8e8";
+  el.style.color      = ok ? "#53704D" : "#c0392b";
 }
 
 document.getElementById("verifyContinueBtn").addEventListener("click", async () => {
@@ -428,8 +428,8 @@ function showAuthError(msg, isSuccess = false) {
   const el = document.getElementById("authError");
   el.textContent = msg;
   el.style.display = "";
-  el.style.background = isSuccess ? "#d4edda" : "#fde8e8";
-  el.style.color      = isSuccess ? "#1a6632" : "#c0392b";
+  el.style.background = isSuccess ? "#DCE8D2" : "#fde8e8";
+  el.style.color      = isSuccess ? "#53704D" : "#c0392b";
 }
 function clearAuthError() {
   const el = document.getElementById("authError");
@@ -1374,7 +1374,7 @@ function renderStars(rating) {
 
 function updateStarLabel(rating, committed) {
   const el = document.getElementById("starPickLabel");
-  if (!rating) { el.textContent = t("Select rating"); el.style.color = "#9b9a97"; return; }
+  if (!rating) { el.textContent = t("Select rating"); el.style.color = "#8A8270"; return; }
   const label =
     rating <= 1 ? t("😞 Didn't like it") :
     rating <= 2 ? t("😐 It was ok")       :
@@ -1829,7 +1829,7 @@ function showPreview(filename) {
       <td>${b.genre}</td><td>${b.status}</td>
       <td>${b.totalPages || "—"}</td>
     </tr>`).join("")}
-    ${parsedBooks.length > 5 ? `<tr><td colspan="5" style="color:#9b9a97;text-align:center">... and ${parsedBooks.length - 5} more</td></tr>` : ""}
+    ${parsedBooks.length > 5 ? `<tr><td colspan="5" style="color:#8A8270;text-align:center">... and ${parsedBooks.length - 5} more</td></tr>` : ""}
     </tbody>`;
 
   preview.style.display   = "";
@@ -1972,7 +1972,7 @@ startImportBtn.addEventListener("click", async () => {
     if (existingTitles.has(book.title.trim().toLowerCase())) {
       skipped++;
       const line = document.createElement("div");
-      line.style.color  = "#9b9a97";
+      line.style.color  = "#8A8270";
       line.textContent  = `— skipped (duplicate): ${book.title}`;
       logEl.appendChild(line);
       logEl.scrollTop = logEl.scrollHeight;
@@ -1986,7 +1986,7 @@ startImportBtn.addEventListener("click", async () => {
       existingTitles.add(book.title.trim().toLowerCase());
       success++;
       const line = document.createElement("div");
-      line.style.color = "#1a6632";
+      line.style.color = "#53704D";
       line.textContent = `✓ ${book.title}`;
       logEl.appendChild(line);
     } catch(e) {
@@ -2006,7 +2006,7 @@ startImportBtn.addEventListener("click", async () => {
   labelEl.textContent = t("Done! ✓ {ok} imported", { ok: success })
     + (skipped ? t(", {n} skipped", { n: skipped }) : "")
     + (failed ? t(", ✗ {n} failed", { n: failed }) : "") + ".";
-  labelEl.style.color = "#1a6632";
+  labelEl.style.color = "#53704D";
   startImportBtn.textContent = t("Done");
   startImportBtn.disabled    = false;
   // 按下 Done = 正式完成:保留資料、關閉視窗、開始背景抓封面(此後不再回滾)
@@ -2671,7 +2671,7 @@ const DICT = {
 // 含 HTML 標籤的整塊內容(無法用純文字翻)
 const HTML_DICT = {
   "cover-upload-browse": {
-    "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#2383e2;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`
+    "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#5A7052;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`
   },
   "cover-screenshot-note": {
     "zh-TW": `瀏覽器會詢問要分享哪個視窗/畫面。<br/>截取後,拖曳框選你要當封面的區域。`
