@@ -580,6 +580,25 @@
   </div>
 </div>
 
+<!-- 待驗證信箱（新註冊未驗證者被擋在此） -->
+<div class="modal-overlay" id="verifyModal">
+  <div class="modal modal-auth">
+    <div class="auth-brand">
+      <div class="auth-brand-icon">📧</div>
+      <div class="auth-brand-name">Verify your email</div>
+      <div class="auth-brand-sub" id="verifySub">We sent a verification link to your email.</div>
+    </div>
+    <div class="auth-form-area">
+      <div class="auth-error" id="verifyMsg" style="display:none"></div>
+      <button class="btn-auth-submit" id="verifyContinueBtn">I've verified — continue</button>
+      <div class="auth-reset-wrap">
+        <button class="btn-auth-link" id="resendVerifyBtn">Resend verification email</button>
+        <button class="btn-auth-link" id="verifySignOutBtn">Use a different account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>

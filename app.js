@@ -37,25 +37,107 @@ const authModal     = document.getElementById("authModal");
 //  AUTH
 // ══════════════════════════════════════════
 
+// 信箱驗證分界線：帳號建立早於此一律放行（grandfather 既有/demo 帳號，
+// 它們用假信箱收不到驗證信；只有此刻之後新註冊的 email/密碼帳號才強制驗證）
+const EMAIL_VERIFY_CUTOFF = Date.UTC(2026, 5, 10, 0, 0, 0);
+
+function needsEmailVerify(user) {
+  if (user.emailVerified) return false;
+  // 只擋 email/密碼註冊；Google 等第三方登入的信箱天生已驗證
+  const isPassword = (user.providerData || []).some(p => p.providerId === "password");
+  if (!isPassword) return false;
+  // grandfather：分界線之前建立的舊帳號（含 demo 假信箱）放行
+  const created = Date.parse((user.metadata && user.metadata.creationTime) || "");
+  if (created && created < EMAIL_VERIFY_CUTOFF) return false;
+  return true;
+}
+
 auth.onAuthStateChanged(user => {
   currentUser = user;
   if (user) {
-    closeAuthModal();
-    showApp();
-    booksCol = db.collection("users").doc(user.uid).collection("books");
-    updateUserUI(user);
-    startBooksListener();
-    ensureProfile(user)
-      .then(() => backfillCatalog(user.uid))
-      .then(() => migrateRatingsOnce(user.uid))
-      .then(() => cleanupRatingNotesOnce(user.uid));
+    if (needsEmailVerify(user)) { showVerifyGate(user); return; }
+    enterApp(user);
   } else {
+    closeVerifyGate();
     hideApp();
     showAuthModal();
     if (booksUnsub) { booksUnsub(); booksUnsub = null; }
     allBooks = [];
   }
 });
+
+// 通過驗證關卡後正式進入 app
+function enterApp(user) {
+  closeVerifyGate();
+  closeAuthModal();
+  showApp();
+  booksCol = db.collection("users").doc(user.uid).collection("books");
+  updateUserUI(user);
+  startBooksListener();
+  ensureProfile(user)
+    .then(() => backfillCatalog(user.uid))
+    .then(() => migrateRatingsOnce(user.uid))
+    .then(() => cleanupRatingNotesOnce(user.uid));
+}
+
+// ── 待驗證關卡 UI ──
+let _resendCooldown = false;
+function showVerifyGate(user) {
+  closeAuthModal();
+  hideApp();
+  const sub = document.getElementById("verifySub");
+  if (sub) sub.innerHTML = `${escHtml(t("We sent a verification link to:"))}<br><strong>${escHtml(user.email || "")}</strong>`;
+  const msg = document.getElementById("verifyMsg");
+  if (msg) msg.style.display = "none";
+  document.getElementById("verifyModal").classList.add("open");
+}
+function closeVerifyGate() {
+  const m = document.getElementById("verifyModal");
+  if (m) m.classList.remove("open");
+}
+function showVerifyMsg(msg, ok = false) {
+  const el = document.getElementById("verifyMsg");
+  el.textContent = msg;
+  el.style.display = "";
+  el.style.background = ok ? "#d4edda" : "#fde8e8";
+  el.style.color      = ok ? "#1a6632" : "#c0392b";
+}
+
+document.getElementById("verifyContinueBtn").addEventListener("click", async () => {
+  const u = auth.currentUser;
+  if (!u) { closeVerifyGate(); showAuthModal(); return; }
+  const btn = document.getElementById("verifyContinueBtn");
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = t("Checking...");
+  try {
+    await u.reload();
+    if (!needsEmailVerify(auth.currentUser)) {
+      enterApp(auth.currentUser);
+    } else {
+      showVerifyMsg(t("Not verified yet. Please click the link in your email."), false);
+    }
+  } catch (e) {
+    showVerifyMsg(getAuthErrorMessage(e.code), false);
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+});
+
+document.getElementById("resendVerifyBtn").addEventListener("click", async () => {
+  const u = auth.currentUser;
+  if (!u || _resendCooldown) return;
+  const btn = document.getElementById("resendVerifyBtn");
+  try {
+    await u.sendEmailVerification();
+    showVerifyMsg(t("✓ Verification email resent. Check your inbox."), true);
+    _resendCooldown = true; btn.disabled = true;
+    setTimeout(() => { _resendCooldown = false; btn.disabled = false; }, 30000);
+  } catch (e) {
+    showVerifyMsg(getAuthErrorMessage(e.code), false);
+  }
+});
+
+document.getElementById("verifySignOutBtn").addEventListener("click", () => auth.signOut());
 
 function showApp() {
   document.getElementById("appHeader").style.display = "";
@@ -296,20 +378,21 @@ async function handleAuthSubmit() {
       const confirmPw    = document.getElementById("authConfirmPassword").value;
       const displayName  = document.getElementById("authDisplayName").value.trim();
       if (password !== confirmPw) {
-        showAuthError("Passwords do not match.");
-        btn.disabled = false; btn.textContent = "Create Account"; return;
+        showAuthError("Passwords do not match."); return;
       }
       if (password.length < 6) {
-        showAuthError("Password must be at least 6 characters.");
-        btn.disabled = false; btn.textContent = "Create Account"; return;
+        showAuthError("Password must be at least 6 characters."); return;
       }
       const cred = await auth.createUserWithEmailAndPassword(email, password);
       if (displayName) await cred.user.updateProfile({ displayName });
+      // 寄驗證信；onAuthStateChanged 會接手把新帳號擋進待驗證關卡
+      cred.user.sendEmailVerification().catch(() => {});
     } else {
       await auth.signInWithEmailAndPassword(email, password);
     }
   } catch (e) {
     showAuthError(getAuthErrorMessage(e.code));
+  } finally {
     btn.disabled = false;
     btn.textContent = authMode === "signup" ? "Create Account" : "Sign In";
   }
@@ -2328,6 +2411,16 @@ const LANGS = ["en", "zh-TW"];
 let currentLang = "en";
 
 const DICT = {
+  // 信箱驗證關卡
+  "Verify your email": { "zh-TW": "驗證你的信箱" },
+  "We sent a verification link to your email.": { "zh-TW": "我們已寄出驗證連結至你的信箱。" },
+  "We sent a verification link to:": { "zh-TW": "我們已寄出驗證連結至:" },
+  "I've verified — continue": { "zh-TW": "我已驗證,繼續" },
+  "Resend verification email": { "zh-TW": "重寄驗證信" },
+  "Use a different account": { "zh-TW": "改用其他帳號" },
+  "Not verified yet. Please click the link in your email.": { "zh-TW": "尚未驗證,請點擊信中的連結。" },
+  "✓ Verification email resent. Check your inbox.": { "zh-TW": "✓ 驗證信已重寄,請查收信箱。" },
+  "Checking...": { "zh-TW": "檢查中..." },
   // 導覽 / 側欄
   "My Shelf": { "zh-TW": "我的書架" }, "Explore": { "zh-TW": "探索" }, "Feed": { "zh-TW": "動態" },
   "Status": { "zh-TW": "狀態" }, "⬜ All": { "zh-TW": "⬜ 全部" },
