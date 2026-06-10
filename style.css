@@ -2383,3 +2383,11 @@ body {
 .ld-hero-veil {
   background: linear-gradient(rgba(24, 21, 16, .35), rgba(24, 21, 16, .30) 55%, #221E17 100%);
 }
+
+/* 特色卡加大 */
+.ld-feature-grid { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 22px; }
+.ld-feature { padding: 30px 26px; min-height: 230px; border-radius: 18px; }
+.ld-feature-icon { font-size: 36px; margin-bottom: 14px; }
+.ld-feature h3 { font-size: 18px; margin-bottom: 10px; }
+.ld-feature p { font-size: 14.5px; line-height: 1.75; }
+.ld-feature-grid { max-width: 1140px; }
