@@ -542,7 +542,7 @@ function renderGrid() {
   bookGrid.innerHTML = books.map(b => {
     const pct = bookPct(b);
     const coverHTML = b.cover
-      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="${escHtml(b.title)}" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
+      ? `<div class="book-cover"><img ${coverAttrs(b.cover)} alt="${escHtml(b.title)}" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title)}</div></div>`;
     return `
       <div class="book-card" data-id="${b.id}">
@@ -971,7 +971,7 @@ async function fetchBookInfo() {
         author: (info.authors || []).join(", "),
         genre: (info.categories || []).join(", "),
         totalPages: info.pageCount || "",
-        cover: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail || "").replace("http://","https://") : "",
+        cover: info.imageLinks ? tidyCover(info.imageLinks.thumbnail || info.imageLinks.smallThumbnail || "") : "",
         year: (info.publishedDate || "").slice(0, 4),
         description: cleanDesc(info.description || ""),
       });
@@ -1010,7 +1010,7 @@ function renderSearchResults(list) {
   const grid    = document.getElementById("bsrGrid");
   grid.innerHTML = list.map((r, i) => `
     <div class="bsr-item" data-i="${i}">
-      ${r.cover ? `<img class="bsr-cover" src="${escHtml(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
+      ${r.cover ? `<img class="bsr-cover" ${coverAttrs(r.cover)} alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.style.display='none'">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
       <div class="bsr-meta">
         <div class="bsr-title">${escHtml(r.title)}</div>
         <div class="bsr-sub">${escHtml(r.author || "?")}${r.year ? " · " + escHtml(String(r.year)) : ""}${r.totalPages ? " · " + r.totalPages + "p" : ""}</div>
@@ -1080,6 +1080,36 @@ window.__retryProxy = function (img) {
   return true;
 };
 
+// 封面網址清洗:Google Books 縮圖常帶 edge=curl(圖上畫假翻角)→ 拿掉;http→https。
+// 顯示端統一過這層,既有資料庫裡的舊網址不用遷移。
+function tidyCover(u) {
+  if (!u || !/^https?:\/\//i.test(u)) return u || "";
+  u = u.replace(/^http:\/\//i, "https://");
+  if (/books\.google/i.test(u)) u = u.replace(/([?&])edge=curl&?/i, "$1").replace(/[?&]$/, "");
+  return u;
+}
+// 顯示用高解析版:Google Books zoom=1(~128px)→zoom=2、OpenLibrary -M→-L。
+// 不是每本都有高解析版 → 配 __coverFallback,載入失敗自動退回 tidy 原版。
+function hiCover(u) {
+  const t = tidyCover(u);
+  if (/books\.google\.[^/]+\/books\/content/i.test(t)) return t.replace(/([?&])zoom=1(?=&|$)/i, "$1zoom=2");
+  if (/covers\.openlibrary\.org\/b\//i.test(t)) return t.replace(/-M\.jpg$/i, "-L.jpg");
+  return t;
+}
+// img onerror 第一關:有 data-fb(高解析失敗的退路)就換上去,每張只退一次。
+window.__coverFallback = function (img) {
+  const fb = img.dataset.fb;
+  if (!fb || img.dataset.fbDone || img.getAttribute("src") === fb) return false;
+  img.dataset.fbDone = "1";
+  img.src = fb;
+  return true;
+};
+// 模板共用:回傳 src(高解析)+ data-fb(原版退路)屬性字串
+function coverAttrs(u) {
+  const hi = hiCover(u), lo = tidyCover(u);
+  return `src="${escHtml(hi)}"${hi !== lo ? ` data-fb="${escHtml(lo)}"` : ""}`;
+}
+
 function setCover(value) {
   document.getElementById("coverUrl").value = value;
   if (!value) {
@@ -1090,7 +1120,7 @@ function setCover(value) {
     coverPreview.style.background = value;
   } else {
     coverPreview.style.background = "";
-    coverPreview.innerHTML = `<img src="${escHtml(value)}" alt="cover" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<span>No Cover</span>'" />`;
+    coverPreview.innerHTML = `<img ${coverAttrs(value)} alt="cover" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<span>No Cover</span>'" />`;
   }
 }
 
@@ -1432,8 +1462,13 @@ function openDetail(id) {
 
   const coverEl = document.getElementById("detailCover");
   if (b.cover) {
-    coverEl.src = b.cover;
-    coverEl.onerror = () => { coverEl.src = ""; coverEl.style.display = "none"; };
+    const hi = hiCover(b.cover), lo = tidyCover(b.cover);
+    let triedLo = (hi === lo);
+    coverEl.onerror = () => {
+      if (!triedLo) { triedLo = true; coverEl.src = lo; return; }   // 高解析沒有 → 退回原版
+      coverEl.src = ""; coverEl.style.display = "none";
+    };
+    coverEl.src = hi;
     coverEl.style.display = "";
   } else {
     coverEl.style.display = "none";
@@ -2216,7 +2251,7 @@ async function runWebImport(rawText) {
         totalPages: v.pageCount || 0,
         finishDate: "", startDate: "",
         startYear: new Date().getFullYear(),
-        cover: (v.imageLinks?.thumbnail || "").replace("http://", "https://"),
+        cover: tidyCover(v.imageLinks?.thumbnail || ""),
         notes: "",
         userId:    currentUser?.uid || null,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -2364,7 +2399,7 @@ async function fetchCoverUrl(title, author) {
     const data = await res.json();
     if (data.items?.[0]?.volumeInfo?.imageLinks) {
       const imgs = data.items[0].volumeInfo.imageLinks;
-      return (imgs.extraLarge || imgs.large || imgs.thumbnail || "").replace("http://", "https://");
+      return tidyCover(imgs.extraLarge || imgs.large || imgs.thumbnail || "");
     }
   } catch {}
   try {
@@ -2604,7 +2639,7 @@ function renderExplore() {
   grid.innerHTML = list.map(c => {
     const avg   = avgOf(c);
     const cover = c.cover
-      ? `<div class="book-cover"><img src="${escHtml(c.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
+      ? `<div class="book-cover"><img ${coverAttrs(c.cover)} alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(c.title||"")}</div></div>`;
     const rating = c.ratingCount
       ? `<div class="card-rating"><span class="cr-star">${starsHTML(avg)}</span><span>${avg.toFixed(1)}</span><span class="cr-count">(${c.ratingCount})</span></div>`
@@ -2637,8 +2672,19 @@ function openCatalogDetail(c) {
   document.getElementById("detailGenre").textContent  = genreLabel(c.genre);
   document.getElementById("detailStatus").innerHTML   = "";
   const coverImg = document.getElementById("detailCover");
-  coverImg.src = c.cover || "";
-  coverImg.style.display = c.cover ? "" : "none";
+  if (c.cover) {
+    const hi = hiCover(c.cover), lo = tidyCover(c.cover);
+    let triedLo = (hi === lo);
+    coverImg.onerror = () => {
+      if (!triedLo) { triedLo = true; coverImg.src = lo; return; }   // 高解析沒有 → 退回原版
+      coverImg.src = ""; coverImg.style.display = "none";
+    };
+    coverImg.src = hi;
+    coverImg.style.display = "";
+  } else {
+    coverImg.src = "";
+    coverImg.style.display = "none";
+  }
 
   // 隱藏私人書架專屬區塊,顯示「加入我的書架」
   document.querySelectorAll(".detail-shelf-only").forEach(el => el.style.display = "none");
@@ -2921,7 +2967,7 @@ function renderPublicShelf(books) {
   if (!books.length) { grid.innerHTML = `<div class="loading">${t("This shelf is empty")}</div>`; return; }
   grid.innerHTML = books.map(b => {
     const cover = b.cover
-      ? `<div class="book-cover"><img src="${escHtml(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
+      ? `<div class="book-cover"><img ${coverAttrs(b.cover)} alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title||"")}</div></div>`;
     const pct = (b.totalPages && b.currentPage) ? Math.min(100, Math.round(b.currentPage / b.totalPages * 100)) : 0;
     return `<div class="book-card" data-key="${escHtml(b.catalogKey || catalogKeyFor(b.title, b.author))}">
@@ -3409,7 +3455,7 @@ async function renderFeed() {
     else line = `${nameHtml} · ${bookHtml}`;
     const date  = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().toLocaleDateString() : "";
     const coverUrl = a.bookCover || feedCoverCache[a.bookKey] || "";
-    const cover = coverUrl ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(coverUrl)}" alt="" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : "";
+    const cover = coverUrl ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" ${coverAttrs(coverUrl)} alt="" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.style.display='none'">` : "";
     return `<div class="feed-item">
       ${avatar}
       <div class="feed-body">
