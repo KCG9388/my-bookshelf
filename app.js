@@ -75,18 +75,6 @@ function hideLanding() { document.getElementById("landingView").style.display = 
 document.getElementById("authModal").addEventListener("click", e => {
   if (e.target.id === "authModal" && !currentUser) closeAuthModal();
 });
-// 試裝開關:網址加 ?hero=b / ?hero=c 換影片版本(挑片用,定案後移除)
-const heroPick = new URLSearchParams(location.search).get("hero");
-if (heroPick === "b" || heroPick === "c") {
-  const hv = document.querySelector(".ld-hero-bg");
-  hv.querySelector("source").src = `video/hero-loop-${heroPick}.mp4`;
-  hv.load();
-  if (heroPick === "b") {
-    // B 版整體偏亮,暗化加重以保文字對比
-    document.querySelector(".ld-hero-veil").style.background =
-      "linear-gradient(rgba(24,21,16,.55), rgba(24,21,16,.48) 55%, #221E17 100%)";
-  }
-}
 // 「看看怎麼運作」平滑捲到特色區
 document.getElementById("ldLearnBtn").addEventListener("click", () =>
   document.getElementById("ldFeatures").scrollIntoView({ behavior: "smooth" }));
@@ -181,11 +169,18 @@ function showApp() {
   document.getElementById("appHeader").style.display = "";
   document.getElementById("sidebar").style.display   = "";
   document.getElementById("appBody").style.display   = "";
+  setViewClass(currentView || "shelf");   // 進 app 立刻套分頁背景(書架=散物紙紋)
 }
 function hideApp() {
   document.getElementById("appHeader").style.display = "none";
   document.getElementById("sidebar").style.display   = "none";
   document.getElementById("appBody").style.display   = "none";
+  setViewClass(null);                     // 回登入/landing → 還原預設暖紙背景
+}
+// 分頁背景 class(view-shelf / view-explore / view-feed),CSS 依此切換背景圖
+function setViewClass(v) {
+  document.body.classList.remove("view-shelf", "view-explore", "view-feed");
+  if (v) document.body.classList.add("view-" + v);
 }
 function showAuthModal() { authModal.classList.add("open"); }
 function closeAuthModal() { authModal.classList.remove("open"); }
@@ -2063,6 +2058,7 @@ startImportBtn.addEventListener("click", async () => {
 // ── 頁面切換:我的書架 / 探索 ──
 function switchView(view) {
   currentView = view;
+  setViewClass(view);
   document.querySelectorAll(".nav-tab").forEach(t =>
     t.classList.toggle("active", t.dataset.view === view));
   document.querySelectorAll(".shelf-only").forEach(el =>
@@ -2353,6 +2349,7 @@ async function cleanupRatingNotesOnce(uid) {
 async function loadPublicShelf(uid) {
   // 直接切到探索容器(不走 switchView,避免它非同步載入 catalog 後覆蓋掉公開書架)
   currentView = "explore";
+  setViewClass("explore");
   document.querySelectorAll(".nav-tab").forEach(t => t.classList.toggle("active", t.dataset.view === "explore"));
   document.querySelectorAll(".shelf-only").forEach(el => el.style.display = "none");
   document.getElementById("sidebar").style.display = "none";
@@ -2492,16 +2489,37 @@ function renderCompatPanel(theirBooks, name) {
     ? `<div class="cp-row">💜 ${t("You both rated highly")}: <b>${r.bothLoved.map(escHtml).join("、")}</b></div>` : "";
   const clash = r.topClash
     ? `<div class="cp-row cp-clash">⚡ ${t("Taste clash")}: ${escHtml(r.topClash.title)} — ${t("them")} ${"★".repeat(r.topClash.theirs)} / ${t("you")} ${"★".repeat(r.topClash.mine)}</div>` : "";
-  panel.style.display = "block";
+  panel.style.display = "flex";
+  // 分級配色:>=55 苔綠 / 30~54 金 / <30 陶土(信任分數的視覺語意)
+  panel.classList.remove("cp-mid", "cp-lo");
+  if (pct < 30) panel.classList.add("cp-lo");
+  else if (pct < 55) panel.classList.add("cp-mid");
+  const CIRC = 326.7;   // 2πr, r=52(與 CSS stroke-dasharray 同步)
   panel.innerHTML = `
-    <div class="cp-head">
-      <span class="cp-title">${t("Reading compatibility with {name}", { name: escHtml(name) })}</span>
-      <span class="cp-pct">${pct}%</span>
+    <div class="cp-gauge">
+      <svg viewBox="0 0 120 120">
+        <circle class="cp-g-track" cx="60" cy="60" r="52"/>
+        <circle class="cp-g-fill" cx="60" cy="60" r="52" style="stroke-dashoffset:${(CIRC * (1 - pct / 100)).toFixed(1)}"/>
+      </svg>
+      <div class="cp-g-num">${pct}<span>%</span></div>
     </div>
-    <div class="cp-bar"><div class="cp-fill" style="width:${pct}%"></div></div>
-    <div class="cp-conf">${t("Confidence")}: ${conf}</div>
-    ${shared}${agree}${niche}${loved}${clash}
-    ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}`;
+    <div class="cp-main">
+      <div class="cp-head">
+        <span class="cp-title">${t("Reading compatibility with {name}", { name: escHtml(name) })}</span>
+        <span class="cp-conf-chip">${t("Confidence")}: ${conf}</span>
+      </div>
+      <div class="cp-facts">
+        ${shared}${agree}${niche}${loved}${clash}
+        ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}
+      </div>
+    </div>`;
+  // 圓環從 0 畫到目標值(先設滿 offset,下一幀換成目標讓 transition 生效)
+  const fillEl = panel.querySelector(".cp-g-fill");
+  if (fillEl) {
+    const target = fillEl.style.strokeDashoffset;
+    fillEl.style.strokeDashoffset = CIRC;
+    requestAnimationFrame(() => requestAnimationFrame(() => { fillEl.style.strokeDashoffset = target; }));
+  }
 }
 
 function renderPublicShelf(books) {
@@ -2687,7 +2705,7 @@ const DICT = {
   "No curators found": { "zh-TW": "找不到符合的書評人" }, "New reader": { "zh-TW": "新讀者" },
   "Load more": { "zh-TW": "載入更多" },
   // 登入
-  "Your personal reading tracker": { "zh-TW": "你的個人閱讀紀錄" },
+  "Find readers who read like you": { "zh-TW": "找到跟你閱讀同頻的人" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
   "Sign In": { "zh-TW": "登入" }, "Create Account": { "zh-TW": "建立帳號" },
   "Your name (e.g. Jane)": { "zh-TW": "你的名字(例:小明)" }, "Email address": { "zh-TW": "Email 地址" },
@@ -2890,6 +2908,7 @@ document.getElementById("publicFollowBtn").addEventListener("click", async () =>
 //  PHASE B-4b — 動態牆(全站事件流)
 // ══════════════════════════════════════════
 let feedCache = [];
+let feedCoverCache = {};   // bookKey -> 封面網址(""=查過但沒有,避免重複讀)
 
 // 寫一筆公開動態事件
 async function logActivity(type, book, extra) {
@@ -2942,6 +2961,19 @@ async function renderFeed() {
     list.innerHTML = `<div class="feed-empty">${t(feedSubtab === "following" ? "No activity from people you follow yet" : "No activity yet")}</div>`;
     return;
   }
+  // 舊事件沒存 bookCover → 從 catalog 補查封面(只讀不寫、結果快取、一輪最多 30 本)
+  const missingKeys = [...new Set(
+    items.filter(a => !a.bookCover && a.bookKey && feedCoverCache[a.bookKey] === undefined)
+         .map(a => a.bookKey)
+  )].slice(0, 30);
+  if (missingKeys.length) {
+    await Promise.all(missingKeys.map(async k => {
+      try {
+        const s = await db.collection("catalog").doc(k).get();
+        feedCoverCache[k] = (s.exists && s.data().cover) || "";
+      } catch (e) { feedCoverCache[k] = ""; }
+    }));
+  }
   list.innerHTML = items.map(a => {
     const initials = (a.displayName || "?").slice(0, 2).toUpperCase();
     const avatar = a.photoURL
@@ -2950,12 +2982,13 @@ async function renderFeed() {
     const nameHtml = `<span class="feed-name" data-uid="${escHtml(a.uid)}">${escHtml(a.displayName || "Reader")}</span>`;
     const bookHtml = `<span class="feed-book" data-key="${escHtml(a.bookKey)}">${escHtml(a.bookTitle || "")}</span>`;
     let line;
-    if (a.type === "review")        line = t("{name} reviewed {book}", { name: nameHtml, book: bookHtml }) + (a.rating ? ` <span style="color:#f0a500">${starsHTML(a.rating)}</span>` : "");
+    if (a.type === "review")        line = t("{name} reviewed {book}", { name: nameHtml, book: bookHtml }) + (a.rating ? ` <span style="color:var(--gold)">${starsHTML(a.rating)}</span>` : "");
     else if (a.type === "now_reading") line = t("{name} is now reading {book}", { name: nameHtml, book: bookHtml });
     else if (a.type === "finished")    line = t("{name} finished {book}", { name: nameHtml, book: bookHtml });
     else line = `${nameHtml} · ${bookHtml}`;
     const date  = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().toLocaleDateString() : "";
-    const cover = a.bookCover ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(a.bookCover)}" alt="" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : "";
+    const coverUrl = a.bookCover || feedCoverCache[a.bookKey] || "";
+    const cover = coverUrl ? `<img class="feed-cover" data-key="${escHtml(a.bookKey)}" src="${escHtml(coverUrl)}" alt="" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : "";
     return `<div class="feed-item">
       ${avatar}
       <div class="feed-body">
