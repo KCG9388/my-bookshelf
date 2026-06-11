@@ -538,6 +538,7 @@ function renderGrid() {
   if (books.length === 0) {
     bookGrid.innerHTML = `<div class="empty-state">No books found.</div>`;
     document.getElementById("pagination").style.display = "none";
+    updateFlipArrows(1);
     return;
   }
 
@@ -573,8 +574,15 @@ function renderGrid() {
   renderPagination(totalPages);
 }
 
+// ── 側邊翻頁鈕:有上/下一頁才顯示對應箭頭 ──
+function updateFlipArrows(totalPages) {
+  document.getElementById("flipPrevBtn").classList.toggle("show", currentPage > 1);
+  document.getElementById("flipNextBtn").classList.toggle("show", currentPage < totalPages);
+}
+
 function renderPagination(totalPages) {
   const pg = document.getElementById("pagination");
+  updateFlipArrows(totalPages);
   if (totalPages <= 1) { pg.style.display = "none"; return; }
   pg.style.display = "flex";
 
@@ -598,6 +606,28 @@ function goPage(p) {
   renderGrid();
   document.querySelector(".main").scrollTop = 0;
 }
+
+// ── 側邊翻頁:兩段式翻書動畫(舊頁掀走 → 換內容 → 新頁翻入),動畫中防連點 ──
+let flipBusy = false;
+function flipPage(dir) {
+  if (flipBusy) return;
+  const totalPages = Math.ceil(filterBooks().length / PAGE_SIZE);
+  const target = currentPage + dir;
+  if (target < 1 || target > totalPages) return;
+  flipBusy = true;
+  const outCls = dir > 0 ? "flip-out-next" : "flip-out-prev";
+  const inCls  = dir > 0 ? "flip-in-next"  : "flip-in-prev";
+  bookGrid.classList.add(outCls);
+  setTimeout(() => {
+    bookGrid.classList.remove(outCls);
+    goPage(target);
+    bookGrid.scrollTop = 0;
+    bookGrid.classList.add(inCls);
+    setTimeout(() => { bookGrid.classList.remove(inCls); flipBusy = false; }, 270);
+  }, 175);
+}
+document.getElementById("flipNextBtn").addEventListener("click", () => flipPage(1));
+document.getElementById("flipPrevBtn").addEventListener("click", () => flipPage(-1));
 
 function calcPct(current, total) {
   if (!total || total <= 0) return null;
@@ -1691,6 +1721,13 @@ document.getElementById("updatePageBtn").addEventListener("click", async () => {
   }
   await booksCol.doc(currentDetailId).update(updates);
   openDetail(currentDetailId);
+});
+
+// 進度輸入框按 Enter = 按下「更新」鈕
+["detailCurrentPage", "detailProgressPct"].forEach(id => {
+  document.getElementById(id).addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("updatePageBtn").click(); }
+  });
 });
 
 // 一鍵「已完成」:不必填到 100%,直接標讀完(會議結論)

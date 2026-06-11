@@ -361,6 +361,47 @@ body::after {
   flex-direction: column;
   overflow: hidden;
 }
+#shelfView { position: relative; perspective: 1400px; }
+
+/* ── 書架側邊翻頁鈕 + 翻書動畫 ── */
+.shelf-flip {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 68px;
+  border-radius: 12px;
+  border: 1px solid #E4DECC;
+  background: rgba(247, 244, 236, .92);
+  color: #5A7052;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(59, 55, 46, .14);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.shelf-flip:hover { background: #fff; color: #4A5E44; box-shadow: 0 4px 14px rgba(59, 55, 46, .2); }
+.shelf-flip.show { display: flex; }
+.flip-prev { left: 10px; }
+.flip-next { right: 10px; }
+
+/* 翻頁:舊頁朝書脊掀走 → 新頁從另一側翻進來(transform-origin 模擬書脊) */
+.book-grid.flip-out-next { animation: flipOutNext .18s ease-in forwards; transform-origin: left center; }
+.book-grid.flip-in-next  { animation: flipInNext  .26s ease-out;         transform-origin: left center; }
+.book-grid.flip-out-prev { animation: flipOutPrev .18s ease-in forwards; transform-origin: right center; }
+.book-grid.flip-in-prev  { animation: flipInPrev  .26s ease-out;         transform-origin: right center; }
+@keyframes flipOutNext { to   { opacity: 0; transform: translateX(-4%) rotateY(10deg); } }
+@keyframes flipInNext  { from { opacity: 0; transform: translateX(6%)  rotateY(-10deg); } to { opacity: 1; transform: none; } }
+@keyframes flipOutPrev { to   { opacity: 0; transform: translateX(4%)  rotateY(-10deg); } }
+@keyframes flipInPrev  { from { opacity: 0; transform: translateX(-6%) rotateY(10deg); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .book-grid.flip-out-next, .book-grid.flip-in-next,
+  .book-grid.flip-out-prev, .book-grid.flip-in-prev { animation: none; }
+}
 .filter-bar { flex-shrink: 0; }
 .pagination { flex-shrink: 0; }
 
