@@ -15,6 +15,8 @@ seed_niche.py
 MEETING_*.md
 MEETING_*_transcript.txt
 video/Cinematic_macro_video_of_an_op.mp4
+video/Cinematic_macro_video_filmed.mp4
 video/Animate_this_image*
+video/particle-ref-*
 video/chrome_*
 video/claude_*
