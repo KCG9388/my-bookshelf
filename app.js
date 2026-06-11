@@ -1088,12 +1088,12 @@ function tidyCover(u) {
   if (/books\.google/i.test(u)) u = u.replace(/([?&])edge=curl&?/i, "$1").replace(/[?&]$/, "");
   return u;
 }
-// 顯示用高解析版:Google Books zoom=1(~128px)→zoom=2、OpenLibrary -M→-L。
-// 不是每本都有高解析版 → 配 __coverFallback,載入失敗自動退回 tidy 原版。
+// 顯示用高解析版。⚠️ Google Books 不能升 zoom:沒有高解析版時它回 200 的
+// 「image not available」佔位圖(甚至內頁掃描)而非 404 → onerror 退回機制不會觸發,
+// 書架會掛滿佔位圖(2026-06-12 實爆過)。只升 OpenLibrary(-M→-L,加 default=false 讓缺圖回 404 走退回)。
 function hiCover(u) {
   const t = tidyCover(u);
-  if (/books\.google\.[^/]+\/books\/content/i.test(t)) return t.replace(/([?&])zoom=1(?=&|$)/i, "$1zoom=2");
-  if (/covers\.openlibrary\.org\/b\//i.test(t)) return t.replace(/-M\.jpg$/i, "-L.jpg");
+  if (/covers\.openlibrary\.org\/b\//i.test(t)) return t.replace(/-M\.jpg$/i, "-L.jpg?default=false");
   return t;
 }
 // img onerror 第一關:有 data-fb(高解析失敗的退路)就換上去,每張只退一次。
