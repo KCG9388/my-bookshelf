@@ -1449,6 +1449,31 @@ body::after {
 
 .import-body { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
 
+/* 來源分頁列 */
+.import-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #E4DECC;
+  padding-bottom: 0;
+}
+.import-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #8A8270;
+  cursor: pointer;
+}
+.import-tab:hover { color: #5A7052; }
+.import-tab.active {
+  color: #4A5E44;
+  background: #F3EFE2;
+  border-color: #E4DECC;
+}
+
 .import-instructions {
   background: #F3EFE2;
   border-radius: 8px;
@@ -1456,6 +1481,31 @@ body::after {
   font-size: 13.5px;
   line-height: 1.6;
 }
+
+/* 網頁匯入面板 */
+.import-web-pane { display: flex; flex-direction: column; gap: 10px; }
+.import-web-pane .web-row { display: flex; gap: 8px; }
+.import-web-pane input[type="url"] {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #DDD6C2;
+  border-radius: 9px;
+  font-size: 13.5px;
+  background: var(--paper-card);
+}
+.import-web-pane textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #DDD6C2;
+  border-radius: 9px;
+  font-size: 13px;
+  background: var(--paper-card);
+  resize: vertical;
+  font-family: inherit;
+}
+.import-web-pane .web-or { text-align: center; font-size: 12px; color: #8A8270; }
+.web-status { font-size: 12.5px; color: #6E6557; min-height: 1.4em; }
+.instruction-note a { color: #5A7052; font-weight: 600; }
 .instruction-title { font-weight: 700; margin-bottom: 8px; font-size: 14px; }
 .import-instructions ol { padding-left: 18px; margin: 0 0 10px; }
 .import-instructions li { margin-bottom: 4px; }

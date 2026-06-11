@@ -650,25 +650,69 @@
     </div>
 
     <div class="import-body">
-      <!-- 說明 -->
-      <div class="import-instructions">
-        <div class="instruction-title">📋 Export your library as a CSV file</div>
-        <ol data-i18n-html="import-steps">
-          <li><strong>Goodreads</strong>: My Books → <strong>Import and export</strong> → <strong>Export Library</strong>, then download the file</li>
-          <li><strong>Notion</strong>: open your book database → <strong>⋯</strong> → <strong>Export</strong> → Format <strong>CSV</strong></li>
-          <li>Upload the <code>.csv</code> below — the source is detected automatically</li>
+      <!-- 來源分頁 -->
+      <div class="import-tabs" id="importTabs">
+        <button class="import-tab active" data-src="goodreads">Goodreads</button>
+        <button class="import-tab" data-src="notion">Notion</button>
+        <button class="import-tab" data-src="generic">CSV / TXT</button>
+        <button class="import-tab" data-src="web">🌐 Web Page</button>
+      </div>
+
+      <!-- 各來源說明 -->
+      <div class="import-instructions import-src" data-pane="goodreads">
+        <ol data-i18n-html="import-steps-gr">
+          <li>Goodreads → <strong>My Books</strong> → <strong>Import and export</strong></li>
+          <li>Click <strong>Export Library</strong>, then download the CSV file</li>
+          <li>Upload the <code>.csv</code> below</li>
+        </ol>
+      </div>
+      <div class="import-instructions import-src" data-pane="notion" style="display:none">
+        <ol data-i18n-html="import-steps-notion">
+          <li>Open your book database in Notion → <strong>⋯</strong> → <strong>Export</strong> → Format <strong>CSV</strong></li>
+          <li>Upload the <code>.csv</code> below</li>
         </ol>
         <div class="instruction-note" data-i18n-html="import-cols">
-          ⚠️ Goodreads exports work as-is. Notion databases need these columns:<br/>
+          ⚠️ Your database needs these columns:<br/>
           <code>Title</code>, <code>Author</code>, <code>Status</code>, <code>Total Pages</code>, <code>Current Page</code>, <code>Genre</code>, <code>Date Finished</code>
         </div>
       </div>
+      <div class="import-instructions import-src" data-pane="generic" style="display:none">
+        <ol data-i18n-html="import-steps-generic">
+          <li>Any CSV or TXT (comma / tab separated) with at least a <code>Title</code> column works</li>
+          <li>Optional columns: Author, Status, Total Pages, Genre, Date Read, Rating, Shelves…</li>
+          <li>Using Excel? Save as <strong>CSV</strong> first (.xls is not supported directly)</li>
+        </ol>
+        <div class="instruction-note">
+          <a href="#" id="downloadSampleCsv">⬇ Download sample CSV template</a>
+        </div>
+      </div>
+      <div class="import-instructions import-src" data-pane="web" style="display:none">
+        <ol data-i18n-html="import-steps-web">
+          <li>Paste the URL of any public page that lists books with <strong>ISBNs</strong> (bookstore lists, wish lists…)</li>
+          <li>Page needs login? <strong>Copy the page content</strong> (Ctrl+A, Ctrl+C) and paste it in the box instead</li>
+          <li>We validate every ISBN and look up title / author / cover automatically — review before importing</li>
+        </ol>
+      </div>
 
-      <!-- 上傳區 -->
+      <!-- 上傳區(檔案類分頁共用)-->
       <div class="import-upload-area" id="importDropZone">
         <div class="upload-icon">📂</div>
         <div class="upload-text">Drag &amp; drop your CSV file here<br/><span>or click to browse</span></div>
-        <input type="file" id="importFileInput" accept=".csv" style="display:none" />
+        <input type="file" id="importFileInput" accept=".csv,.txt" style="display:none" />
+      </div>
+
+      <!-- 網頁匯入面板 -->
+      <div class="import-web-pane" id="importWebPane" style="display:none">
+        <div class="web-row">
+          <input type="url" id="webImportUrl" placeholder="https:// page URL with ISBNs" />
+          <button class="btn-save" id="webImportFetchBtn">Fetch</button>
+        </div>
+        <div class="web-or">— or —</div>
+        <textarea id="webImportText" rows="4" placeholder="Paste page content / any text containing ISBNs"></textarea>
+        <div class="web-row">
+          <button class="btn-save" id="webImportParseBtn">Find books in pasted text</button>
+        </div>
+        <div class="web-status" id="webImportStatus"></div>
       </div>
 
       <!-- 預覽 -->

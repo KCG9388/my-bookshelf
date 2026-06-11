@@ -1895,11 +1895,15 @@ function resetImport() {
   document.getElementById("importPreview").style.display  = "none";
   document.getElementById("importProgress").style.display = "none";
   document.getElementById("importDropZone").style.display = "";
-  importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">${t("Drag & drop your CSV file here")}<br/><span>${t("or click to browse")}</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
+  importDropZone.innerHTML = `<div class="upload-icon">📂</div><div class="upload-text">${t("Drag & drop your CSV file here")}<br/><span>${t("or click to browse")}</span></div><input type="file" id="importFileInput" accept=".csv,.txt" style="display:none" />`;
   bindFileInput();
   startImportBtn.disabled  = true;
-  startImportBtn.textContent = "Import Books";
+  startImportBtn.textContent = t("Import Books");
   startImportBtn.onclick = null;   // 清掉 Done 的臨時 handler，還原成預設匯入流程
+  // 網頁匯入面板歸零 + 依目前分頁恢復顯示狀態
+  const wu = document.getElementById("webImportUrl"), wt = document.getElementById("webImportText"), ws = document.getElementById("webImportStatus");
+  if (wu) wu.value = ""; if (wt) wt.value = ""; if (ws) ws.textContent = "";
+  updateImportTabUI();
 }
 
 function bindFileInput() {
@@ -1913,21 +1917,22 @@ function bindFileInput() {
 bindFileInput();
 
 function handleFile(file) {
-  if (!file || !file.name.endsWith(".csv")) { alert(t("Please upload a .csv file (Notion or Goodreads export).")); return; }
+  if (!file || !/\.(csv|txt)$/i.test(file.name)) { alert(t("Please upload a .csv or .txt file.")); return; }
   const reader = new FileReader();
   reader.onload = e => parseAnyCSV(e.target.result, file.name);
   reader.readAsText(file, "UTF-8");
 }
 
-// ── 來源嗅探:看標題列特徵自動分流(Goodreads 一定有 Book Id + Exclusive Shelf)──
+// ── 來源嗅探:看標題列特徵自動分流(Goodreads 一定有 Book Id + Exclusive Shelf;
+//    其他一律走通用解析器——Notion 匯出是它的子集,選錯分頁也能正確匯入)──
 function parseAnyCSV(text, filename) {
   const head = (text.split(/\r?\n/, 1)[0] || "").toLowerCase();
   if (head.includes("exclusive shelf") && head.includes("book id")) parseGoodreadsCSV(text, filename);
-  else parseNotionCSV(text, filename);
+  else parseFlexibleCSV(text, filename);
 }
 
-// ── Goodreads:整檔逐字元解析(My Review 欄位可含換行,逐行切會壞)──
-function parseCSVAll(text) {
+// ── 整檔逐字元解析(欄位可含換行的引號內容,逐行切會壞;delim 支援逗號/Tab)──
+function parseCSVAll(text, delim = ",") {
   const rows = []; let row = [], cur = "", inQ = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -1936,7 +1941,7 @@ function parseCSVAll(text) {
       else cur += ch;
     }
     else if (ch === '"') inQ = true;
-    else if (ch === ',') { row.push(cur); cur = ""; }
+    else if (ch === delim) { row.push(cur); cur = ""; }
     else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       row.push(cur); cur = "";
@@ -2010,61 +2015,76 @@ function parseGoodreadsCSV(text, filename) {
   showPreview(filename);
 }
 
-function parseNotionCSV(text, filename) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) { alert("CSV appears empty."); return; }
-  const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
+// ── 通用 CSV/TXT 解析器(Notion 匯出是子集;也吃 Goodreads 範例格式、中文標頭、Tab 分隔)──
+function parseFlexibleCSV(text, filename) {
+  const delim = (text.split(/\r?\n/, 1)[0] || "").includes("\t") ? "\t" : ",";
+  const rows  = parseCSVAll(text, delim);
+  if (rows.length < 2) { alert("CSV appears empty."); return; }
+  const headers = rows[0].map(h => h.trim().toLowerCase());
 
   const col = name => {
     const aliases = {
-      title:       ["title"],
-      author:      ["author", " author"],
-      genre:       ["genre"],
-      status:      ["status"],
-      currentpage: ["current page","currentpage","current_page"],
-      totalpages:  ["total pages","totalpages","total_pages"],
-      finishdate:  ["date finished","finish date","finishdate","date_finished"],
-      startdate:   ["date started","start date","startdate","date_started"],
-      rating:      ["rate","rating"],
+      title:       ["title", "書名"],
+      author:      ["author", "authors", "作者"],
+      genre:       ["genre", "category", "類型", "分類"],
+      status:      ["status", "exclusive shelf", "shelves", "shelf", "bookshelves", "狀態"],
+      currentpage: ["current page", "currentpage", "current_page", "目前頁數"],
+      totalpages:  ["total pages", "totalpages", "total_pages", "number of pages", "pages", "總頁數", "頁數"],
+      finishdate:  ["date finished", "finish date", "finishdate", "date_finished", "date read", "完成日期", "讀完日期"],
+      startdate:   ["date started", "start date", "startdate", "date_started", "開始日期"],
+      rating:      ["rate", "rating", "my rating", "評分"],
+      review:      ["my review", "review", "notes", "筆記", "心得"],
     };
-    const list = aliases[name] || [name];
-    for (const a of list) { const i = headers.indexOf(a); if (i !== -1) return i; }
+    for (const a of (aliases[name] || [name])) { const i = headers.indexOf(a); if (i !== -1) return i; }
     return -1;
   };
 
-  if (col("title") === -1) { alert("Could not find a 'Title' column."); return; }
+  if (col("title") === -1) { alert(t("Could not find a 'Title' column.")); return; }
 
   parsedBooks = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = parseCSVRow(lines[i]);
-    const get   = name => (cells[col(name)] || "").trim();
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const get = name => { const i = col(name); return i >= 0 && cells[i] != null ? String(cells[i]).trim() : ""; };
 
     const title = cleanNotionCell(get("title"));
     if (!title) continue;
 
     const finishDate = parseNotionDate(cleanNotionCell(get("finishdate")));
     const startDate  = parseNotionDate(cleanNotionCell(get("startdate")));
-    const finishYear = finishDate ? new Date(finishDate).getFullYear() : null;
-    const startYear  = startDate  ? new Date(startDate).getFullYear()  : null;
     const ratingRaw  = cleanNotionCell(get("rating"));
-    const stars      = (ratingRaw.match(/★/g) || []).length;
-    const notes      = stars > 0 ? `Rating: ${"★".repeat(stars)}${"☆".repeat(5-stars)}` : "";
+    const stars      = Math.min(5, (ratingRaw.match(/★/g) || []).length || Math.round(parseFloat(ratingRaw)) || 0);
+    const notes      = [stars > 0 ? `Rating: ${"★".repeat(stars)}${"☆".repeat(5 - stars)}` : "", get("review")]
+                         .filter(Boolean).join("\n");
+    const status     = normalizeShelfStatus(get("status"), !!finishDate || stars > 0);
+    const totalPages = parseInt(cleanNotionCell(get("totalpages"))) || 0;
+    let currentPage  = parseInt(cleanNotionCell(get("currentpage"))) || 0;
+    if (status === "Finished" && !currentPage) currentPage = totalPages;
 
     parsedBooks.push({
       title,
-      author:      cleanNotionCell(get("author")),
-      genre:       cleanNotionCell(get("genre")),
-      status:      cleanNotionCell(get("status")) || "Want to Read",
-      currentPage: parseInt(cleanNotionCell(get("currentpage"))) || 0,
-      totalPages:  parseInt(cleanNotionCell(get("totalpages"))) || 0,
+      author: cleanNotionCell(get("author")),
+      genre:  cleanNotionCell(get("genre")),
+      status, currentPage, totalPages,
       finishDate, startDate,
-      startYear:   startYear || finishYear || new Date().getFullYear(),
+      startYear: (startDate ? new Date(startDate).getFullYear() : null)
+              || (finishDate ? new Date(finishDate).getFullYear() : null)
+              || new Date().getFullYear(),
       cover: "", notes,
       userId:    currentUser?.uid || null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
   }
   showPreview(filename);
+}
+
+// 狀態正規化:吃各家寫法(中英、Goodreads shelf 清單);認不出來時看「有完成日/評分」推定
+function normalizeShelfStatus(raw, looksFinished) {
+  const v = (raw || "").toLowerCase();
+  if (/currently-reading|now reading|閱讀中|在讀/.test(v)) return "Now Reading";
+  if (/to-read|to read|want|wish|想讀|待讀/.test(v)) return "Want to Read";
+  if (/\bread\b|finished|done|已讀|讀完|完成/.test(v)) return "Finished";
+  if (/\breading\b/.test(v)) return "Now Reading";
+  return looksFinished ? "Finished" : "Want to Read";
 }
 
 function cleanNotionCell(str) {
@@ -2078,17 +2098,139 @@ function parseNotionDate(str) {
   // 用本地日期組字串;toISOString 是 UTC,在台灣(+8)會把日期倒退一天
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function parseCSVRow(line) {
-  const result = []; let cur = "", inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') { if (inQuote && line[i+1] === '"') { cur += '"'; i++; } else inQuote = !inQuote; }
-    else if (ch === ',' && !inQuote) { result.push(cur); cur = ""; }
-    else cur += ch;
+// ── 來源分頁:Goodreads / Notion / 通用 CSV / 網頁 ──
+let importSrc = "goodreads";
+function updateImportTabUI() {
+  document.querySelectorAll("#importTabs .import-tab").forEach(b =>
+    b.classList.toggle("active", b.dataset.src === importSrc));
+  document.querySelectorAll(".import-src").forEach(p =>
+    p.style.display = p.dataset.pane === importSrc ? "" : "none");
+  if (importPhase === "idle") {
+    const isWeb = importSrc === "web";
+    document.getElementById("importDropZone").style.display = isWeb ? "none" : "";
+    document.getElementById("importWebPane").style.display  = isWeb ? "" : "none";
   }
-  result.push(cur);
-  return result;
 }
+document.querySelectorAll("#importTabs .import-tab").forEach(b => {
+  b.addEventListener("click", () => {
+    if (importPhase !== "idle") return;   // 寫入中不准切
+    importSrc = b.dataset.src;
+    parsedBooks = [];                     // 切來源=重來,清掉已解析的預覽
+    document.getElementById("importPreview").style.display = "none";
+    startImportBtn.disabled = true;
+    updateImportTabUI();
+  });
+});
+
+// ── 範例 CSV 模板下載(通用分頁;BOM 讓 Excel 正確顯示中文)──
+document.getElementById("downloadSampleCsv").addEventListener("click", e => {
+  e.preventDefault();
+  const sample = [
+    "Title,Author,Status,Total Pages,Current Page,Genre,Date Finished,Rating",
+    "克拉拉與太陽,石黑一雄,Finished,352,352,Fiction,2026-01-15,4",
+    "Project Hail Mary,Andy Weir,Now Reading,476,120,Sci-Fi,,",
+    "範例:想讀的書,某作者,Want to Read,,,,,",
+  ].join("\r\n");
+  const blob = new Blob(["﻿" + sample], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "concento_import_sample.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// ══ 網頁匯入:貼網址(走 CORS 代理抓頁面)或直接貼內容 → 萃取 ISBN → Google Books 解書 ══
+// 比 Goodreads 強的點:登入牆內的頁面(自己的願望清單等)複製內容貼上就能解析,不要求頁面公開。
+function validISBN13(s) {
+  if (!/^\d{13}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 13; i++) sum += (+s[i]) * (i % 2 ? 3 : 1);
+  return sum % 10 === 0;
+}
+function validISBN10(s) {
+  if (!/^\d{9}[\dX]$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 10; i++) sum += (s[i] === "X" ? 10 : +s[i]) * (10 - i);
+  return sum % 11 === 0;
+}
+function isbn10to13(s) {
+  const core = "978" + s.slice(0, 9);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += (+core[i]) * (i % 2 ? 3 : 1);
+  return core + ((10 - sum % 10) % 10);
+}
+function extractISBNs(text) {
+  const out = new Set();
+  const re = /97[89][-\s]?(?:\d[-\s]?){9}\d|\b\d{9}[\dXx]\b/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const clean = m[0].replace(/[^0-9Xx]/g, "").toUpperCase();
+    if (clean.length === 13) { if (validISBN13(clean)) out.add(clean); }
+    else if (clean.length === 10 && validISBN10(clean)) {
+      // ISBN-10 誤判率高(任意 10 位數約 9% 會過檢查碼):附近要有 isbn 字樣或像書店商品網址才收
+      const ctx = text.slice(Math.max(0, m.index - 80), m.index + 90).toLowerCase();
+      if (/isbn|\/dp\/|\/gp\/product|book/.test(ctx)) out.add(isbn10to13(clean));
+    }
+  }
+  return [...out];
+}
+async function fetchPageForISBNs(url) {
+  const proxies = [   // 純前端抓跨站頁面必經代理;一個掛了換下一個
+    u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+    u => "https://r.jina.ai/" + u,
+  ];
+  for (const p of proxies) {
+    try {
+      const r = await fetch(p(url));
+      if (r.ok) { const t = await r.text(); if (t && t.length > 50) return t; }
+    } catch {}
+  }
+  return "";
+}
+async function runWebImport(rawText) {
+  const status = document.getElementById("webImportStatus");
+  const isbns  = extractISBNs(rawText).slice(0, 120);   // 安全上限
+  if (!isbns.length) { status.textContent = t("No valid ISBNs found on that page."); return; }
+  const books = [];
+  for (let i = 0; i < isbns.length; i++) {
+    status.textContent = t("Looking up {i} / {n}...", { i: i + 1, n: isbns.length });
+    try {
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbns[i]}&maxResults=1&key=${GBOOKS_KEY}`);
+      const v = (await res.json()).items?.[0]?.volumeInfo;
+      if (v && v.title) books.push({
+        title: v.title,
+        author: (v.authors || []).join(", "),
+        genre:  v.categories?.[0] || "",
+        status: "Want to Read", currentPage: 0,
+        totalPages: v.pageCount || 0,
+        finishDate: "", startDate: "",
+        startYear: new Date().getFullYear(),
+        cover: (v.imageLinks?.thumbnail || "").replace("http://", "https://"),
+        notes: "",
+        userId:    currentUser?.uid || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch {}
+    await new Promise(r => setTimeout(r, 150));
+  }
+  status.textContent = t("Found {n} ISBNs → resolved {m} books. Review below.", { n: isbns.length, m: books.length });
+  if (!books.length) return;
+  parsedBooks = books;
+  showPreview(t("Web page import"));
+}
+document.getElementById("webImportFetchBtn").addEventListener("click", async () => {
+  const url    = document.getElementById("webImportUrl").value.trim();
+  const status = document.getElementById("webImportStatus");
+  if (!/^https?:\/\//.test(url)) { status.textContent = t("Please enter a valid http(s) URL."); return; }
+  status.textContent = t("Fetching page...");
+  const text = await fetchPageForISBNs(url);
+  if (!text) { status.textContent = t("Could not fetch that page — paste its content below instead."); return; }
+  runWebImport(text);
+});
+document.getElementById("webImportParseBtn").addEventListener("click", () => {
+  const txt = document.getElementById("webImportText").value;
+  if (txt.trim()) runWebImport(txt);
+});
 
 function showPreview(filename) {
   importDropZone.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><div class="upload-filename">${filename}</div><span style="color:#6b6b68;text-decoration:none">${t("Click to change file")}</span></div><input type="file" id="importFileInput" accept=".csv" style="display:none" />`;
@@ -2836,8 +2978,22 @@ const DICT = {
   "Year": { "zh-TW": "年份" }, "All Years": { "zh-TW": "所有年份" },
   "Genre": { "zh-TW": "類型" }, "All Genres": { "zh-TW": "所有類型" },
   "+ New Book": { "zh-TW": "+ 新增書籍" },
-  "📋 Export your library as a CSV file": { "zh-TW": "📋 把你的書庫匯出成 CSV 檔" },
-  "Please upload a .csv file (Notion or Goodreads export).": { "zh-TW": "請上傳 .csv 檔(Notion 或 Goodreads 匯出)。" },
+  // 匯入中心
+  "🌐 Web Page": { "zh-TW": "🌐 網頁匯入" },
+  "⬇ Download sample CSV template": { "zh-TW": "⬇ 下載範例 CSV 模板" },
+  "Fetch": { "zh-TW": "抓取" },
+  "Find books in pasted text": { "zh-TW": "從貼上的內容找書" },
+  "Fetching page...": { "zh-TW": "抓取頁面中..." },
+  "Looking up {i} / {n}...": { "zh-TW": "查書中 {i} / {n}..." },
+  "No valid ISBNs found on that page.": { "zh-TW": "找不到有效的 ISBN。" },
+  "Found {n} ISBNs → resolved {m} books. Review below.": { "zh-TW": "找到 {n} 組 ISBN → 解析出 {m} 本書,請在下方確認。" },
+  "Please enter a valid http(s) URL.": { "zh-TW": "請輸入有效的 http(s) 網址。" },
+  "Could not fetch that page — paste its content below instead.": { "zh-TW": "抓不到這個頁面——改把頁面內容複製貼到下方吧。" },
+  "Web page import": { "zh-TW": "網頁匯入" },
+  "Could not find a 'Title' column.": { "zh-TW": "找不到「Title / 書名」欄位。" },
+  "Please upload a .csv or .txt file.": { "zh-TW": "請上傳 .csv 或 .txt 檔。" },
+  "https:// page URL with ISBNs": { "zh-TW": "https:// 含 ISBN 的頁面網址" },
+  "Paste page content / any text containing ISBNs": { "zh-TW": "貼上頁面內容/任何含 ISBN 的文字" },
   "⚙ Privacy": { "zh-TW": "⚙ 隱私設定" }, "Sign out": { "zh-TW": "登出" },
   // 篩選列
   "Sort by": { "zh-TW": "排序" },
@@ -3004,11 +3160,20 @@ const HTML_DICT = {
   "cover-screenshot-note": {
     "zh-TW": `瀏覽器會詢問要分享哪個視窗/畫面。<br/>截取後,拖曳框選你要當封面的區域。`
   },
-  "import-steps": {
-    "zh-TW": `<li><strong>Goodreads</strong>:My Books → <strong>Import and export</strong> → <strong>Export Library</strong>,下載檔案</li><li><strong>Notion</strong>:打開書籍資料庫 → <strong>⋯</strong> → <strong>Export</strong> → 格式選 <strong>CSV</strong></li><li>在下方上傳 <code>.csv</code> 檔——來源會自動辨識</li>`
+  "import-steps-gr": {
+    "zh-TW": `<li>Goodreads → <strong>My Books</strong> → <strong>Import and export</strong></li><li>點 <strong>Export Library</strong>,下載 CSV 檔</li><li>在下方上傳 <code>.csv</code> 檔</li>`
+  },
+  "import-steps-notion": {
+    "zh-TW": `<li>在 Notion 打開書籍資料庫 → <strong>⋯</strong> → <strong>Export</strong> → 格式選 <strong>CSV</strong></li><li>在下方上傳 <code>.csv</code> 檔</li>`
+  },
+  "import-steps-generic": {
+    "zh-TW": `<li>任何逗號或 Tab 分隔的 CSV / TXT,至少要有 <code>Title / 書名</code> 欄位</li><li>選填欄位:作者、狀態、總頁數、類型、讀完日期、評分、Shelves…(中英欄名都認得)</li><li>用 Excel 整理的話,先另存成 <strong>CSV</strong>(不直接支援 .xls)</li>`
+  },
+  "import-steps-web": {
+    "zh-TW": `<li>貼上任何<strong>公開</strong>書單頁面的網址(書店清單、願望清單…),頁面要含 <strong>ISBN</strong></li><li>頁面要登入才看得到?<strong>直接複製頁面內容</strong>(Ctrl+A、Ctrl+C)貼到下方文字框即可</li><li>每組 ISBN 都會驗證,並自動查書名/作者/封面——匯入前可先確認</li>`
   },
   "import-cols": {
-    "zh-TW": `⚠️ Goodreads 匯出檔可直接使用。Notion 資料庫必須包含這些欄位:<br/><code>Title</code>、<code>Author</code>、<code>Status</code>、<code>Total Pages</code>、<code>Current Page</code>、<code>Genre</code>、<code>Date Finished</code>`
+    "zh-TW": `⚠️ 你的資料庫必須包含這些欄位:<br/><code>Title</code>、<code>Author</code>、<code>Status</code>、<code>Total Pages</code>、<code>Current Page</code>、<code>Genre</code>、<code>Date Finished</code>`
   },
   "import-upload": {
     "zh-TW": `拖曳你的 CSV 檔到這裡<br/><span>或點擊瀏覽</span>`
