@@ -3046,13 +3046,13 @@ const DICT = {
   "Track your books, share reviews, and see how compatible another reader's taste is with yours — before you take their recommendations.": { "zh-TW": "建立自己的書架,用自己的標準評分;再讓書架與評分,帶你連結品味相近的讀者。" },
   "See how it works": { "zh-TW": "看看怎麼運作" },
   "How it works": { "zh-TW": "怎麼運作" },
-  "The trust score": { "zh-TW": "閱讀相容度" },
+  "The trust score": { "zh-TW": "閱讀相似度" },
   "One minute to set up. Free for readers.": { "zh-TW": "一分鐘完成設定,讀者免費使用。" },
   "Get started — free": { "zh-TW": "免費開始使用" },
   "Create a free account": { "zh-TW": "免費註冊帳號" },
   "Why Concento?": { "zh-TW": "為什麼選 Concento?" },
-  "Reading compatibility": { "zh-TW": "閱讀相容度" },
-  "A trust score between you and any reviewer — see how well their taste matches yours before following their picks.": { "zh-TW": "你和任何書評人之間都有一個相容度分數——先看品味合不合,再決定要不要參考他的書單。" },
+  "Reading compatibility": { "zh-TW": "閱讀相似度" },
+  "A trust score between you and any reviewer — see how well their taste matches yours before following their picks.": { "zh-TW": "你和任何書評人之間都有一個相似度分數——先看品味合不合,再決定要不要參考他的書單。" },
   "Your shelf": { "zh-TW": "你的書架" },
   "Track what you've read, are reading, and want to read — with progress, ratings, and yearly stats.": { "zh-TW": "記錄讀過、正在讀、想讀的每一本書,附進度、評分與年度統計。" },
   "Discover reviewers": { "zh-TW": "探索書評人" },
@@ -3060,7 +3060,7 @@ const DICT = {
   "Book clubs": { "zh-TW": "讀書會" },
   "Chapter-by-chapter discussions with spoiler protection, on every book.": { "zh-TW": "每本書都有分章節討論區,防爆雷設計,讀到哪聊到哪。" },
   "Know who to trust": { "zh-TW": "品味合不合,數字告訴你" },
-  "Concento compares shared books, genres, and ratings to show a compatibility score with any reader — recommendations finally come with context.": { "zh-TW": "Concento 比對你們的共同書目、類型與評分,算出你跟任何讀者的相容度——推薦終於有了脈絡。" },
+  "Concento compares shared books, genres, and ratings to show a compatibility score with any reader — recommendations finally come with context.": { "zh-TW": "Concento 比對你們的共同書目、類型與評分,算出你跟任何讀者的閱讀相似度——推薦終於有了脈絡。" },
   "Start building your shelf today": { "zh-TW": "今天就開始建立你的書架" },
   // 頁尾 / 法律頁
   "Privacy Policy": { "zh-TW": "隱私權政策" }, "Terms of Service": { "zh-TW": "服務條款" },
@@ -3102,12 +3102,12 @@ const DICT = {
   "Updating covers (keep this page open)": { "zh-TW": "更新封面中(請勿關閉此頁面)" },
   "✓ Finished updating covers!": { "zh-TW": "✓ 封面更新完成!" },
   // 閱讀相容度
-  "Reading compatibility with {name}": { "zh-TW": "與 {name} 的閱讀相容度" },
+  "Reading compatibility with {name}": { "zh-TW": "與 {name} 的閱讀相似度" },
   "Confidence": { "zh-TW": "信心" }, "High": { "zh-TW": "高" }, "Medium": { "zh-TW": "中" },
   "Low — for reference only": { "zh-TW": "低 — 僅供參考" },
   "You both read niche": { "zh-TW": "你們都讀過冷門的" },
   "{n} books in common": { "zh-TW": "共同讀過 {n} 本" },
-  "No overlap yet — taste match is based on genres only": { "zh-TW": "尚無共同書 — 相容度僅依類型推估" },
+  "No overlap yet — taste match is based on genres only": { "zh-TW": "尚無共同書 — 相似度僅依類型推估" },
   "Rating agreement": { "zh-TW": "評分一致度" }, "over {n} co-rated": { "zh-TW": "(共 {n} 本都評過)" },
   "You both rated highly": { "zh-TW": "你們都給高分" }, "Taste clash": { "zh-TW": "品味分歧" },
   "them": { "zh-TW": "他" }, "you": { "zh-TW": "你" },
@@ -3163,6 +3163,9 @@ const DICT = {
 const HTML_DICT = {
   "ld-headline": {
     "zh-TW": `找到跟你<em>閱讀同頻</em>的人`
+  },
+  "ld-compat-demo": {
+    "zh-TW": `<div class="cp-head"><span class="cp-title">與 阿哲 的閱讀相似度</span><span class="cp-conf-chip">信心:高</span></div><div class="cp-facts"><div class="cp-row">📚 共同讀過 12 本 — Circe、Project Hail Mary、Klara and the Sun…</div><div class="cp-row">🎯 評分一致度:<b>86%</b>(共 9 本都評過)</div><div class="cp-row">🔥 你們都讀過冷門的:<b>Piranesi</b></div></div>`
   },
   "cover-upload-browse": {
     "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#5A7052;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`
