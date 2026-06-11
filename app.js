@@ -535,7 +535,7 @@ function renderGrid() {
 
   if (books.length === 0) {
     bookGrid.innerHTML = `<div class="empty-state">No books found.</div>`;
-    updateFlipArrows();
+    updateShelfNav();
     return;
   }
 
@@ -564,49 +564,113 @@ function renderGrid() {
     card.addEventListener("click", () => openDetail(card.dataset.id));
   });
 
-  requestAnimationFrame(updateFlipArrows);
+  // 渲染完用真實卡片高度修正排數,再同步箭頭/頁碼
+  requestAnimationFrame(() => { applyShelfRows(); updateShelfNav(); });
 }
 
-// ══ 書架捲動引擎:整面連續捲動(像手機),滑鼠可直接拖曳 + 慣性滑行 ══
+// ══ 書架捲動引擎:桌面=橫向書牆(拖曳+慣性+箭頭+頁碼),手機=原生直向捲動 ══
+const SHELF_MOBILE = window.matchMedia("(max-width: 600px)");
+function shelfHorizontal() { return !SHELF_MOBILE.matches; }
 
-// 側邊箭頭:還能往上/往下捲才顯示
-function updateFlipArrows() {
-  const max = bookGrid.scrollHeight - bookGrid.clientHeight;
-  document.getElementById("flipPrevBtn").classList.toggle("show", bookGrid.scrollTop > 4);
-  document.getElementById("flipNextBtn").classList.toggle("show", bookGrid.scrollTop < max - 4);
-}
-bookGrid.addEventListener("scroll", updateFlipArrows, { passive: true });
-
-// 箭頭:平滑捲動一個畫面,並對齊整排(不會停在半張卡片)
-function scrollShelfPage(dir) {
+// 直欄排數:依可視高度塞得下幾排(桌面橫向用;手機排版交給 CSS)
+function applyShelfRows() {
+  if (!shelfHorizontal()) return;
+  const cs   = getComputedStyle(bookGrid);
+  const gap  = parseFloat(cs.rowGap) || 20;
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   const card = bookGrid.querySelector(".book-card");
-  const gap  = parseFloat(getComputedStyle(bookGrid).rowGap) || 20;
-  const rowH = card ? card.getBoundingClientRect().height + gap : bookGrid.clientHeight;
-  const rows = Math.max(1, Math.round(bookGrid.clientHeight / rowH));   // 取最接近一個畫面的整排數
-  const target = Math.max(0, Math.round((bookGrid.scrollTop + dir * rows * rowH) / rowH) * rowH);
-  bookGrid.scrollTo({ top: target, behavior: "smooth" });
+  const cardH = card ? card.getBoundingClientRect().height : getCardW() * 1.5 + 150;
+  const rows  = Math.max(1, Math.floor((bookGrid.clientHeight - padY + gap) / (cardH + gap)));
+  document.documentElement.style.setProperty("--shelf-rows", rows);
+}
+
+// 一欄寬 / 一頁寬(=最接近一個畫面的整欄數)
+function shelfColW() {
+  const card = bookGrid.querySelector(".book-card");
+  const gap  = parseFloat(getComputedStyle(bookGrid).columnGap) || 20;
+  return (card ? card.getBoundingClientRect().width : getCardW()) + gap;
+}
+function shelfPageW() {
+  // 欄數取捨去:一頁只算「完整看得到的欄」,翻頁才不會跳過半欄的書
+  const cw = shelfColW();
+  return Math.max(1, Math.floor(bookGrid.clientWidth / cw)) * cw;
+}
+
+// 側邊箭頭 + 頁碼列:跟著捲動位置同步;頁=一個畫面寬
+function updateShelfNav() {
+  const pg = document.getElementById("pagination");
+  const prevBtn = document.getElementById("flipPrevBtn");
+  const nextBtn = document.getElementById("flipNextBtn");
+  const max = bookGrid.scrollWidth - bookGrid.clientWidth;
+  if (!shelfHorizontal() || max <= 4) {
+    pg.style.display = "none";
+    prevBtn.classList.remove("show"); nextBtn.classList.remove("show");
+    return;
+  }
+  prevBtn.classList.toggle("show", bookGrid.scrollLeft > 4);
+  nextBtn.classList.toggle("show", bookGrid.scrollLeft < max - 4);
+
+  const pageW = shelfPageW();
+  const total = Math.max(1, Math.ceil(bookGrid.scrollWidth / pageW));
+  let cur = Math.round(bookGrid.scrollLeft / pageW) + 1;
+  if (bookGrid.scrollLeft >= max - 4) cur = total;   // 捲到底就算最後一頁
+  cur = Math.min(cur, total);
+  pg.style.display = "flex";
+  const key = total + ":" + cur;
+  if (pg.dataset.state === key) return;   // 頁數/所在頁沒變就不重建 DOM
+  pg.dataset.state = key;
+
+  const show   = new Set([1, total, cur, cur-1, cur+1, cur-2, cur+2].filter(p => p >= 1 && p <= total));
+  const sorted = [...show].sort((a, b) => a - b);
+  let html = `<button class="page-btn" ${cur===1?"disabled":""} onclick="goShelfPage(${cur-1})">‹</button>`;
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) html += `<span class="page-info">…</span>`;
+    html += `<button class="page-btn ${p===cur?"active":""}" onclick="goShelfPage(${p})">${p}</button>`;
+    prev = p;
+  }
+  html += `<button class="page-btn" ${cur===total?"disabled":""} onclick="goShelfPage(${cur+1})">›</button>`;
+  html += `<span class="page-info">${cur} / ${total}</span>`;
+  pg.innerHTML = html;
+}
+function goShelfPage(p) {
+  const max = bookGrid.scrollWidth - bookGrid.clientWidth;
+  bookGrid.scrollTo({ left: Math.max(0, Math.min(max, (p - 1) * shelfPageW())), behavior: "smooth" });
+}
+let shelfNavPending = false;
+bookGrid.addEventListener("scroll", () => {
+  if (shelfNavPending) return;
+  shelfNavPending = true;
+  requestAnimationFrame(() => { shelfNavPending = false; updateShelfNav(); });
+}, { passive: true });
+
+// 箭頭:平滑捲一個畫面,並對齊整欄(不會停在半張卡片)
+function scrollShelfPage(dir) {
+  const cw = shelfColW();
+  const target = Math.max(0, Math.round((bookGrid.scrollLeft + dir * shelfPageW()) / cw) * cw);
+  bookGrid.scrollTo({ left: target, behavior: "smooth" });
 }
 document.getElementById("flipNextBtn").addEventListener("click", () => scrollShelfPage(1));
 document.getElementById("flipPrevBtn").addEventListener("click", () => scrollShelfPage(-1));
 
-// 滑鼠拖曳捲動 + 放手慣性(觸控/觸控板用原生捲動,不攔截)
+// 滑鼠拖曳捲動 + 放手慣性(桌面橫向、手機直向;觸控由原生處理,不攔截)
 let shelfDrag = null, shelfMomentum = 0, suppressCardClick = false;
 function stopShelfMomentum() { cancelAnimationFrame(shelfMomentum); }
-bookGrid.addEventListener("wheel", stopShelfMomentum, { passive: true });
 bookGrid.addEventListener("pointerdown", e => {
   if (e.pointerType !== "mouse" || e.button !== 0) return;
   stopShelfMomentum();
-  shelfDrag = { lastY: e.clientY, lastT: performance.now(), moved: 0, v: 0 };
+  shelfDrag = { lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), moved: 0, v: 0 };
 });
 window.addEventListener("pointermove", e => {
   if (!shelfDrag) return;
+  const horiz = shelfHorizontal();
   const now = performance.now();
-  const dy  = e.clientY - shelfDrag.lastY;
+  const d   = horiz ? e.clientX - shelfDrag.lastX : e.clientY - shelfDrag.lastY;
   const dt  = Math.max(1, now - shelfDrag.lastT);
-  shelfDrag.v = 0.8 * shelfDrag.v + 0.2 * (dy / dt * 16);   // 平滑化的每幀速度
-  bookGrid.scrollTop -= dy;
-  shelfDrag.moved += Math.abs(dy);
-  shelfDrag.lastY = e.clientY; shelfDrag.lastT = now;
+  shelfDrag.v = 0.8 * shelfDrag.v + 0.2 * (d / dt * 16);   // 平滑化的每幀速度
+  if (horiz) bookGrid.scrollLeft -= d; else bookGrid.scrollTop -= d;
+  shelfDrag.moved += Math.abs(d);
+  shelfDrag.lastX = e.clientX; shelfDrag.lastY = e.clientY; shelfDrag.lastT = now;
   if (shelfDrag.moved > 5) { bookGrid.classList.add("dragging"); suppressCardClick = true; }
 });
 window.addEventListener("pointerup", () => {
@@ -616,18 +680,27 @@ window.addEventListener("pointerup", () => {
   bookGrid.classList.remove("dragging");
   setTimeout(() => { suppressCardClick = false; }, 50);   // 點擊事件在 pointerup 後同步發出,50ms 後保險歸位
   if (Math.abs(v) > 2) {                                  // 放手夠快才有慣性
-    let prevTop = -1;
+    const horiz = shelfHorizontal();
+    let prevPos = -1;
     const glide = () => {
-      bookGrid.scrollTop -= v;
+      if (horiz) bookGrid.scrollLeft -= v; else bookGrid.scrollTop -= v;
+      const pos = horiz ? bookGrid.scrollLeft : bookGrid.scrollTop;
       v *= 0.95;
-      if (Math.abs(v) > 0.4 && bookGrid.scrollTop !== prevTop) {
-        prevTop = bookGrid.scrollTop;
+      if (Math.abs(v) > 0.4 && pos !== prevPos) {
+        prevPos = pos;
         shelfMomentum = requestAnimationFrame(glide);
       }
     };
     shelfMomentum = requestAnimationFrame(glide);
   }
 });
+// 滾輪:桌面把直滾輪轉成橫向捲(書牆是橫的);觸控板橫滑原生就會動
+bookGrid.addEventListener("wheel", e => {
+  stopShelfMomentum();
+  if (!shelfHorizontal()) return;
+  const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+  if (Math.abs(dy) > Math.abs(e.deltaX)) { e.preventDefault(); bookGrid.scrollLeft += dy; }
+}, { passive: false });
 // 拖過的那一下放手不算點書(攔在捕獲階段,卡片 listener 收不到)
 bookGrid.addEventListener("click", e => {
   if (suppressCardClick) { e.stopPropagation(); e.preventDefault(); suppressCardClick = false; }
@@ -672,7 +745,7 @@ function rebuildSidebarFilters() {
 
 function setFilter(key, val) {
   currentFilter[key] = val;
-  bookGrid.scrollTop = 0;   // 換條件就捲回頂端
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
   updateActiveFilters();
 }
@@ -687,20 +760,20 @@ document.getElementById("statusFilter").querySelectorAll("li").forEach(li => {
 
 searchInput.addEventListener("input", e => {
   currentFilter.search = e.target.value.trim();
-  bookGrid.scrollTop = 0;   // 換條件就捲回頂端
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
 });
 
 // ── Filter Bar ──
 document.getElementById("sortSelect").addEventListener("change", e => {
   currentSort = e.target.value;
-  bookGrid.scrollTop = 0;   // 換條件就捲回頂端
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
 });
 
 document.getElementById("formatSelect").addEventListener("change", e => {
   currentFilter.format = e.target.value;
-  bookGrid.scrollTop = 0;   // 換條件就捲回頂端
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
   updateActiveFilters();
 });
@@ -711,7 +784,7 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   document.getElementById("formatSelect").value = "all";
   document.getElementById("sortSelect").value = "createdAt_desc";
   currentSort = "createdAt_desc";
-  bookGrid.scrollTop = 0;   // 換條件就捲回頂端
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   document.querySelectorAll("#statusFilter li").forEach(li => li.classList.remove("active"));
   document.querySelector("#statusFilter li[data-filter='all']").classList.add("active");
   document.getElementById("yearFilter").value  = "all";
@@ -741,9 +814,11 @@ function getCardW() {
   return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--card-w"), 10) || ZDEF;
 }
 
-// 書架改全量連續捲動後不再算「每頁塞幾本」;這裡只負責(初次/縮放/resize 後)重渲染
+// 初次/縮放/resize 後:先用估計值定排數再渲染(渲染完 renderGrid 會用真卡高修正)
 function refreshLayout() {
-  if (currentView === "shelf") renderGrid();
+  if (currentView !== "shelf") return;
+  applyShelfRows();
+  renderGrid();
 }
 
 // 只改卡片大小(便宜的 CSS 變更,拖曳時即時用)

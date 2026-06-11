@@ -402,11 +402,13 @@ body::after {
 .book-grid {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-x: auto;              /* 橫向書牆:左右捲動 */
+  overflow-y: hidden;
   padding: 18px 24px 28px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--card-w, 160px));
-  grid-auto-rows: max-content;   /* 列高=卡片內容高,避免被容器壓縮裁切 */
+  grid-auto-flow: column;        /* 直欄塞滿後往右長 */
+  grid-template-rows: repeat(var(--shelf-rows, 2), max-content);   /* 排數由 JS 依視窗高計算 */
+  grid-auto-columns: var(--card-w, 160px);
   gap: 20px;
   align-content: start;
   justify-content: start;
@@ -1498,6 +1500,31 @@ body::after {
 .progress-label { font-size: 13.5px; font-weight: 600; }
 .import-log { max-height: 120px; overflow-y: auto; font-size: 11.5px; font-family: monospace; background: #F3EFE2; border-radius: 6px; padding: 8px 10px; }
 
+/* ── Pagination(橫向捲動的導航捷徑:點頁碼=捲到該畫面)── */
+.pagination {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 24px 14px;
+}
+.page-btn {
+  padding: 5px 10px;
+  border: 1px solid #DBD3BE;
+  border-radius: 9px;
+  background: var(--paper-card);
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 32px;
+  text-align: center;
+  transition: background .12s, border-color .12s;
+}
+.page-btn:hover { background: var(--cream); border-color: #CCC2A8; }
+.page-btn.active { background: var(--bark); color: #F3EDE0; border-color: var(--bark); font-weight: 600; }
+.page-btn:disabled { opacity: .4; cursor: default; }
+.page-info { font-size: 12px; color: #8A8270; padding: 0 8px; }
+
 /* ── Cover Fetch Progress ── */
 .cover-fetch-toast {
   position: fixed;
@@ -1743,8 +1770,17 @@ body::after {
   .filter-list { flex-direction: row; flex-wrap: wrap; }
   .add-btn { margin-top: 0; }
   .main { overflow: auto; }
-  .book-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-  .shelf-flip { display: none !important; }   /* 手機用原生滑動,不放箭頭 */
+  /* 手機:回到直向捲動(符合手機習慣),原生觸控、不需箭頭與頁碼 */
+  .book-grid {
+    grid-auto-flow: row;
+    grid-template-rows: none;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-auto-rows: max-content;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .shelf-flip { display: none !important; }
+  .pagination { display: none !important; }
   .detail-body { flex-direction: column; padding: 20px 16px 14px; gap: 14px; }
   .detail-cover-col { width: auto; align-self: stretch; }
   .detail-cover-col img { width: 130px; height: 195px; margin: 0 auto; display: block; }
