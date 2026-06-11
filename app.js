@@ -1178,17 +1178,23 @@ document.getElementById("saveBook").addEventListener("click", async () => {
 //  DETAIL MODAL
 // ══════════════════════════════════════════
 
-// ── 簡介:渲染(折疊 + 顯示更多)──
-function renderDescription(text) {
+// ── 簡介:渲染(折疊 + 顯示更多;wiki 來源附出處連結)──
+function renderDescription(text, srcUrl) {
   const card = document.getElementById("detailDescCard");
   const p    = document.getElementById("detailDesc");
   const btn  = document.getElementById("descMoreBtn");
+  const src  = document.getElementById("descSrc");
   const txt  = (text || "").trim();
   card.style.display = txt ? "" : "none";
   p.classList.remove("expanded");
   p.textContent = txt;
   btn.textContent = t("Read more");
   btn.style.display = "none";
+  if (src) {
+    src.style.display = txt && srcUrl ? "" : "none";
+    src.href = srcUrl || "#";
+    src.textContent = t("Source: Wikipedia (CC BY-SA)");
+  }
   if (!txt) return;
   // 等版面排好才量得到高度 → 折疊後有溢出才需要「顯示更多」鈕
   requestAnimationFrame(() => {
@@ -1203,17 +1209,45 @@ document.getElementById("descMoreBtn").addEventListener("click", () => {
   btn.textContent = open ? t("Show less") : t("Read more");
 });
 
-// ── 簡介:載入。優先用手上資料 → 讀 catalog → 都沒有就查 Google Books 並寫回 catalog 快取
+// ── 簡介:Google Books 沒料時的第二資料源 → 中文維基百科(中文書常只有 wiki 有簡介)
+//   一次請求同時做「搜尋 + 取首段摘要」,再用基底書名比對挑對條目:
+//   排除作者頁、電影/電視/遊戲等改編作品條目,避免抓到同名不同物
+async function fetchWikiDesc(title, author) {
+  try {
+    const auth = (author || "").split(",")[0].trim();
+    const q = encodeURIComponent(title + (auth ? " " + auth : ""));
+    const url = `https://zh.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${q}&gsrlimit=5&prop=extracts&exintro=1&explaintext=1&exlimit=max&variant=zh-tw&format=json&origin=*`;
+    const data  = await (await fetch(url)).json();
+    const pages = Object.values(data.query?.pages || {}).sort((a, b) => (a.index || 99) - (b.index || 99));
+    const norm  = s => (s || "").replace(/\s+/g, "").toLowerCase();
+    const bookT = norm(title);
+    for (const pg of pages) {
+      const base   = norm(pg.title.replace(/\s*\(([^)]*)\)\s*$/, ""));
+      const suffix = (pg.title.match(/\(([^)]*)\)\s*$/) || [])[1] || "";
+      if (!base || norm(pg.title) === norm(auth)) continue;                       // 作者本人的條目
+      if (!(bookT.includes(base) || base.includes(bookT))) continue;             // 書名對不上(含副標情況)
+      if (/電影|电影|電視|电视|遊戲|游戏|動畫|动画|專輯|专辑|歌曲|樂團|乐团/.test(suffix)) continue; // 改編/同名作品
+      const ex = cleanDesc(pg.extract || "");
+      if (ex) return { text: ex, url: "https://zh.wikipedia.org/wiki/" + encodeURIComponent(pg.title) };
+    }
+  } catch {}
+  return null;
+}
+
+// ── 簡介:載入。優先用手上資料 → 讀 catalog → Google Books → 中文維基,查到就寫回 catalog 快取
 //   (第一個點開的人觸發補抓,之後全站直接讀;與封面/catalog 自我修復同套路)
 let descReqKey = null;   // 防止快速連點兩本書時,慢的那筆回來蓋掉新的
-async function loadDescription(key, title, author, preset) {
+async function loadDescription(key, title, author, preset, presetUrl) {
   descReqKey = key;
-  if (preset && preset.trim()) { renderDescription(preset); return; }
+  if (preset && preset.trim()) { renderDescription(preset, presetUrl); return; }
   renderDescription("");
-  let desc = "";
+  let desc = "", srcUrl = "";
   try {
     const snap = await db.collection("catalog").doc(key).get();
-    if (snap.exists) desc = cleanDesc(snap.data().description || "");
+    if (snap.exists) {
+      desc   = cleanDesc(snap.data().description || "");
+      srcUrl = desc ? (snap.data().descUrl || "") : "";
+    }
   } catch {}
   if (!desc && title) {
     try {
@@ -1221,12 +1255,18 @@ async function loadDescription(key, title, author, preset) {
       const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
       const data = await res.json();
       desc = cleanDesc(data.items?.[0]?.volumeInfo?.description || "");
-      if (desc && currentUser) {
-        db.collection("catalog").doc(key).set({ description: desc }, { merge: true }).catch(() => {});
-      }
     } catch {}
+    if (!desc) {
+      const wiki = await fetchWikiDesc(title, author);
+      if (wiki) { desc = wiki.text; srcUrl = wiki.url; }
+    }
+    if (desc && currentUser) {
+      const patch = { description: desc };
+      if (srcUrl) { patch.descSource = "wikipedia"; patch.descUrl = srcUrl; }
+      db.collection("catalog").doc(key).set(patch, { merge: true }).catch(() => {});
+    }
   }
-  if (descReqKey === key) renderDescription(desc);
+  if (descReqKey === key) renderDescription(desc, srcUrl);
 }
 
 // ── 手機版分頁籤:評論 / 讀書會 切換(桌面雙欄並排,籤列隱藏)──
@@ -2262,7 +2302,7 @@ function openCatalogDetail(c) {
 
   detailModal.classList.add("open");
   setSocialTab(false);
-  loadDescription(c.key, c.title || "", c.author || "", c.description || "");
+  loadDescription(c.key, c.title || "", c.author || "", c.description || "", c.descUrl || "");
   loadReviews(c.key);
   loadDiscussion(c.key);
 }
@@ -2655,6 +2695,7 @@ const DICT = {
   // 詳情 / 評論
   "About this book": { "zh-TW": "簡介" },
   "Read more": { "zh-TW": "顯示更多" }, "Show less": { "zh-TW": "收合" },
+  "Source: Wikipedia (CC BY-SA)": { "zh-TW": "資料來源:維基百科(CC BY-SA)" },
   "Reviews": { "zh-TW": "評論" }, "Book Club": { "zh-TW": "讀書會" },
   "Book Detail": { "zh-TW": "書籍詳情" }, "Progress": { "zh-TW": "進度" },
   "Update current page:": { "zh-TW": "更新目前頁數:" }, "Update": { "zh-TW": "更新" },

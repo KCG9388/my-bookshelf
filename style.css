@@ -1016,6 +1016,14 @@ body::after {
   padding: 6px 0 0;
 }
 .desc-more:hover { text-decoration: underline; }
+.desc-src {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8A8270;
+  text-decoration: none;
+}
+.desc-src:hover { text-decoration: underline; color: #5A7052; }
 
 /* 評論 / 讀書會:桌面與手機同款「分頁籤兩頁式」切換。
    class 避開 "social" 字眼:會被廣告攔截器的社群過濾清單隱藏 */
