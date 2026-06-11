@@ -536,9 +536,9 @@ body::after {
   margin-top: 2px;
   width: fit-content;
 }
-.status-Now\ Reading  { background: #D8E5D0; color: #3F6B4F; }
+.status-Now\ Reading, .status-Now.Reading  { background: #D8E5D0; color: #3F6B4F; }
 .status-TBR           { background: #fdefd3; color: #b85c00; }
-.status-Want\ to\ Read{ background: #E9E4D3; color: #5A7052; }
+.status-Want\ to\ Read, .status-Want.to.Read { background: #E9E4D3; color: #5A7052; }
 .status-Finished      { background: #DCE8D2; color: #53704D; }
 .status-DNF           { background: #fde8e8; color: #c0392b; }
 
@@ -2292,7 +2292,7 @@ body::after {
   background: var(--paper-card, #fff);
   border: 1px solid #EAE3D2; border-radius: 16px;
   display: flex; flex-direction: column; gap: 7px;
-  height: fit-content;
+  align-self: stretch;                 /* 跟書牆等高,按鈕才推得到底 */
 }
 .ldm-logo { font-family: var(--serif, serif); font-style: italic; font-size: 21px; font-weight: 700; color: #3B372E; margin: 0 2px 8px; }
 .ldm-group { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #8A8270; padding: 0 4px; }
@@ -2300,11 +2300,18 @@ body::after {
 .ldm-pill img { width: 16px; height: 16px; object-fit: contain; }
 .ldm-pill.active { background: #EDE9DA; font-weight: 600; color: #3B372E; }
 .ldm-side-btn {
-  margin-top: 12px; background: #5A7052; color: #F3EDE0;
+  margin-top: auto; background: #5A7052; color: #F3EDE0;   /* auto=貼到側欄底部 */
   text-align: center; font-size: 12.5px; font-weight: 600;
   padding: 8px 10px; border-radius: 10px;
 }
 .ldm-side-btn-alt { margin-top: 0; background: #A98B6B; }
+.ldm-gap { margin-top: 5px; }
+.ldm-select {
+  display: flex; justify-content: space-between; align-items: center;
+  border: 1px solid #E4DECC; border-radius: 9px;
+  padding: 7px 10px; font-size: 12px; color: #5C5546;
+  background: var(--paper-card, #fff);
+}
 .ldm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ldm-top { display: flex; align-items: center; gap: 10px; padding: 16px 18px 6px; }
 .ldm-tab { font-size: 12.5px; font-weight: 600; color: #6E6557; padding: 6px 13px; border-radius: 9px; }
