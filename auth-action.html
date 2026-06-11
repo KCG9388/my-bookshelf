@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Concento</title>
+<link rel="icon" type="image/png" href="assets/icons/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2C271F; --ink-soft: #5C5546; --ink-faint: #8A8270;
+    --paper-card: #FFFDF8; --cream: #F7F4EC; --line: #E4DECC;
+    --moss: #5A7052; --moss-deep: #46523F;
+    --wood: #A98B6B; --clay: #B5654A;
+    --serif: "Fraunces", "Noto Serif TC", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--cream); color: var(--ink); padding: 20px;
+    font-family: "Noto Sans TC", system-ui, sans-serif;
+  }
+  .card {
+    width: 100%; max-width: 420px; background: var(--paper-card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 36px 32px;
+    box-shadow: 0 1px 2px rgba(44,39,31,.05), 0 8px 24px rgba(44,39,31,.10);
+    text-align: center;
+  }
+  .logo { font-family: var(--serif); font-weight: 700; font-size: 1.35rem; letter-spacing: .04em; color: var(--moss-deep); margin-bottom: 22px; }
+  .icon { font-size: 2.2rem; margin-bottom: 12px; }
+  h1 { font-family: var(--serif); font-size: 1.25rem; margin-bottom: 10px; }
+  p { color: var(--ink-soft); font-size: .92rem; line-height: 1.65; }
+  .hint { color: var(--ink-faint); font-size: .8rem; margin-top: 14px; }
+  .err { color: var(--clay); }
+  form { text-align: left; margin-top: 18px; }
+  label { display: block; font-size: .82rem; color: var(--ink-soft); margin: 14px 0 5px; }
+  input[type=password] {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; font-size: 1rem; color: var(--ink);
+  }
+  input[type=password]:focus { outline: 2px solid var(--moss); outline-offset: 0; border-color: var(--moss); }
+  button, .btn {
+    display: inline-block; width: 100%; margin-top: 20px; padding: 11px 16px;
+    background: var(--moss); color: #fff; border: none; border-radius: 10px;
+    font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center;
+    font-family: inherit;
+  }
+  button:hover, .btn:hover { background: var(--moss-deep); }
+  button:disabled { opacity: .55; cursor: default; }
+  .spinner {
+    width: 26px; height: 26px; margin: 8px auto 14px; border-radius: 50%;
+    border: 3px solid var(--line); border-top-color: var(--moss);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Concento</div>
+  <div id="stage"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+const ZH = navigator.language.toLowerCase().startsWith("zh");
+const T = ZH ? {
+  checking: "處理中…",
+  badLink: "連結無效或已過期",
+  badLinkHint: "請回到 Concento 重新申請一次。",
+  backHome: "前往 Concento",
+  verified: "信箱驗證完成!",
+  verifiedHint: "你的帳號已啟用,歡迎開始建立書架。",
+  resetTitle: "重設密碼",
+  resetFor: "帳號:",
+  newPw: "新密碼(至少 6 個字元)",
+  confirmPw: "再輸入一次新密碼",
+  submit: "確認重設",
+  pwShort: "密碼至少需要 6 個字元",
+  pwMismatch: "兩次輸入的密碼不一致",
+  pwWeak: "密碼強度不足,請換一組",
+  resetDone: "密碼已更新!",
+  resetDoneHint: "請用新密碼重新登入。",
+  recovered: "已復原你的登入信箱",
+  recoveredHint: "如果這不是你本人操作,建議立即重設密碼。",
+} : {
+  checking: "Processing…",
+  badLink: "This link is invalid or has expired",
+  badLinkHint: "Please go back to Concento and request a new one.",
+  backHome: "Go to Concento",
+  verified: "Email verified!",
+  verifiedHint: "Your account is ready — start building your shelf.",
+  resetTitle: "Reset your password",
+  resetFor: "Account: ",
+  newPw: "New password (at least 6 characters)",
+  confirmPw: "Repeat new password",
+  submit: "Reset password",
+  pwShort: "Password must be at least 6 characters",
+  pwMismatch: "Passwords do not match",
+  pwWeak: "Password is too weak, try another one",
+  resetDone: "Password updated!",
+  resetDoneHint: "Sign in again with your new password.",
+  recovered: "Your sign-in email has been restored",
+  recoveredHint: "If this wasn't you, reset your password right away.",
+};
+
+const stage = document.getElementById("stage");
+const params = new URLSearchParams(location.search);
+const mode = params.get("mode");
+const oobCode = params.get("oobCode");
+const HOME = "https://concento.io/";
+
+function show(html) { stage.innerHTML = html; }
+function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+function loading() { show(`<div class="spinner"></div><p>${T.checking}</p>`); }
+function fail() {
+  show(`<div class="icon">⚠️</div><h1 class="err">${T.badLink}</h1><p>${T.badLinkHint}</p><a class="btn" href="${HOME}">${T.backHome}</a>`);
+}
+function done(title, hint) {
+  show(`<div class="icon">✅</div><h1>${title}</h1><p>${hint}</p><a class="btn" href="${HOME}">${T.backHome}</a>`);
+}
+
+function showResetForm(email) {
+  show(`
+    <div class="icon">🔑</div><h1>${T.resetTitle}</h1>
+    <p>${T.resetFor}<strong>${esc(email)}</strong></p>
+    <form id="pwForm">
+      <label for="pw1">${T.newPw}</label>
+      <input type="password" id="pw1" autocomplete="new-password" required>
+      <label for="pw2">${T.confirmPw}</label>
+      <input type="password" id="pw2" autocomplete="new-password" required>
+      <button type="submit" id="pwBtn">${T.submit}</button>
+    </form>
+    <p class="hint err" id="pwErr"></p>
+  `);
+  document.getElementById("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw1 = document.getElementById("pw1").value;
+    const pw2 = document.getElementById("pw2").value;
+    const err = document.getElementById("pwErr");
+    err.textContent = "";
+    if (pw1.length < 6) { err.textContent = T.pwShort; return; }
+    if (pw1 !== pw2) { err.textContent = T.pwMismatch; return; }
+    const btn = document.getElementById("pwBtn");
+    btn.disabled = true;
+    try {
+      await auth.confirmPasswordReset(oobCode, pw1);
+      done(T.resetDone, T.resetDoneHint);
+    } catch (ex) {
+      btn.disabled = false;
+      err.textContent = ex.code === "auth/weak-password" ? T.pwWeak : T.badLink;
+    }
+  });
+}
+
+(async () => {
+  if (!mode || !oobCode) { fail(); return; }
+  loading();
+  try {
+    if (mode === "resetPassword") {
+      const email = await auth.verifyPasswordResetCode(oobCode);
+      showResetForm(email);
+    } else if (mode === "recoverEmail") {
+      await auth.applyActionCode(oobCode);
+      done(T.recovered, T.recoveredHint);
+    } else {
+      // verifyEmail / verifyAndChangeEmail 都走 applyActionCode
+      await auth.applyActionCode(oobCode);
+      done(T.verified, T.verifiedHint);
+    }
+  } catch (ex) {
+    fail();
+  }
+})();
+</script>
+</body>
+</html>
