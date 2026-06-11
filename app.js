@@ -598,24 +598,31 @@ function shelfPageW() {
 
 // 側邊箭頭 + 頁碼列:跟著捲動位置同步;頁=一個畫面寬
 function updateShelfNav() {
-  const pg = document.getElementById("pagination");
+  const pg  = document.getElementById("pagination");
+  const bar = document.getElementById("shelfBottomBar");
   const prevBtn = document.getElementById("flipPrevBtn");
   const nextBtn = document.getElementById("flipNextBtn");
   const max = bookGrid.scrollWidth - bookGrid.clientWidth;
   if (!shelfHorizontal() || max <= 4) {
-    pg.style.display = "none";
+    bar.style.display = "none";
     prevBtn.classList.remove("show"); nextBtn.classList.remove("show");
     return;
   }
   prevBtn.classList.toggle("show", bookGrid.scrollLeft > 4);
   nextBtn.classList.toggle("show", bookGrid.scrollLeft < max - 4);
+  bar.style.display = "flex";
+
+  // 迷你指示條:寬=可視比例(下限 8% 免得細到看不見),位置=捲動進度
+  const thumb = document.getElementById("scrollIndThumb");
+  const frac  = Math.max(0.08, bookGrid.clientWidth / bookGrid.scrollWidth);
+  thumb.style.width = (frac * 100) + "%";
+  thumb.style.left  = (bookGrid.scrollLeft / max) * (1 - frac) * 100 + "%";
 
   const pageW = shelfPageW();
   const total = Math.max(1, Math.ceil(bookGrid.scrollWidth / pageW));
   let cur = Math.round(bookGrid.scrollLeft / pageW) + 1;
   if (bookGrid.scrollLeft >= max - 4) cur = total;   // 捲到底就算最後一頁
   cur = Math.min(cur, total);
-  pg.style.display = "flex";
   const key = total + ":" + cur;
   if (pg.dataset.state === key) return;   // 頁數/所在頁沒變就不重建 DOM
   pg.dataset.state = key;

@@ -404,7 +404,7 @@ body::after {
   min-height: 0;
   overflow-x: auto;              /* 橫向書牆:左右捲動 */
   overflow-y: hidden;
-  padding: 18px 24px 28px;
+  padding: 14px 24px 14px;
   display: grid;
   grid-auto-flow: column;        /* 直欄塞滿後往右長 */
   grid-template-rows: repeat(var(--shelf-rows, 2), max-content);   /* 排數由 JS 依視窗高計算 */
@@ -412,7 +412,9 @@ body::after {
   gap: 20px;
   align-content: start;
   justify-content: start;
+  scrollbar-width: none;         /* 原生捲動條吃高度,藏掉(位置改看頁碼旁迷你指示條) */
 }
+.book-grid::-webkit-scrollbar { display: none; }
 
 /* 空狀態/載入:襯線斜體,有「書頁註記」感,不再是死灰小字 */
 .loading, .empty-state, .feed-empty, .reviews-empty, .discussion-empty {
@@ -1500,14 +1502,30 @@ body::after {
 .progress-label { font-size: 13.5px; font-weight: 600; }
 .import-log { max-height: 120px; overflow-y: auto; font-size: 11.5px; font-family: monospace; background: #F3EFE2; border-radius: 6px; padding: 8px 10px; }
 
-/* ── Pagination(橫向捲動的導航捷徑:點頁碼=捲到該畫面)── */
-.pagination {
+/* ── 底部導航列:頁碼 + 迷你捲動指示條 ── */
+.shelf-bottombar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px 24px 14px;
+  gap: 16px;
+  padding: 6px 24px 10px;
+}
+.pagination { display: flex; align-items: center; gap: 6px; }
+.scroll-ind {
+  width: 110px;
+  height: 5px;
+  border-radius: 3px;
+  background: #E4DECC;
+  position: relative;
+  overflow: hidden;
+}
+.scroll-ind-thumb {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 30%;
+  border-radius: 3px;
+  background: #A98B6B;
 }
 .page-btn {
   padding: 5px 10px;
@@ -1780,7 +1798,7 @@ body::after {
     overflow-y: auto;
   }
   .shelf-flip { display: none !important; }
-  .pagination { display: none !important; }
+  .shelf-bottombar { display: none !important; }
   .detail-body { flex-direction: column; padding: 20px 16px 14px; gap: 14px; }
   .detail-cover-col { width: auto; align-self: stretch; }
   .detail-cover-col img { width: 130px; height: 195px; margin: 0 auto; display: block; }
