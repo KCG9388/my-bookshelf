@@ -573,15 +573,31 @@ const SHELF_MOBILE = window.matchMedia("(max-width: 600px)");
 function shelfHorizontal() { return !SHELF_MOBILE.matches; }
 
 // 直欄排數:依可視高度塞得下幾排(桌面橫向用;手機排版交給 CSS)
+// 微縮救排:只差一點點就能塞兩排時(縮 ≤15% 且不低於 ZMIN),自動微縮封面把第二排救回來
+// (1080p 實測差距常只有幾 px,排數對瀏覽體驗的影響遠大於封面差幾 px)
 function applyShelfRows() {
-  if (!shelfHorizontal()) return;
+  const root = document.documentElement.style;
+  const base = getCardW();
+  if (!shelfHorizontal()) { root.setProperty("--card-w-fit", base + "px"); return; }
   const cs   = getComputedStyle(bookGrid);
   const gap  = parseFloat(cs.rowGap) || 20;
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-  const card = bookGrid.querySelector(".book-card");
-  const cardH = card ? card.getBoundingClientRect().height : getCardW() * 1.5 + 150;
-  const rows  = Math.max(1, Math.floor((bookGrid.clientHeight - padY + gap) / (cardH + gap)));
-  document.documentElement.style.setProperty("--shelf-rows", rows);
+  const innerH = bookGrid.clientHeight - padY;
+  // 卡高 = 封面(寬×1.5)+ 資訊區(固定高,量測)+ 邊框等雜項
+  const info  = bookGrid.querySelector(".book-info");
+  const infoH = info ? info.getBoundingClientRect().height : 150;
+  const card  = bookGrid.querySelector(".book-card");
+  const extra = card ? Math.max(0, card.getBoundingClientRect().height - card.getBoundingClientRect().width * 1.5 - infoH) : 2;
+  const cardH = w => w * 1.5 + infoH + extra;
+  let rows  = Math.max(1, Math.floor((innerH + gap) / (cardH(base) + gap)));
+  let dispW = base;
+  if (rows === 1) {
+    const maxH = (innerH + gap) / 2 - gap;                       // 塞兩排時一張卡的高度上限
+    const wFit = Math.floor((maxH - infoH - extra) / 1.5);
+    if (wFit >= Math.max(ZMIN, Math.round(base * 0.85))) { rows = 2; dispW = wFit; }
+  }
+  root.setProperty("--shelf-rows", rows);
+  root.setProperty("--card-w-fit", dispW + "px");
 }
 
 // 一欄寬 / 一頁寬(=最接近一個畫面的整欄數)

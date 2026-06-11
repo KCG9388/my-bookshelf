@@ -404,11 +404,11 @@ body::after {
   min-height: 0;
   overflow-x: auto;              /* 橫向書牆:左右捲動 */
   overflow-y: hidden;
-  padding: 14px 24px 14px;
+  padding: 12px 24px 10px;
   display: grid;
   grid-auto-flow: column;        /* 直欄塞滿後往右長 */
   grid-template-rows: repeat(var(--shelf-rows, 2), max-content);   /* 排數由 JS 依視窗高計算 */
-  grid-auto-columns: var(--card-w, 160px);
+  grid-auto-columns: var(--card-w-fit, var(--card-w, 160px));      /* fit=微縮救排後的實際寬 */
   gap: 20px;
   align-content: start;
   justify-content: start;
@@ -443,7 +443,7 @@ body::after {
 
 .book-cover {
   width: 100%;
-  height: calc(var(--card-w, 160px) * 1.5);   /* 跟著縮放,維持 2:3 */
+  height: calc(var(--card-w-fit, var(--card-w, 160px)) * 1.5);   /* 跟著縮放,維持 2:3 */
   overflow: hidden;
   background: #EDE6D6;
   display: flex;
@@ -455,7 +455,7 @@ body::after {
 .book-card:hover .book-cover img { transform: scale(1.035); }
 .no-cover {
   width: 100%;
-  height: calc(var(--card-w, 160px) * 1.5);
+  height: calc(var(--card-w-fit, var(--card-w, 160px)) * 1.5);
   background: linear-gradient(135deg, #6B7F5E 0%, #A98B6B 100%);
   display: flex;
   flex-direction: column;
@@ -1509,7 +1509,7 @@ body::after {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 6px 24px 10px;
+  padding: 4px 24px 8px;
 }
 .pagination { display: flex; align-items: center; gap: 6px; }
 .scroll-ind {
