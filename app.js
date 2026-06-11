@@ -2873,10 +2873,6 @@ function renderCompatPanel(theirBooks, name) {
   }
   const r = computeCompatibility(mine, theirBooks);
   const pct = Math.round(r.score * 100);
-  const lowData = r.myCount < 10 || r.sharedCount < 4;
-  const conf = lowData ? t("Low — for reference only")
-             : r.confidence >= 0.8 ? t("High")
-             : r.confidence >= 0.4 ? t("Medium") : t("Low — for reference only");
   const niche = r.nicheShared.length
     ? `<div class="cp-row">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>` : "";
   const shared = r.sharedCount
@@ -2904,7 +2900,6 @@ function renderCompatPanel(theirBooks, name) {
     <div class="cp-main">
       <div class="cp-head">
         <span class="cp-title">${t("Reading compatibility with {name}", { name: escHtml(name) })}</span>
-        <span class="cp-conf-chip">${t("Confidence")}: ${conf}</span>
       </div>
       <div class="cp-facts">
         ${shared}${agree}${niche}${loved}${clash}
@@ -2983,6 +2978,7 @@ const DICT = {
   "Checking...": { "zh-TW": "檢查中..." },
   // 導覽 / 側欄
   "My Shelf": { "zh-TW": "我的書架" }, "Explore": { "zh-TW": "探索" }, "Feed": { "zh-TW": "動態" },
+  "104 books": { "zh-TW": "104 本書" },   // landing demo 頂欄
   "Status": { "zh-TW": "狀態" }, "⬜ All": { "zh-TW": "⬜ 全部" },
   "⏳ Now Reading": { "zh-TW": "⏳ 正在閱讀" }, "⏭ TBR": { "zh-TW": "⏭ 待讀" },
   "📋 Want to Read": { "zh-TW": "📋 想讀" }, "✅ Finished": { "zh-TW": "✅ 已讀完" }, "🚫 DNF": { "zh-TW": "🚫 棄讀" },
@@ -3165,7 +3161,7 @@ const HTML_DICT = {
     "zh-TW": `找到跟你<em>閱讀同頻</em>的人`
   },
   "ld-compat-demo": {
-    "zh-TW": `<div class="cp-head"><span class="cp-title">與 阿哲 的閱讀相似度</span><span class="cp-conf-chip">信心:高</span></div><div class="cp-facts"><div class="cp-row">📚 共同讀過 12 本 — Circe、Project Hail Mary、Klara and the Sun…</div><div class="cp-row">🎯 評分一致度:<b>86%</b>(共 9 本都評過)</div><div class="cp-row">🔥 你們都讀過冷門的:<b>Piranesi</b></div></div>`
+    "zh-TW": `<div class="cp-head"><span class="cp-title">與 阿哲 的閱讀相似度</span></div><div class="cp-facts"><div class="cp-row">📚 共同讀過 12 本 — Circe、Project Hail Mary、Klara and the Sun…</div><div class="cp-row">🎯 評分一致度:<b>86%</b>(共 9 本都評過)</div><div class="cp-row">🔥 你們都讀過冷門的:<b>Piranesi</b></div></div>`
   },
   "cover-upload-browse": {
     "zh-TW": `拖放圖片到此,或 <label for="coverFileInput" style="color:#5A7052;cursor:pointer;text-decoration:underline">點擊瀏覽</label>`

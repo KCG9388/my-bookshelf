@@ -39,10 +39,29 @@
   <div class="ld-fade"></div>
 
   <section class="ld-mock-section">
-    <!-- 真元件 demo:直接用 app 的 .book-card 樣式 + 真書封,跟產品畫面一致 -->
+    <!-- 真元件 demo:完整 app 畫面複刻(側欄+頂欄+書牆),書卡直接用 app 的 .book-card 樣式 -->
     <div class="ld-shot-frame ld-mock ld-demo-frame" aria-hidden="true">
       <div class="ld-mock-bar"><span></span><span></span><span></span></div>
-      <div class="ld-demo-shelf">
+      <div class="ldm-app">
+        <aside class="ldm-side">
+          <div class="ldm-logo">Concento</div>
+          <div class="ldm-group">Status</div>
+          <div class="ldm-pill active"><img src="icons/all.png" alt="" /><span>All</span></div>
+          <div class="ldm-pill"><img src="icons/now-reading.png" alt="" /><span>Now Reading</span></div>
+          <div class="ldm-pill"><img src="icons/want-to-read.png" alt="" /><span>Want to Read</span></div>
+          <div class="ldm-pill"><img src="icons/finished.png" alt="" /><span>Finished</span></div>
+          <div class="ldm-side-btn">+ New Book</div>
+        </aside>
+        <div class="ldm-main">
+          <div class="ldm-top">
+            <span class="ldm-tab active">My Shelf</span>
+            <span class="ldm-tab">Explore</span>
+            <span class="ldm-tab">Feed</span>
+            <div class="ldm-search">🔍 <span>Search books...</span></div>
+            <span class="ldm-count">104 books</span>
+            <span class="ldm-avatar">DV</span>
+          </div>
+          <div class="ld-demo-shelf">
         <div class="book-card">
           <div class="book-cover"><img src="assets/demo/demo-1.jpg" alt="" loading="lazy" /></div>
           <div class="book-info">
@@ -50,6 +69,26 @@
             <div class="book-author">Carlos Ruiz Zafón</div>
             <div class="book-genre">Fiction</div>
             <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:62%"></div></div><div class="progress-pct">62%</div></div>
+            <div class="book-status-row"><span class="status-badge status-Now Reading">Now Reading</span></div>
+          </div>
+        </div>
+        <div class="book-card">
+          <div class="book-cover"><img src="assets/demo/demo-9.jpg" alt="" loading="lazy" /></div>
+          <div class="book-info">
+            <div class="book-title">Normal People</div>
+            <div class="book-author">Sally Rooney</div>
+            <div class="book-genre">Contemporary Fiction</div>
+            <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:28%"></div></div><div class="progress-pct">28%</div></div>
+            <div class="book-status-row"><span class="status-badge status-Now Reading">Now Reading</span></div>
+          </div>
+        </div>
+        <div class="book-card">
+          <div class="book-cover"><img src="assets/demo/demo-10.jpg" alt="" loading="lazy" /></div>
+          <div class="book-info">
+            <div class="book-title">The Three-Body Problem</div>
+            <div class="book-author">Liu Cixin</div>
+            <div class="book-genre">Sci-Fi</div>
+            <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:76%"></div></div><div class="progress-pct">76%</div></div>
             <div class="book-status-row"><span class="status-badge status-Now Reading">Now Reading</span></div>
           </div>
         </div>
@@ -71,6 +110,16 @@
             <div class="book-genre">Sci-Fi</div>
             <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:38%"></div></div><div class="progress-pct">38%</div></div>
             <div class="book-status-row"><span class="status-badge status-Now Reading">Now Reading</span></div>
+          </div>
+        </div>
+        <div class="book-card">
+          <div class="book-cover"><img src="assets/demo/demo-11.jpg" alt="" loading="lazy" /></div>
+          <div class="book-info">
+            <div class="book-title">Sapiens</div>
+            <div class="book-author">Yuval Noah Harari</div>
+            <div class="book-genre">Non-fiction</div>
+            <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div><div class="progress-pct">100%</div></div>
+            <div class="book-status-row"><span class="status-badge status-Finished">Finished</span></div>
           </div>
         </div>
         <div class="book-card">
@@ -121,6 +170,18 @@
             <div class="book-genre">Fantasy</div>
             <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div><div class="progress-pct">100%</div></div>
             <div class="book-status-row"><span class="status-badge status-Finished">Finished</span></div>
+          </div>
+        </div>
+        <div class="book-card">
+          <div class="book-cover"><img src="assets/demo/demo-12.jpg" alt="" loading="lazy" /></div>
+          <div class="book-info">
+            <div class="book-title">Educated</div>
+            <div class="book-author">Tara Westover</div>
+            <div class="book-genre">Memoir</div>
+            <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:65%"></div></div><div class="progress-pct">65%</div></div>
+            <div class="book-status-row"><span class="status-badge status-Now Reading">Now Reading</span></div>
+          </div>
+        </div>
           </div>
         </div>
       </div>
@@ -183,7 +244,6 @@
         <div class="cp-main" data-i18n-html="ld-compat-demo">
           <div class="cp-head">
             <span class="cp-title">Reading compatibility with 阿哲</span>
-            <span class="cp-conf-chip">Confidence: High</span>
           </div>
           <div class="cp-facts">
             <div class="cp-row">📚 12 books in common — Circe、Project Hail Mary、Klara and the Sun…</div>

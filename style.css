@@ -2283,16 +2283,51 @@ body::after {
 
 /* Landing 擬真縮影(CSS mockup,語言中立) */
 .ld-mock { padding: 0; }
-/* 真元件 demo 書架:用 app 的 .book-card 樣式,封面尺寸用區域變數鎖定 */
-.ld-demo-frame { width: fit-content; }
+/* ── 真元件 demo:完整 app 畫面複刻(側欄+頂欄+書牆)── */
+.ld-shot-frame.ld-demo-frame { width: fit-content; max-width: calc(100vw - 32px); }   /* 蓋過 .ld-shot-frame 的 940px 上限 */
+.ldm-app { display: flex; background: #F7F4EC; }
+.ldm-side {
+  width: 162px; flex-shrink: 0;
+  margin: 14px 0 14px 14px; padding: 14px 12px 16px;
+  background: var(--paper-card, #fff);
+  border: 1px solid #EAE3D2; border-radius: 16px;
+  display: flex; flex-direction: column; gap: 7px;
+  height: fit-content;
+}
+.ldm-logo { font-family: var(--serif, serif); font-style: italic; font-size: 21px; font-weight: 700; color: #3B372E; margin: 0 2px 8px; }
+.ldm-group { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #8A8270; padding: 0 4px; }
+.ldm-pill { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #5C5546; padding: 7px 9px; border-radius: 9px; }
+.ldm-pill img { width: 16px; height: 16px; object-fit: contain; }
+.ldm-pill.active { background: #EDE9DA; font-weight: 600; color: #3B372E; }
+.ldm-side-btn {
+  margin-top: 12px; background: #5A7052; color: #F3EDE0;
+  text-align: center; font-size: 12.5px; font-weight: 600;
+  padding: 8px 10px; border-radius: 10px;
+}
+.ldm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ldm-top { display: flex; align-items: center; gap: 10px; padding: 16px 18px 6px; }
+.ldm-tab { font-size: 12.5px; font-weight: 600; color: #6E6557; padding: 6px 13px; border-radius: 9px; }
+.ldm-tab.active { background: #3B372E; color: #F3EDE0; }
+.ldm-search {
+  flex: 1; max-width: 330px; margin: 0 12px;
+  background: var(--paper-card, #fff); border: 1px solid #E4DECC; border-radius: 999px;
+  padding: 7px 14px; font-size: 12px; color: #8A8270;
+  white-space: nowrap; overflow: hidden;
+}
+.ldm-search i { font-style: normal; }
+.ldm-count { font-size: 12px; color: #8A8270; margin-left: auto; }
+.ldm-avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  background: #5A7052; color: #fff; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
 .ld-demo-shelf {
-  --card-w: 150px;
-  --card-w-fit: 150px;
+  --card-w: 140px;
+  --card-w-fit: 140px;
   display: grid;
-  grid-template-columns: repeat(4, var(--card-w));
-  gap: 16px;
-  padding: 18px 20px 22px;
-  background: #F7F4EC;
+  grid-template-columns: repeat(6, var(--card-w));
+  gap: 14px;
+  padding: 12px 18px 20px;
   pointer-events: none;   /* 純展示,不可點 */
 }
 .ld-demo-compat { margin: 0; }
@@ -2301,9 +2336,14 @@ body::after {
   background: #F3EFE2; border-bottom: 1px solid #E4DECC;
 }
 .ld-mock-bar span { width: 10px; height: 10px; border-radius: 50%; background: #DDD6C2; }
-@media (max-width: 700px) {
+@media (max-width: 1240px) {
+  .ld-demo-shelf { grid-template-columns: repeat(4, var(--card-w)); }
+  .ld-demo-shelf .book-card:nth-child(n+9) { display: none; }   /* 窄螢幕 4×2 */
+}
+@media (max-width: 860px) {
+  .ldm-side, .ldm-search, .ldm-count { display: none; }         /* 手機只留頂欄籤+書牆 */
   .ld-demo-shelf { grid-template-columns: repeat(2, var(--card-w)); justify-content: center; }
-  .ld-demo-shelf .book-card:nth-child(n+5) { display: none; }   /* 手機只秀 4 本,免得太長 */
+  .ld-demo-shelf .book-card:nth-child(n+5) { display: none; }
 }
 
 /* ── Landing(未登入首頁)── */
