@@ -361,7 +361,7 @@ body::after {
   flex-direction: column;
   overflow: hidden;
 }
-#shelfView { position: relative; perspective: 1400px; }
+#shelfView { position: relative; }
 
 /* ── 書架側邊翻頁鈕 + 翻書動畫 ── */
 .shelf-flip {
@@ -389,21 +389,11 @@ body::after {
 .flip-prev { left: 10px; }
 .flip-next { right: 10px; }
 
-/* 翻頁:舊頁朝書脊掀走 → 新頁從另一側翻進來(transform-origin 模擬書脊) */
-.book-grid.flip-out-next { animation: flipOutNext .18s ease-in forwards; transform-origin: left center; }
-.book-grid.flip-in-next  { animation: flipInNext  .26s ease-out;         transform-origin: left center; }
-.book-grid.flip-out-prev { animation: flipOutPrev .18s ease-in forwards; transform-origin: right center; }
-.book-grid.flip-in-prev  { animation: flipInPrev  .26s ease-out;         transform-origin: right center; }
-@keyframes flipOutNext { to   { opacity: 0; transform: translateX(-4%) rotateY(10deg); } }
-@keyframes flipInNext  { from { opacity: 0; transform: translateX(6%)  rotateY(-10deg); } to { opacity: 1; transform: none; } }
-@keyframes flipOutPrev { to   { opacity: 0; transform: translateX(4%)  rotateY(-10deg); } }
-@keyframes flipInPrev  { from { opacity: 0; transform: translateX(-6%) rotateY(10deg); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .book-grid.flip-out-next, .book-grid.flip-in-next,
-  .book-grid.flip-out-prev, .book-grid.flip-in-prev { animation: none; }
-}
+/* 滑鼠拖曳捲動:抓取游標 + 拖曳中禁選字 */
+.book-grid { cursor: grab; }
+.book-grid.dragging { cursor: grabbing; user-select: none; }
+.book-grid.dragging .book-card { pointer-events: none; }   /* 拖曳中卡片不吃 hover/點擊 */
 .filter-bar { flex-shrink: 0; }
-.pagination { flex-shrink: 0; }
 
 .refresh-btn { transition: background .12s, color .12s, transform .3s; }
 .refresh-btn.spinning { animation: spin .7s linear infinite; }
@@ -1508,33 +1498,6 @@ body::after {
 .progress-label { font-size: 13.5px; font-weight: 600; }
 .import-log { max-height: 120px; overflow-y: auto; font-size: 11.5px; font-family: monospace; background: #F3EFE2; border-radius: 6px; padding: 8px 10px; }
 
-/* ── Pagination ── */
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 14px 24px;
-  background: transparent;     /* 共用背景,不另加底色 */
-  position: sticky;
-  bottom: 0;
-}
-.page-btn {
-  padding: 5px 10px;
-  border: 1px solid #DBD3BE;
-  border-radius: 9px;
-  background: var(--paper-card);
-  cursor: pointer;
-  font-size: 13px;
-  min-width: 32px;
-  text-align: center;
-  transition: background .12s, border-color .12s;
-}
-.page-btn:hover { background: var(--cream); border-color: #CCC2A8; }
-.page-btn.active { background: var(--bark); color: #F3EDE0; border-color: var(--bark); font-weight: 600; }
-.page-btn:disabled { opacity: .4; cursor: default; }
-.page-info { font-size: 12px; color: #8A8270; padding: 0 8px; }
-
 /* ── Cover Fetch Progress ── */
 .cover-fetch-toast {
   position: fixed;
@@ -1781,6 +1744,7 @@ body::after {
   .add-btn { margin-top: 0; }
   .main { overflow: auto; }
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .shelf-flip { display: none !important; }   /* 手機用原生滑動,不放箭頭 */
   .detail-body { flex-direction: column; padding: 20px 16px 14px; gap: 14px; }
   .detail-cover-col { width: auto; align-self: stretch; }
   .detail-cover-col img { width: 130px; height: 195px; margin: 0 auto; display: block; }
