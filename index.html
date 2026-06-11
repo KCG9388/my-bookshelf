@@ -10,11 +10,10 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
 <div id="landingView" style="display:none">
   <nav class="ld-nav">
-    <div class="ld-brand">📚 Concento</div>
+    <div class="ld-brand"><img class="ld-brand-logo" src="assets/logo-cream.png" alt="Concento" /></div>
     <div class="ld-nav-right">
       <button class="ld-lang" id="ldLangBtn">EN</button>
       <button class="ld-signin" id="ldSignInBtn">Sign In</button>
@@ -190,7 +189,7 @@
 
 <!-- 左側欄(全高:品牌 + 篩選)-->
 <aside class="sidebar" id="sidebar" style="display:none">
-  <div class="sidebar-brand">📚 <span>Concento</span></div>
+  <div class="sidebar-brand"><img class="brand-logo" src="assets/logo.png" alt="Concento" /></div>
 
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Status</div>
@@ -697,9 +696,8 @@
 <div class="modal-overlay" id="authModal">
   <div class="modal modal-auth">
     <div class="auth-brand">
-      <div class="auth-brand-icon">📚</div>
-      <div class="auth-brand-name">Concento</div>
-      <div class="auth-brand-sub">Your personal reading tracker</div>
+      <img class="auth-brand-logo" src="assets/logo.png" alt="Concento" />
+      <div class="auth-brand-sub">Find readers who read like you</div>
     </div>
 
     <!-- Google 登入 -->
