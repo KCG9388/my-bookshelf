@@ -645,23 +645,21 @@
 <div class="modal-overlay" id="importModal">
   <div class="modal modal-import">
     <div class="modal-header">
-      <h2>⬆ Import from Notion</h2>
+      <h2>⬆ Import Books</h2>
       <button class="modal-close" id="closeImportModal">✕</button>
     </div>
 
     <div class="import-body">
       <!-- 說明 -->
       <div class="import-instructions">
-        <div class="instruction-title">📋 How to export from Notion</div>
+        <div class="instruction-title">📋 Export your library as a CSV file</div>
         <ol data-i18n-html="import-steps">
-          <li>Open your book database page in Notion</li>
-          <li>Click <strong>⋯</strong> (top right) → <strong>Export</strong></li>
-          <li>Set Format to <strong>CSV</strong></li>
-          <li>Click <strong>Export</strong> and save the file</li>
-          <li>Upload the <code>.csv</code> file below</li>
+          <li><strong>Goodreads</strong>: My Books → <strong>Import and export</strong> → <strong>Export Library</strong>, then download the file</li>
+          <li><strong>Notion</strong>: open your book database → <strong>⋯</strong> → <strong>Export</strong> → Format <strong>CSV</strong></li>
+          <li>Upload the <code>.csv</code> below — the source is detected automatically</li>
         </ol>
         <div class="instruction-note" data-i18n-html="import-cols">
-          ⚠️ Your Notion database must have these columns:<br/>
+          ⚠️ Goodreads exports work as-is. Notion databases need these columns:<br/>
           <code>Title</code>, <code>Author</code>, <code>Status</code>, <code>Total Pages</code>, <code>Current Page</code>, <code>Genre</code>, <code>Date Finished</code>
         </div>
       </div>

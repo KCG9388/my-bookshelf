@@ -1913,10 +1913,101 @@ function bindFileInput() {
 bindFileInput();
 
 function handleFile(file) {
-  if (!file || !file.name.endsWith(".csv")) { alert("Please upload a .csv file exported from Notion."); return; }
+  if (!file || !file.name.endsWith(".csv")) { alert(t("Please upload a .csv file (Notion or Goodreads export).")); return; }
   const reader = new FileReader();
-  reader.onload = e => parseNotionCSV(e.target.result, file.name);
+  reader.onload = e => parseAnyCSV(e.target.result, file.name);
   reader.readAsText(file, "UTF-8");
+}
+
+// ── 來源嗅探:看標題列特徵自動分流(Goodreads 一定有 Book Id + Exclusive Shelf)──
+function parseAnyCSV(text, filename) {
+  const head = (text.split(/\r?\n/, 1)[0] || "").toLowerCase();
+  if (head.includes("exclusive shelf") && head.includes("book id")) parseGoodreadsCSV(text, filename);
+  else parseNotionCSV(text, filename);
+}
+
+// ── Goodreads:整檔逐字元解析(My Review 欄位可含換行,逐行切會壞)──
+function parseCSVAll(text) {
+  const rows = []; let row = [], cur = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    }
+    else if (ch === '"') inQ = true;
+    else if (ch === ',') { row.push(cur); cur = ""; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur); cur = "";
+      if (row.length > 1 || (row[0] && row[0].trim())) rows.push(row);
+      row = [];
+    }
+    else cur += ch;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+const CJK_RE = /[぀-ヿ㐀-䶿一-鿿]/;
+function parseGoodreadsCSV(text, filename) {
+  const rows = parseCSVAll(text);
+  if (rows.length < 2) { alert("CSV appears empty."); return; }
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+  const idx = n => headers.indexOf(n);
+  const I = { title: idx("title"), author: idx("author"), addl: idx("additional authors"),
+              rating: idx("my rating"), publisher: idx("publisher"), pages: idx("number of pages"),
+              read: idx("date read"), added: idx("date added"), shelf: idx("exclusive shelf"),
+              review: idx("my review") };
+  if (I.title === -1 || I.shelf === -1) { alert("Could not recognize this Goodreads CSV."); return; }
+
+  const statusMap = { "to-read": "Want to Read", "currently-reading": "Now Reading", "read": "Finished" };
+  parsedBooks = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const get = i => (i >= 0 && cells[i] != null ? String(cells[i]).trim() : "");
+
+    // 書名:去掉「(系列名, #N)」和「(Traditional Chinese Edition)」尾巴
+    const title = get(I.title)
+      .replace(/\s*\([^()]*#\d+[^()]*\)\s*$/, "")
+      .replace(/\s*\((traditional|simplified) chinese edition\)\s*$/i, "")
+      .trim();
+    if (!title) continue;
+
+    // 作者:中文書的 Author 欄常是羅馬拼音、中文名藏在 Additional Authors(後面接譯者)。
+    // 啟用條件:Author 非中日文 + Additional 有中日文名 + 書名或出版社是中日文(確認是中文版書)。
+    // 多筆=第一筆是作者中文名;單筆通常只是譯者,除非 Author 欄本身像拼音(帶變音符/連字號)。
+    let author = get(I.author).replace(/\s{2,}/g, " ");
+    const cjkAddl = get(I.addl).split(",").map(s => s.trim()).filter(s => CJK_RE.test(s));
+    if (!CJK_RE.test(author) && cjkAddl.length &&
+        (CJK_RE.test(title) || CJK_RE.test(get(I.publisher))) &&
+        (cjkAddl.length >= 2 || /[^\x00-\x7F]|\p{L}+-\p{L}+/u.test(author))) {
+      author = cjkAddl[0];
+    }
+
+    const status     = statusMap[get(I.shelf)] || "Finished";
+    const totalPages = parseInt(get(I.pages)) || 0;
+    const finishDate = parseNotionDate(get(I.read));
+    const addedDate  = parseNotionDate(get(I.added));
+    const stars      = parseInt(get(I.rating)) || 0;
+    const notes      = [stars > 0 ? `Rating: ${"★".repeat(stars)}${"☆".repeat(5 - stars)}` : "", get(I.review)]
+                         .filter(Boolean).join("\n");
+
+    parsedBooks.push({
+      title, author, genre: "",
+      status,
+      currentPage: status === "Finished" ? totalPages : 0,   // 已讀完=進度滿;閱讀中頁數 GR 沒給,進來再更新
+      totalPages,
+      finishDate, startDate: "",
+      startYear: (finishDate ? new Date(finishDate).getFullYear() : null)
+              || (addedDate  ? new Date(addedDate).getFullYear()  : null)
+              || new Date().getFullYear(),
+      cover: "", notes,
+      userId: currentUser?.uid || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  showPreview(filename);
 }
 
 function parseNotionCSV(text, filename) {
@@ -1984,7 +2075,8 @@ function parseNotionDate(str) {
   if (!str) return "";
   const d = new Date(str);
   if (isNaN(d)) return "";
-  return d.toISOString().split("T")[0];
+  // 用本地日期組字串;toISOString 是 UTC,在台灣(+8)會把日期倒退一天
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function parseCSVRow(line) {
   const result = []; let cur = "", inQuote = false;
@@ -2743,7 +2835,9 @@ const DICT = {
   "📋 Want to Read": { "zh-TW": "📋 想讀" }, "✅ Finished": { "zh-TW": "✅ 已讀完" }, "🚫 DNF": { "zh-TW": "🚫 棄讀" },
   "Year": { "zh-TW": "年份" }, "All Years": { "zh-TW": "所有年份" },
   "Genre": { "zh-TW": "類型" }, "All Genres": { "zh-TW": "所有類型" },
-  "+ New Book": { "zh-TW": "+ 新增書籍" }, "⬆ Import from Notion": { "zh-TW": "⬆ 從 Notion 匯入" },
+  "+ New Book": { "zh-TW": "+ 新增書籍" },
+  "📋 Export your library as a CSV file": { "zh-TW": "📋 把你的書庫匯出成 CSV 檔" },
+  "Please upload a .csv file (Notion or Goodreads export).": { "zh-TW": "請上傳 .csv 檔(Notion 或 Goodreads 匯出)。" },
   "⚙ Privacy": { "zh-TW": "⚙ 隱私設定" }, "Sign out": { "zh-TW": "登出" },
   // 篩選列
   "Sort by": { "zh-TW": "排序" },
@@ -2828,7 +2922,6 @@ const DICT = {
   // 匯入
   "⬆ Import Books": { "zh-TW": "⬆ 匯入書籍" },
   "Importing...": { "zh-TW": "匯入中..." }, "Import Books": { "zh-TW": "匯入書籍" },
-  "📋 How to export from Notion": { "zh-TW": "📋 如何從 Notion 匯出" },
   "Found {n} books ready to import.": { "zh-TW": "找到 {n} 本書可匯入。" },
   "Found {n} duplicate books. Remove them?": { "zh-TW": "找到 {n} 本重複的書,要移除嗎?" },
   "Found {n} duplicate book. Remove them?": { "zh-TW": "找到 {n} 本重複的書,要移除嗎?" },
@@ -2912,10 +3005,10 @@ const HTML_DICT = {
     "zh-TW": `瀏覽器會詢問要分享哪個視窗/畫面。<br/>截取後,拖曳框選你要當封面的區域。`
   },
   "import-steps": {
-    "zh-TW": `<li>在 Notion 打開你的書籍資料庫頁面</li><li>點右上角 <strong>⋯</strong> → <strong>Export</strong>(匯出)</li><li>格式(Format)選 <strong>CSV</strong></li><li>點 <strong>Export</strong> 並儲存檔案</li><li>在下方上傳 <code>.csv</code> 檔</li>`
+    "zh-TW": `<li><strong>Goodreads</strong>:My Books → <strong>Import and export</strong> → <strong>Export Library</strong>,下載檔案</li><li><strong>Notion</strong>:打開書籍資料庫 → <strong>⋯</strong> → <strong>Export</strong> → 格式選 <strong>CSV</strong></li><li>在下方上傳 <code>.csv</code> 檔——來源會自動辨識</li>`
   },
   "import-cols": {
-    "zh-TW": `⚠️ 你的 Notion 資料庫必須包含這些欄位:<br/><code>Title</code>、<code>Author</code>、<code>Status</code>、<code>Total Pages</code>、<code>Current Page</code>、<code>Genre</code>、<code>Date Finished</code>`
+    "zh-TW": `⚠️ Goodreads 匯出檔可直接使用。Notion 資料庫必須包含這些欄位:<br/><code>Title</code>、<code>Author</code>、<code>Status</code>、<code>Total Pages</code>、<code>Current Page</code>、<code>Genre</code>、<code>Date Finished</code>`
   },
   "import-upload": {
     "zh-TW": `拖曳你的 CSV 檔到這裡<br/><span>或點擊瀏覽</span>`
