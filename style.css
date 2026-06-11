@@ -248,8 +248,8 @@ body::after {
 
 /* ── Sidebar(暖白浮面板;深色只留給 landing 與小面積 accent)── */
 .sidebar {
-  width: 210px;
-  min-width: 210px;
+  width: 184px;
+  min-width: 184px;
   margin: 14px 0 14px 14px;
   background: var(--paper-card);
   border: 1px solid #EAE3D2;
@@ -408,8 +408,8 @@ body::after {
   display: grid;
   grid-auto-flow: column;        /* 直欄塞滿後往右長 */
   grid-template-rows: repeat(var(--shelf-rows, 2), max-content);   /* 排數由 JS 依視窗高計算 */
-  grid-auto-columns: var(--card-w-fit, var(--card-w, 160px));      /* fit=微縮救排後的實際寬 */
-  gap: 20px;
+  grid-auto-columns: var(--card-w-fit, var(--card-w, 160px));      /* fit=依排數調整後的實際寬 */
+  gap: 16px;
   align-content: start;
   justify-content: start;
   scrollbar-width: none;         /* 原生捲動條吃高度,藏掉(位置改看頁碼旁迷你指示條) */
@@ -477,7 +477,7 @@ body::after {
   overflow: hidden;
 }
 
-.book-info { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.book-info { padding: 8px 9px 9px; display: flex; flex-direction: column; gap: 2px; }
 
 .book-title {
   font-family: var(--serif);
@@ -511,7 +511,7 @@ body::after {
   text-overflow: ellipsis;
 }
 
-.progress-wrap { height: 21px; margin-top: 5px; }   /* 固定高度,無進度也保留位置 */
+.progress-wrap { height: 18px; margin-top: 3px; }   /* 固定高度,無進度也保留位置 */
 .progress-bar {
   height: 4px;
   background: #E4DECC;
@@ -533,7 +533,7 @@ body::after {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: .02em;
-  margin-top: 4px;
+  margin-top: 2px;
   width: fit-content;
 }
 .status-Now\ Reading  { background: #D8E5D0; color: #3F6B4F; }

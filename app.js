@@ -595,6 +595,11 @@ function applyShelfRows() {
     const maxH = (innerH + gap) / 2 - gap;                       // 塞兩排時一張卡的高度上限
     const wFit = Math.floor((maxH - infoH - extra) / 1.5);
     if (wFit >= Math.max(ZMIN, Math.round(base * 0.85))) { rows = 2; dispW = wFit; }
+  } else {
+    // 撐滿救空:排數固定後,把封面放大到剛好填滿高度(上限=縮放值的 +18%,免得架空縮放控制)
+    const maxH = (innerH + gap) / rows - gap;
+    const wFit = Math.floor((maxH - infoH - extra) / 1.5);
+    dispW = Math.max(base, Math.min(wFit, Math.round(base * 1.18), ZMAX));
   }
   root.setProperty("--shelf-rows", rows);
   root.setProperty("--card-w-fit", dispW + "px");
