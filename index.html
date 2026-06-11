@@ -335,6 +335,17 @@
   </div>
 </div>
 
+<!-- 書籍搜尋結果浮窗(蓋在新增/編輯視窗上,空間大、一眼多本) -->
+<div class="bsr-overlay" id="bsrOverlay">
+  <div class="bsr-panel">
+    <div class="bsr-head">
+      <span class="bsr-head-title">Pick the right book:</span>
+      <button class="modal-close" id="bsrClose">✕</button>
+    </div>
+    <div class="bsr-grid" id="bsrGrid"></div>
+  </div>
+</div>
+
 <!-- Cover fetch toast -->
 <div class="cover-fetch-toast" id="coverFetchToast">
   <div class="toast-header">
@@ -358,7 +369,6 @@
       <button id="fetchBookBtn">Search</button>
     </div>
     <div class="fetch-status" id="fetchStatus"></div>
-    <div class="book-search-results" id="bookSearchResults"></div>
 
     <div class="modal-form">
       <div class="form-row">

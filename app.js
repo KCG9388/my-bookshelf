@@ -954,8 +954,6 @@ async function fetchBookInfo() {
   const query = document.getElementById("bookSearchInput").value.trim();
   if (!query) return;
   fetchStatus.textContent = t("Searching...");
-  const resultsEl = document.getElementById("bookSearchResults");
-  if (resultsEl) resultsEl.innerHTML = "";
 
   const isISBN    = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
   const cleanISBN = query.replace(/[\s\-]/g, "");
@@ -964,7 +962,7 @@ async function fetchBookInfo() {
   // 主來源 Google Books(封面/metadata 最齊)。抓多筆,讓使用者自己挑,不再盲填第一筆(=之前跳成別本書的根因)
   try {
     const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
-    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=8&key=${GBOOKS_KEY}`);
+    const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=12&key=${GBOOKS_KEY}`);
     const data = await res.json();
     (data.items || []).forEach(it => {
       const info = it.volumeInfo || {};
@@ -1006,11 +1004,11 @@ async function fetchBookInfo() {
   renderSearchResults(results);
 }
 
-// 列出搜尋結果,點一筆才填表(取代盲填第一筆 → 不再跳成別本書)
+// 列出搜尋結果:開浮窗網格(蓋在編輯視窗上,空間大、一眼多本),點一筆填表並關窗
 function renderSearchResults(list) {
-  const el = document.getElementById("bookSearchResults");
-  if (!el) return;
-  el.innerHTML = list.map((r, i) => `
+  const overlay = document.getElementById("bsrOverlay");
+  const grid    = document.getElementById("bsrGrid");
+  grid.innerHTML = list.map((r, i) => `
     <div class="bsr-item" data-i="${i}">
       ${r.cover ? `<img class="bsr-cover" src="${escHtml(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(window.__retryProxy(this))return; this.style.display='none'">` : `<div class="bsr-cover bsr-nocover">📖</div>`}
       <div class="bsr-meta">
@@ -1018,14 +1016,27 @@ function renderSearchResults(list) {
         <div class="bsr-sub">${escHtml(r.author || "?")}${r.year ? " · " + escHtml(String(r.year)) : ""}${r.totalPages ? " · " + r.totalPages + "p" : ""}</div>
       </div>
     </div>`).join("");
-  el.querySelectorAll(".bsr-item").forEach(item => item.addEventListener("click", () => {
+  grid.querySelectorAll(".bsr-item").forEach(item => item.addEventListener("click", () => {
     const r = list[parseInt(item.dataset.i)];
     fillForm({ title: r.title, author: r.author, genre: r.genre, totalPages: r.totalPages, cover: r.cover });
     pendingBookDesc = r.description || "";   // 暫存簡介,儲存時跟著進共享書庫(不進私人書 doc,避免每本書都拖一大段文字)
-    el.innerHTML = "";
+    closeSearchResults();
     fetchStatus.textContent = t("Selected") + `: "${r.title}"`;
   }));
+  overlay.classList.add("open");
+  grid.scrollTop = 0;
 }
+function closeSearchResults() {
+  document.getElementById("bsrOverlay").classList.remove("open");
+  document.getElementById("bsrGrid").innerHTML = "";
+}
+document.getElementById("bsrClose").addEventListener("click", closeSearchResults);
+document.getElementById("bsrOverlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("bsrOverlay")) closeSearchResults();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("bsrOverlay").classList.contains("open")) closeSearchResults();
+});
 
 function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {}) {
   if (title)      document.getElementById("bookTitle").value      = title;
@@ -1225,7 +1236,7 @@ function resetAddForm() {
   setCover(""); closePicker();
   fetchStatus.textContent = "";
   pendingBookDesc = "";
-  const sr = document.getElementById("bookSearchResults"); if (sr) sr.innerHTML = "";
+  closeSearchResults();
 }
 
 // ── Save Book ──
