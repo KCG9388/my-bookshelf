@@ -1859,6 +1859,10 @@ body::after {
 }
 .btn-delete-review:hover { opacity: 1; background: #fde8e8; }
 
+/* 手機抽屜選單(桌面不顯示;樣式在 600px media query 內) */
+.menu-btn { display: none; }
+.side-backdrop { display: none; position: fixed; inset: 0; z-index: 140; background: rgba(34,30,23,.45); }
+
 /* ── Responsive ── */
 @media (max-width: 600px) {
   body { display: flex; flex-direction: column; }   /* 手機改回直向堆疊,取消桌機 grid */
@@ -1868,20 +1872,32 @@ body::after {
   .hdr-search { position: static; transform: none; width: 100%; max-width: none; order: 3; }
   .sidebar-brand { font-size: 16px; }
   .nav-tabs { flex: 1; }
-  .sidebar {
-    width: 100%;
-    min-width: unset;
-    flex-direction: row;
-    flex-wrap: wrap;
-    height: auto;
-    gap: 8px;
-    padding: 12px;
-    overflow-x: auto;
+  /* 側欄改左滑抽屜:平常整個藏到畫面外,漢堡鈕打開、點遮罩收回 */
+  .menu-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; flex-shrink: 0;
+    border: 1px solid #E2DAC6; border-radius: 10px;
+    background: rgba(255,253,248,.85);
+    font-size: 17px; color: var(--ink); cursor: pointer;
   }
-  .sidebar-section { flex-direction: row; flex-wrap: wrap; gap: 4px; align-items: center; }
-  .sidebar-label { display: none; }
-  .filter-list { flex-direction: row; flex-wrap: wrap; }
-  .add-btn { margin-top: 0; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 150;
+    width: min(78vw, 300px); height: 100%;
+    min-width: unset;
+    margin: 0; border-radius: 0 18px 18px 0; border: none;
+    flex-direction: column; flex-wrap: nowrap;
+    gap: 14px; padding: 18px 16px;
+    overflow-y: auto;
+    background: var(--cream);
+    box-shadow: var(--shadow-pop);
+    transform: translateX(-108%);
+    transition: transform .25s ease;
+  }
+  body.side-open .sidebar { transform: translateX(0); }
+  body.side-open .side-backdrop { display: block; }
+  .sidebar-section { flex-direction: column; align-items: stretch; gap: 6px; }
+  .filter-list { flex-direction: column; }
+  .add-btn { margin-top: 6px; }
   .main { overflow: auto; }
   /* 手機:回到直向捲動(符合手機習慣),原生觸控、不需箭頭與頁碼 */
   .book-grid {

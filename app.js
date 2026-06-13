@@ -892,6 +892,16 @@ function rebuildFormatFilter() {
   if (formats.includes(cur)) sel.value = cur;
 }
 
+// ── 手機抽屜選單(漢堡鈕開、遮罩關;選狀態/開彈窗後自動收回)──
+document.getElementById("menuBtn").addEventListener("click", () =>
+  document.body.classList.toggle("side-open"));
+document.getElementById("sideBackdrop").addEventListener("click", () =>
+  document.body.classList.remove("side-open"));
+document.getElementById("sidebar").addEventListener("click", (e) => {
+  if (e.target.closest("#statusFilter li, .add-btn, .import-btn, .filter-clear-btn"))
+    document.body.classList.remove("side-open");
+});
+
 // ── Refresh Button ──
 document.getElementById("refreshBtn").addEventListener("click", async () => {
   if (!booksCol) return;
