@@ -18,6 +18,7 @@ let currentView   = "shelf";   // "shelf" | "explore"
 let exploreBooks  = [];
 let exploreLoaded = false;
 let viewingPublicUid = null;
+let lastPublicShelf = null;   // 快取目前看的公開書架 {books,name,state} → 語言切換時重渲染面板
 let myProfile = {};   // 快取本人 profile(含 shelfPublic/showReading,給動態判斷)
 let feedSubtab = "following";
 
@@ -1088,6 +1089,7 @@ function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {
   if (genre)      document.getElementById("bookGenre").value      = genre;
   if (totalPages) document.getElementById("bookTotalPages").value = totalPages;
   if (cover)      setCover(cover);
+  syncGenreSelect(document.getElementById("bookGenre").value);   // 下拉跟著選到對的項/開自訂框
 }
 
 // ── Cover Picker ──
@@ -1311,6 +1313,7 @@ function resetAddForm() {
   fetchStatus.textContent = "";
   pendingBookDesc = "";
   closeSearchResults();
+  syncGenreSelect("");
 }
 
 // ── Save Book ──
@@ -1751,6 +1754,13 @@ function renderReviews(reviews) {
     return;
   }
 
+  // 自己的評論置頂(一眼看到自己評過沒);其餘維持原本 createdAt 倒序。slice 不動原陣列
+  const myUid = currentUser && currentUser.uid;
+  if (myUid) {
+    const own = r => (r.uid === myUid || r.id === myUid) ? 1 : 0;
+    reviews = reviews.slice().sort((a, b) => own(b) - own(a));
+  }
+
   const withRating = reviews.filter(r => r.rating > 0);
   const avg = withRating.length ? withRating.reduce((s,r) => s+r.rating, 0) / withRating.length : 0;
   aggScore.textContent = avg.toFixed(1);
@@ -1775,10 +1785,11 @@ function renderReviews(reviews) {
     const date     = r.createdAt?.toDate
       ? r.createdAt.toDate().toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" })
       : "";
-    return `<div class="review-card">
+    return `<div class="review-card${isOwn ? " review-card-own" : ""}">
       <div class="review-top">
         <div class="reviewer-avatar">${escHtml(initials)}</div>
         <div class="reviewer-name clickable" data-uid="${escHtml(r.uid || r.id || "")}">${escHtml(r.reviewerName || "Anonymous")}</div>
+        ${isOwn ? `<span class="review-own-tag">${t("Your review")}</span>` : ""}
         ${r.rating ? `<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>` : ""}
         ${r.readPercent != null ? `<div class="review-read-badge">Read ${r.readPercent}%</div>` : ""}
         ${isOwn ? `<button class="btn-delete-review" data-id="${r.id}" title="Delete your review">🗑</button>` : ""}
@@ -2546,6 +2557,7 @@ function switchView(view) {
   document.getElementById("feedView").style.display    = view === "feed"    ? "" : "none";
   if (view === "explore") {
     viewingPublicUid = null;
+    lastPublicShelf = null;
     switchExploreSubtab(exploreSubtab || "people");
   }
   if (view === "feed") loadFeed();
@@ -2857,20 +2869,39 @@ async function loadPublicShelf(uid) {
     publicShelfOwner = { uid, name, rating: null };   // 供三評分面板的「他的評分」
     setupFollowButton(uid);
     if (!pdata.shelfPublic) {
-      document.getElementById("compatPanel").style.display = "none";
-      banner.style.display = "flex"; pbText.textContent = t("🔒 {name}'s library is private", { name });
-      grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
-      return;
+      lastPublicShelf = { state: "private", name };
+    } else {
+      const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
+      const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      lastPublicShelf = { state: "ok", books, name };
     }
-    const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
-    const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    banner.style.display = "flex"; pbText.textContent = t("📖 {name}'s library ({n} books)", { name, n: books.length });
-    renderPublicShelf(books);
-    renderCompatPanel(books, name);
   } catch (e) {
-    document.getElementById("compatPanel").style.display = "none";
-    banner.style.display = "flex"; pbText.textContent = t("🔒 Cannot load this shelf");
+    lastPublicShelf = { state: "error" };
+  }
+  renderPublicShelfView();
+}
+
+// 從 lastPublicShelf 快取重畫 banner+書架+相容度面板(初次載入 & 語言切換共用 → 切語言面板不再凍結)
+function renderPublicShelfView() {
+  const c = lastPublicShelf;
+  if (!c) return;
+  const grid   = document.getElementById("exploreGrid");
+  const banner = document.getElementById("publicBanner");
+  const pbText = banner.querySelector(".pb-text");
+  const compat = document.getElementById("compatPanel");
+  banner.style.display = "flex";
+  if (c.state === "private") {
+    compat.style.display = "none";
+    pbText.textContent = t("🔒 {name}'s library is private", { name: c.name });
+    grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
+  } else if (c.state === "error") {
+    compat.style.display = "none";
+    pbText.textContent = t("🔒 Cannot load this shelf");
     grid.innerHTML = `<div class="loading">${t("Could not load — they may have made it private")}</div>`;
+  } else {
+    pbText.textContent = t("📖 {name}'s library ({n} books)", { name: c.name, n: c.books.length });
+    renderPublicShelf(c.books);
+    renderCompatPanel(c.books, c.name);
   }
 }
 
@@ -2951,6 +2982,12 @@ function computeCompatibility(mine, theirs) {
     topShared:   shared.slice(0, 4).map(x => x.book.title),
     bothLoved:   bothLoved.slice(0, 2),
     topClash:    maxDiff >= 2 ? topClash : null,   // 差 ≥2 星才算「分歧」
+    // #6 共同書比對:bookKey + 兩人私人評分(免額外讀;評論文字點開時才 lazy 抓)
+    sharedKeys:  shared.map(x => ({
+      key: compatKeyOf(x.book), title: x.book.title,
+      cover: x.book.cover || x.them.cover || "",
+      myRating: x.book.rating || 0, theirRating: x.them.rating || 0,
+    })),
   };
 }
 function renderCompatPanel(theirBooks, name) {
@@ -2966,7 +3003,7 @@ function renderCompatPanel(theirBooks, name) {
   const niche = r.nicheShared.length
     ? `<div class="cp-row">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>` : "";
   const shared = r.sharedCount
-    ? `<div class="cp-row">📚 ${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""}</div>` : "";
+    ? `<div class="cp-row cp-shared-link" role="button" tabindex="0" title="${t("Compare your reviews")}">📚 ${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""} <span class="cp-row-go">›</span></div>` : "";
   const agree = r.coRated
     ? `<div class="cp-row">🎯 ${t("Rating agreement")}: <b>${Math.round(r.ratingAgreement * 100)}%</b> ${t("over {n} co-rated", { n: r.coRated })}</div>` : "";
   const loved = r.bothLoved.length
@@ -2980,6 +3017,8 @@ function renderCompatPanel(theirBooks, name) {
   else if (pct < 55) panel.classList.add("cp-mid");
   const CIRC = 326.7;   // 2πr, r=52(與 CSS stroke-dasharray 同步)
   panel.innerHTML = `
+    <button class="cp-collapsed-bar" type="button">📊 ${t("Reading compatibility with {name}", { name: escHtml(name) })} · <b>${pct}%</b> <span class="cp-chev">▾</span></button>
+    <button class="cp-toggle" type="button" aria-label="collapse">▴</button>
     <div class="cp-gauge">
       <svg viewBox="0 0 120 120">
         <circle class="cp-g-track" cx="60" cy="60" r="52"/>
@@ -2996,6 +3035,14 @@ function renderCompatPanel(theirBooks, name) {
         ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}
       </div>
     </div>`;
+  panel.classList.remove("cp-collapsed");
+  panel.querySelector(".cp-toggle").addEventListener("click", () => panel.classList.add("cp-collapsed"));
+  panel.querySelector(".cp-collapsed-bar").addEventListener("click", () => panel.classList.remove("cp-collapsed"));
+  setupCompatScrollCollapse(panel);
+  const sharedLink = panel.querySelector(".cp-shared-link");
+  if (sharedLink && r.sharedKeys && r.sharedKeys.length) {
+    sharedLink.addEventListener("click", () => openSharedReviews(r.sharedKeys, viewingPublicUid, name));
+  }
   // 圓環從 0 畫到目標值(先設滿 offset,下一幀換成目標讓 transition 生效)
   const fillEl = panel.querySelector(".cp-g-fill");
   if (fillEl) {
@@ -3004,6 +3051,80 @@ function renderCompatPanel(theirBooks, name) {
     requestAnimationFrame(() => requestAnimationFrame(() => { fillEl.style.strokeDashoffset = target; }));
   }
 }
+
+// 手機:捲動瀏覽書架時自動把相容度面板縮成一條(回頂端再展開);只綁一次。
+// 防禦性同時聽 #mainContent 與 #exploreGrid(不確定哪個是實際捲動容器,聽不到也只是不自動縮、手動鈕照常)。
+let _cpScrollBound = false;
+function setupCompatScrollCollapse() {
+  if (_cpScrollBound) return;
+  _cpScrollBound = true;
+  let lastY = 0;
+  const onScroll = (e) => {
+    const p = document.getElementById("compatPanel");
+    if (!p || p.style.display === "none" || !window.matchMedia("(max-width: 600px)").matches) return;
+    const y = e.target.scrollTop || 0;
+    if (y <= 4) p.classList.remove("cp-collapsed");
+    else if (y > lastY + 6) p.classList.add("cp-collapsed");
+    lastY = y;
+  };
+  ["mainContent", "exploreGrid"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("scroll", onScroll, { passive: true });
+  });
+}
+
+// ── #6 共同書比對:點「共同讀過 N 本」→ 並排看兩人對每本的評分+評論 ──
+// 讀 catalog/{key}/reviews/{uid}(同 loadReviews 的路徑,規則允許);評分用私人書架值當後備。
+async function openSharedReviews(sharedKeys, theirUid, theirName) {
+  const modal = document.getElementById("sharedReviewsModal");
+  const body  = document.getElementById("sharedReviewsBody");
+  if (!modal || !body || !currentUser || !theirUid) return;
+  document.getElementById("sharedReviewsTitle").textContent = t("Shared books with {name}", { name: theirName });
+  body.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
+  modal.classList.add("open");   // 返回鍵層由全域 overlay 觀察器自動登記
+  const myUid = currentUser.uid;
+  const rows = await Promise.all((sharedKeys || []).map(async sk => {
+    let mine = null, theirs = null;
+    try {
+      const [a, b] = await Promise.all([
+        db.collection("catalog").doc(sk.key).collection("reviews").doc(myUid).get(),
+        db.collection("catalog").doc(sk.key).collection("reviews").doc(theirUid).get(),
+      ]);
+      mine   = a.exists ? a.data() : null;
+      theirs = b.exists ? b.data() : null;
+    } catch (e) {}
+    return { sk, mine, theirs };
+  }));
+  const col = (rev, fallbackRating, who) => {
+    const rating = (rev && rev.rating) ? rev.rating : fallbackRating;
+    const stars  = rating
+      ? `<div class="sr-stars">${starsHTML(rating)}<span class="sr-score">${rating}</span></div>`
+      : `<div class="sr-stars sr-norate">${t("Not rated")}</div>`;
+    const text = (rev && rev.text)
+      ? `<div class="sr-text">${escHtml(rev.text)}</div>`
+      : `<div class="sr-text sr-empty">${t("Rated only — no written review")}</div>`;
+    return `<div class="sr-col"><div class="sr-who">${escHtml(who)}</div>${stars}${text}</div>`;
+  };
+  body.innerHTML = rows.map(({ sk, mine, theirs }) => {
+    const coverHtml = sk.cover
+      ? `<img class="sr-cover" ${coverAttrs(sk.cover)} alt="" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return;if(window.__retryProxy(this))return;this.style.display='none'">`
+      : `<div class="sr-cover sr-nocover">📖</div>`;
+    const diff = (sk.myRating && sk.theirRating) ? Math.abs(sk.myRating - sk.theirRating) : 0;
+    const tag = diff >= 2 ? `<span class="sr-tag sr-clash">${t("Differ")}</span>`
+              : (sk.myRating && sk.theirRating && diff === 0) ? `<span class="sr-tag sr-agree">${t("Agree")}</span>` : "";
+    return `<div class="sr-card">
+      <div class="sr-bookhead">${coverHtml}<div class="sr-booktitle">${escHtml(sk.title)}${tag}</div></div>
+      <div class="sr-cols">${col(mine, sk.myRating, t("You"))}${col(theirs, sk.theirRating, theirName)}</div>
+    </div>`;
+  }).join("") || `<div class="loading">${t("No shared books")}</div>`;
+}
+function closeSharedReviews() {
+  document.getElementById("sharedReviewsModal").classList.remove("open");
+}
+document.getElementById("closeSharedReviews").addEventListener("click", closeSharedReviews);
+document.getElementById("sharedReviewsModal").addEventListener("click", (e) => {
+  if (e.target.id === "sharedReviewsModal") closeSharedReviews();   // 點遮罩關
+});
 
 function renderPublicShelf(books) {
   const grid = document.getElementById("exploreGrid");
@@ -3046,6 +3167,7 @@ function renderPublicShelf(books) {
 
 document.getElementById("publicBackBtn").addEventListener("click", () => {
   viewingPublicUid = null;
+  lastPublicShelf = null;
   switchExploreSubtab(exploreSubtab || "people");
 });
 
@@ -3213,6 +3335,14 @@ const DICT = {
   "Loading...": { "zh-TW": "載入中..." }, "{n} books": { "zh-TW": "{n} 本書" }, "{n} book": { "zh-TW": "{n} 本書" },
   "No reviews yet": { "zh-TW": "尚無評論" }, "📝 No reviews yet — be the first!": { "zh-TW": "📝 還沒有評論——當第一個!" },
   "{n} reviews": { "zh-TW": "{n} 則評論" }, "{n} review": { "zh-TW": "{n} 則評論" },
+  "Your review": { "zh-TW": "你的評論" },
+  "Compare your reviews": { "zh-TW": "比對你們的評論" },
+  "Shared books with {name}": { "zh-TW": "和 {name} 的共同書" },
+  "You": { "zh-TW": "你" }, "Not rated": { "zh-TW": "未評分" },
+  "Rated only — no written review": { "zh-TW": "只給了分,沒寫評論" },
+  "No shared books": { "zh-TW": "沒有共同書" },
+  "Differ": { "zh-TW": "分歧" }, "Agree": { "zh-TW": "一致" },
+  "Press back again to leave": { "zh-TW": "再按一次返回鍵即離開" },
   "No ratings yet": { "zh-TW": "尚無評分" }, "No books in the shared library yet": { "zh-TW": "共享書庫還沒有書" },
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
@@ -3311,6 +3441,44 @@ function genreLabel(g) {
   return GENRE_DICT[k] || g;
 }
 
+// ── 類型下拉(常用選項可用選的 + 保留自訂輸入)──
+// value 一律存英文 key,genreLabel 負責顯示成當前語言,側欄 #genreFilter 也靠 key 維持一致
+const COMMON_GENRES = ["Fiction","Literary Fiction","Fantasy","Sci-Fi","Mystery","Thriller",
+  "Romance","Horror","Historical Fiction","History","Non-Fiction","Memoir","Biography",
+  "Self-Help","Philosophy","Psychology","Poetry","Classics","Young Adult","Graphic Novel",
+  "Crime","Dystopian","Business"];
+function buildGenreSelect() {
+  const sel = document.getElementById("bookGenreSelect");
+  if (!sel) return;
+  const keep = sel.value;
+  const ph     = currentLang === "en" ? "Select genre…" : "選擇類型…";
+  const custom = currentLang === "en" ? "✎ Custom…"     : "✎ 自訂…";
+  sel.innerHTML = `<option value="">${ph}</option>`
+    + COMMON_GENRES.map(g => `<option value="${escHtml(g)}">${escHtml(genreLabel(g))}</option>`).join("")
+    + `<option value="__custom">${custom}</option>`;
+  sel.value = keep;
+}
+// 依 #bookGenre 的實際值,把下拉與自訂框調到對的狀態(fillForm / 編輯 / 重置都用)
+function syncGenreSelect(genre) {
+  const sel = document.getElementById("bookGenreSelect");
+  const inp = document.getElementById("bookGenre");
+  if (!sel || !inp) return;
+  const g = (genre || "").trim();
+  if (g && COMMON_GENRES.includes(g)) { sel.value = g;          inp.style.display = "none"; }
+  else if (g)                         { sel.value = "__custom"; inp.style.display = "";     }
+  else                                { sel.value = "";         inp.style.display = "none"; }
+}
+(function wireGenreSelect() {
+  const sel = document.getElementById("bookGenreSelect");
+  const inp = document.getElementById("bookGenre");
+  if (!sel || !inp) return;
+  buildGenreSelect();
+  sel.addEventListener("change", () => {
+    if (sel.value === "__custom") { inp.style.display = ""; inp.value = ""; inp.focus(); }
+    else { inp.value = sel.value; inp.style.display = "none"; }   // #bookGenre 永遠是存檔來源
+  });
+})();
+
 // 翻譯靜態 DOM(葉節點文字 + placeholder),跳過動態書格與使用者資料
 function translateStatic(lang) {
   // 含 HTML 標籤的整塊內容
@@ -3346,8 +3514,10 @@ function setLang(lang) {
   if (ldBtn) ldBtn.textContent = lang === "en" ? "中" : "EN";
   // 重新渲染含動態文字的可見區塊
   try {
+    buildGenreSelect();   // 類型下拉選項跟著語言重標(保留當前選擇)
     if (allBooks.length) { rebuildSidebarFilters(); rebuildFormatFilter(); }
-    if (currentView === "explore" && !viewingPublicUid) renderExplore();
+    if (currentView === "explore" && viewingPublicUid && lastPublicShelf) renderPublicShelfView();
+    else if (currentView === "explore" && !viewingPublicUid) renderExplore();
     else renderGrid();
   } catch (e) {}
 }
@@ -3729,3 +3899,88 @@ async function sendDiscussion() {
 }
 document.getElementById("discussionSend").addEventListener("click", sendDiscussion);
 document.getElementById("discussionInput").addEventListener("keydown", e => { if (e.key === "Enter") sendDiscussion(); });
+
+// ══════════════════════════════════════════
+//  #7 返回鍵管理:上一頁/手機左滑 = 關掉最上層彈窗(而非離站)
+//  作法:把開著的彈窗(.modal-overlay/.bsr-overlay/抽屜)數量「鏡射」成 history 深度。
+//  - 開一個 → pushState 一筆;按上一頁 → popstate 關掉最上層;程式關掉 → 自動撤掉對應筆。
+//  - 用「對賬(reconcile)」而非逐一掛鉤 → 換頁(詳情→編輯,一關一開)淨深度不變,不會亂跳。
+//  - 根部什麼都沒開時按上一頁 → 顯示「再按一次離開」提示(不綁秒數),再按才放行離站。
+//  排除:verifyModal(信箱驗證 gate)、內嵌封面裁切器。
+// ══════════════════════════════════════════
+(function setupBackButton() {
+  const body = document.body;
+  // 受監看的「層」:每個有 isOpen()/close() 的彈窗或抽屜
+  const watched = [];
+  document.querySelectorAll(".modal-overlay, .bsr-overlay").forEach(el => {
+    if (el.id === "verifyModal") return;
+    watched.push({ el, isOpen: () => el.classList.contains("open"), close: () => el.classList.remove("open") });
+  });
+  // 手機抽屜(body.side-open)
+  watched.push({ el: body, drawer: true, isOpen: () => body.classList.contains("side-open"), close: () => body.classList.remove("side-open") });
+
+  let stack = [];          // 目前開著的層(LIFO)
+  let histDepth = 0;       // 已 push 的 history 筆數(=層數)
+  let ignorePop = 0;       // 接下來要忽略幾次 popstate(來自我們自己的 history.go)
+  let exitArmed = false;
+  let queued = false;
+
+  function openLayers() { return watched.filter(w => w.isOpen()); }
+
+  function reconcile() {
+    queued = false;
+    const open = openLayers();
+    // 保留仍開著的(維持原順序),補上新開的
+    const still = stack.filter(s => open.includes(s));
+    open.forEach(w => { if (!still.includes(w)) still.push(w); });
+    stack = still;
+    const target = stack.length;
+    if (target > histDepth) {
+      while (histDepth < target) { histDepth++; try { history.pushState({ cdDepth: histDepth }, ""); } catch (e) {} }
+      exitArmed = false; hideExitHint();
+    } else if (target < histDepth) {
+      const delta = histDepth - target;
+      histDepth = target;
+      ignorePop += delta;
+      try { history.go(-delta); } catch (e) { ignorePop -= delta; }
+    }
+  }
+  function schedule() { if (!queued) { queued = true; Promise.resolve().then(reconcile); } }
+
+  watched.forEach(w => {
+    new MutationObserver(schedule).observe(w.el, { attributes: true, attributeFilter: ["class"] });
+  });
+
+  window.addEventListener("popstate", () => {
+    if (ignorePop > 0) { ignorePop--; return; }
+    if (histDepth > 0) {            // 有彈窗開著 → 關最上層,人留在站內
+      histDepth--;
+      const top = stack.pop();
+      if (top) { try { top.close(); } catch (e) {} }   // 移除 .open → 觀察器 reconcile(target 已等於 histDepth,無動作)
+      return;
+    }
+    // 根部:第一次按 → 武裝+提示+留下;第二次按 → 放行離站
+    if (!exitArmed) {
+      exitArmed = true;
+      showExitHint();
+      try { history.pushState({ cdRoot: true }, ""); } catch (e) {}
+    } else {
+      exitArmed = false; hideExitHint();
+      try { history.back(); } catch (e) {}
+    }
+  });
+
+  // 載入時壓一筆 sentinel,讓第一次「上一頁」有東西可退、不直接離站
+  try { history.pushState({ cdRoot: true }, ""); } catch (e) {}
+})();
+
+function showExitHint() {
+  let el = document.getElementById("exitHint");
+  if (!el) { el = document.createElement("div"); el.id = "exitHint"; el.className = "exit-hint"; document.body.appendChild(el); }
+  el.textContent = t("Press back again to leave");
+  el.classList.add("show");
+}
+function hideExitHint() {
+  const el = document.getElementById("exitHint");
+  if (el) el.classList.remove("show");
+}

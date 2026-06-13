@@ -601,7 +601,8 @@
       <div class="form-row two-col">
         <div class="form-group">
           <label>Genre</label>
-          <input type="text" id="bookGenre" placeholder="e.g. Fantasy, Mystery" />
+          <select id="bookGenreSelect"></select>
+          <input type="text" id="bookGenre" class="genre-custom" placeholder="自訂類型 Custom genre" style="display:none;margin-top:8px" />
         </div>
         <div class="form-group">
           <label>Total Pages</label>
@@ -799,6 +800,17 @@
       <button class="btn-cancel" id="cancelPrivacy">Cancel</button>
       <button class="btn-save" id="savePrivacyBtn">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- Shared Reviews Modal(#6:共同書的雙方評分/評論比對)-->
+<div class="modal-overlay" id="sharedReviewsModal">
+  <div class="modal modal-shared">
+    <div class="modal-header">
+      <h2 id="sharedReviewsTitle">Shared books</h2>
+      <button class="modal-close" id="closeSharedReviews">✕</button>
+    </div>
+    <div class="shared-reviews-body" id="sharedReviewsBody"></div>
   </div>
 </div>
 
