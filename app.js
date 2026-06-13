@@ -902,6 +902,40 @@ document.getElementById("sidebar").addEventListener("click", (e) => {
     document.body.classList.remove("side-open");
 });
 
+// ── 手機:把次要 header 控制項搬進抽屜,讓頂列只剩 [☰][分頁][搜尋],永不爆寬 ──
+// 關鍵:搬「同一個 DOM 節點」(append 會移動而非複製)→ 載入時綁的監聽器跟著走,
+// 且不會產生重複 id(app.js 大量用 getElementById,複製會壞 #bookCount/#signOutBtn 等)。
+// 桌面↔手機切換(改視窗寬/轉向)即時還原,與書架引擎共用同一個 SHELF_MOBILE。
+(function setupHeaderRelocate() {
+  const hdrActions = document.querySelector(".hdr-actions");
+  const drawerTools = document.getElementById("drawerTools");
+  const drawerId = document.getElementById("drawerIdentity");
+  if (!hdrActions || !drawerTools || !drawerId) return;
+  const tools = [
+    document.getElementById("bookCount"),
+    document.querySelector(".sort-pop-wrap"),
+    document.getElementById("refreshBtn"),
+    document.getElementById("openPrivacyBtn"),
+    document.getElementById("langToggle"),
+  ].filter(Boolean);
+  const identity = document.getElementById("userInfo");
+  function sync() {
+    if (SHELF_MOBILE.matches) {
+      tools.forEach(n => drawerTools.appendChild(n));
+      if (identity) drawerId.appendChild(identity);
+    } else {
+      // 還原回 header,維持原本順序:書數→排序→重整→設定→語言→使用者
+      tools.forEach(n => hdrActions.appendChild(n));
+      if (identity) hdrActions.appendChild(identity);
+    }
+  }
+  sync();
+  SHELF_MOBILE.addEventListener("change", sync);
+  // 保險:少數環境(部分 in-app 瀏覽器/模擬器)matchMedia change 不觸發,resize 補位
+  let _rzT;
+  window.addEventListener("resize", () => { clearTimeout(_rzT); _rzT = setTimeout(sync, 150); });
+})();
+
 // ── Refresh Button ──
 document.getElementById("refreshBtn").addEventListener("click", async () => {
   if (!booksCol) return;

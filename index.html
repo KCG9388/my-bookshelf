@@ -335,6 +335,9 @@
 <aside class="sidebar" id="sidebar" style="display:none">
   <div class="sidebar-brand"><img class="brand-logo" src="assets/logo.png" alt="Concento" /></div>
 
+  <!-- 手機抽屜:身分/工具的落腳處(桌面隱藏;JS 依 matchMedia 把 header 控制項「真節點」搬進來)-->
+  <div class="drawer-only" id="drawerIdentity"></div>
+
   <div class="sidebar-section shelf-only">
     <div class="sidebar-label">Status</div>
     <ul class="filter-list" id="statusFilter">
@@ -365,6 +368,9 @@
   </div>
 
   <button class="filter-clear-btn shelf-only" id="clearFiltersBtn" style="display:none">✕ Clear filters</button>
+
+  <!-- 手機抽屜:排序/重整/語言/設定/書數的落腳處(桌面隱藏)-->
+  <div class="drawer-only" id="drawerTools"></div>
 
   <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import Books</button>

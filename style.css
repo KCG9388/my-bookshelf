@@ -24,6 +24,9 @@
   --shadow-pop: 0 18px 48px rgba(44,39,31,.22);
 }
 
+/* 任何元素都不該把整頁推寬:全域上限(手機另加 overflow-x:hidden 當保險) */
+html, body { max-width: 100%; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
   /* lofi 氛圍層:手繪書架線稿墊底,鋪厚米紙紗讓它只透出 ~2 成(溫度在、不搶封面) */
@@ -1587,7 +1590,7 @@ body::after {
 
 .import-preview { display: flex; flex-direction: column; gap: 8px; }
 .preview-summary { font-size: 13.5px; font-weight: 600; color: #53704D; }
-.preview-table-wrap { max-height: 180px; overflow-y: auto; border: 1px solid #E4DECC; border-radius: 6px; }
+.preview-table-wrap { max-height: 180px; overflow: auto; border: 1px solid #E4DECC; border-radius: 6px; }
 .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .preview-table th { background: #F3EFE2; padding: 6px 10px; text-align: left; border-bottom: 1px solid #E4DECC; font-weight: 600; white-space: nowrap; }
 .preview-table td { padding: 5px 10px; border-bottom: 1px solid #EFEADB; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -1861,6 +1864,7 @@ body::after {
 
 /* 手機抽屜選單(桌面不顯示;樣式在 600px media query 內) */
 .menu-btn { display: none; }
+.drawer-only { display: none; }   /* 抽屜專屬落腳處:桌面隱藏,手機由 @media 顯示 */
 .side-backdrop { display: none; position: fixed; inset: 0; z-index: 140; background: rgba(34,30,23,.45); }
 
 /* ── Responsive ── */
@@ -1871,14 +1875,17 @@ body::after {
   .app-header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
   .hdr-search { position: static; transform: none; width: 100%; max-width: none; order: 3; }
   .sidebar-brand { font-size: 16px; }
-  .nav-tabs { flex: 1; }
+  html, body { overflow-x: hidden; }    /* 保險:任何漏網元素只內捲、不推寬整頁 */
+  .nav-tabs { flex: 1; min-width: 0; }  /* 分頁可縮,不再把次要控制項擠到爆寬 */
+  .nav-tab { padding: 10px 12px; font-size: 13.5px; }
+  .icon-btn { width: 44px; height: 44px; }   /* 觸控目標 ≥44px */
   /* 側欄改左滑抽屜:平常整個藏到畫面外,漢堡鈕打開、點遮罩收回 */
   .menu-btn {
     display: flex; align-items: center; justify-content: center;
-    width: 38px; height: 38px; flex-shrink: 0;
+    width: 44px; height: 44px; flex-shrink: 0;
     border: 1px solid #E2DAC6; border-radius: 10px;
     background: rgba(255,253,248,.85);
-    font-size: 17px; color: var(--ink); cursor: pointer;
+    font-size: 18px; color: var(--ink); cursor: pointer;
   }
   .sidebar {
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 150;
@@ -1899,6 +1906,20 @@ body::after {
   .filter-list { flex-direction: column; }
   .add-btn { margin-top: 6px; }
   .main { overflow: auto; }
+
+  /* 抽屜落腳處:身分列 + 工具列(由 JS 搬入次要 header 控制項)*/
+  .drawer-only { display: flex; flex-direction: column; }
+  #drawerIdentity { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  #drawerIdentity .user-info { width: 100%; margin: 0; justify-content: space-between; }
+  #drawerIdentity .user-display-name { max-width: none; flex: 1; }
+  #drawerTools {
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px;
+    border-top: 1px solid var(--line); padding-top: 12px;
+  }
+  #drawerTools .book-count { width: 100%; }
+  /* 排序浮層在抽屜內改內嵌展開,避免絕對定位被切掉 */
+  #drawerTools .sort-popover { position: static; width: 100%; margin-top: 8px; }
+
   /* 手機:回到直向捲動(符合手機習慣),原生觸控、不需箭頭與頁碼 */
   .book-grid {
     grid-auto-flow: row;
@@ -1908,6 +1929,10 @@ body::after {
     overflow-x: hidden;
     overflow-y: auto;
   }
+  /* 封面高度改吃真實欄寬(2:3),不再綁死的 --card-w-fit→不會被拉長/letterbox */
+  .book-cover, .no-cover { height: auto; aspect-ratio: 2 / 3; }
+  /* 縮放條在手機上動不了欄數(欄寬由 CSS auto-fill 決定)且浮在書上→直接收起 */
+  .zoom-dock { display: none; }
   .shelf-flip { display: none !important; }
   .shelf-bottombar { display: none !important; }
   .detail-body { flex-direction: column; padding: 20px 16px 14px; gap: 14px; }
@@ -1918,6 +1943,23 @@ body::after {
   .detail-desc-card { margin: 4px 0 0; }
 
   .form-row.two-col { flex-direction: column; }
+
+  /* 彈窗內不換行的橫列在窄螢幕全部改成堆疊/可捲,避免撐破或被切 */
+  .modal-close, .detail-close { width: 40px; height: 40px; }
+  .import-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .import-tab { flex-shrink: 0; padding: 8px 10px; font-size: 12.5px; }
+  .reviews-header { flex-direction: column; gap: 14px; }
+  .reviews-aggregate { min-width: 0; width: 100%; padding-right: 0; border-right: none; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .discussion-input-row { flex-wrap: wrap; }
+  .disc-section-input { flex: 1 1 100% !important; }   /* 蓋過 base 的 flex:0 0 130px !important */
+  .page-edit-row { flex-wrap: wrap; }
+  .star-picker-wrap { flex-wrap: wrap; }
+  .public-banner { flex-wrap: wrap; }
+  .public-banner .pb-text { flex: 1 1 100%; }
+
+  /* 縮邊距 + 守住 landing demo 不外溢 */
+  .people-search-wrap, .people-grid { margin-left: 14px; margin-right: 14px; }
+  .ld-demo-frame { overflow: hidden; }
 }
 
 /* 動態牆 */
