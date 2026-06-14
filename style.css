@@ -2854,28 +2854,21 @@ body::after {
 }
 .exit-hint.show { opacity: 1; transform: translate(-50%, 0); }
 
-/* ── 意見回饋小工具(左下角浮動)── */
-.fb-fab {
-  position: fixed; left: 20px; bottom: 20px; z-index: 80;
-  width: 48px; height: 48px; border-radius: 50%;
-  background: var(--moss); color: #fff; border: none;
-  font-size: 22px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: var(--shadow-lift);
-  transition: background .15s, transform .15s;
+/* ── 意見回饋:左側欄按鈕 + 置中彈窗 ── */
+.fb-sidebar-btn {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin-top: 8px;
+  background: none; border: 1px solid var(--line); color: var(--ink-soft);
+  border-radius: 11px; padding: 9px 12px;
+  font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.fb-fab:hover { background: var(--moss-deep); transform: translateY(-2px); }
-.fb-panel {
-  position: fixed; left: 20px; bottom: 80px; z-index: 81;
-  width: 320px; max-width: calc(100vw - 40px);
-  background: var(--paper-card); border: 1px solid var(--line);
-  border-radius: 16px; box-shadow: var(--shadow-pop);
-  padding: 16px; display: none; flex-direction: column; gap: 10px;
-}
-.fb-panel.open { display: flex; }
-.fb-head { display: flex; align-items: center; justify-content: space-between; }
-.fb-title { font-family: var(--serif); font-size: 17px; font-weight: 600; color: var(--ink); }
-.fb-close { background: none; border: none; font-size: 16px; color: var(--ink-faint); cursor: pointer; padding: 4px; line-height: 1; }
+.fb-sidebar-btn:hover { background: var(--moss-soft); color: var(--moss-deep); border-color: #D7DCC6; }
+.fb-fab-icon { font-size: 15px; line-height: 1; }
+.fb-fab-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+#feedbackModal { z-index: 200; }   /* 壓過手機抽屜(z-index 150)*/
+.modal-feedback { max-width: 420px; }
+.fb-body { padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 10px; }
 .fb-intro { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin: 0; }
 #feedbackText, #feedbackEmail {
   width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px;
@@ -2894,7 +2887,3 @@ body::after {
 .fb-status { font-size: 12.5px; text-align: center; min-height: 16px; }
 .fb-status.ok { color: var(--moss-deep); }
 .fb-status.err { color: var(--clay); }
-@media (max-width: 600px) {
-  .fb-fab { width: 44px; height: 44px; left: 14px; bottom: 14px; font-size: 20px; }
-  .fb-panel { left: 14px; right: 14px; bottom: 66px; width: auto; max-width: none; }
-}

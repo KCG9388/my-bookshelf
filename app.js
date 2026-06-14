@@ -3352,6 +3352,8 @@ const DICT = {
   "Sending…": { "zh-TW": "送出中…" },
   "Thanks! Got it. 🙏": { "zh-TW": "收到了,謝謝!🙏" },
   "Failed to send — please try again.": { "zh-TW": "送出失敗,請再試一次。" },
+  "Please wait {s}s before sending again.": { "zh-TW": "請等 {s} 秒再送出。" },
+  "Thanks for all the feedback! Please come back later.": { "zh-TW": "感謝你的多則回饋!想再送請晚點再來。" },
   "No ratings yet": { "zh-TW": "尚無評分" }, "No books in the shared library yet": { "zh-TW": "共享書庫還沒有書" },
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
@@ -3998,13 +4000,13 @@ function hideExitHint() {
 // ── 意見回饋小工具:寫進 Firestore feedback/(Telegram 推播由本機 watcher 接;見 PROJECT_CONTEXT)──
 (function setupFeedback() {
   const fab = document.getElementById("feedbackFab");
-  const panel = document.getElementById("feedbackPanel");
+  const modal = document.getElementById("feedbackModal");
   const closeBtn = document.getElementById("feedbackClose");
   const textEl = document.getElementById("feedbackText");
   const emailEl = document.getElementById("feedbackEmail");
   const sendBtn = document.getElementById("feedbackSend");
   const statusEl = document.getElementById("feedbackStatus");
-  if (!fab || !panel) return;
+  if (!fab || !modal) return;
 
   function setPlaceholders() {
     textEl.placeholder = t("Type your feedback…");
@@ -4013,19 +4015,30 @@ function hideExitHint() {
   setPlaceholders();
   window.__fbSetPlaceholders = setPlaceholders;   // 供 setLang 切語言時重設 placeholder
 
-  const open  = () => { panel.classList.add("open"); textEl.focus(); };
-  const close = () => panel.classList.remove("open");
-  fab.addEventListener("click", () => panel.classList.contains("open") ? close() : open());
+  // 觸發鈕在左側欄;開啟時順手收起手機抽屜,modal z-index 已壓過抽屜
+  const open  = () => { document.body.classList.remove("side-open"); modal.classList.add("open"); textEl.focus(); };
+  const close = () => modal.classList.remove("open");
+  fab.addEventListener("click", () => modal.classList.contains("open") ? close() : open());
   closeBtn.addEventListener("click", close);
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && panel.classList.contains("open")) close(); });
-  document.addEventListener("click", e => {
-    if (panel.classList.contains("open") && !panel.contains(e.target) && !fab.contains(e.target)) close();
-  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && modal.classList.contains("open")) close(); });
+  modal.addEventListener("click", e => { if (e.target.id === "feedbackModal") close(); });   // 點背景遮罩關閉
+
+  // 前端冷卻:擋手滑連送與隨手洗版(真正的防灌爆在 watcher 端節流)
+  let lastSent = 0, sentCount = 0;
+  const FB_COOLDOWN_MS = 15000, FB_MAX_PER_SESSION = 12;
 
   sendBtn.addEventListener("click", async () => {
     const text = textEl.value.trim();
     statusEl.className = "fb-status";
     if (text.length < 3) { statusEl.textContent = t("Please write a bit more."); statusEl.classList.add("err"); return; }
+    if (sentCount >= FB_MAX_PER_SESSION) {
+      statusEl.textContent = t("Thanks for all the feedback! Please come back later."); statusEl.classList.add("err"); return;
+    }
+    const since = Date.now() - lastSent;
+    if (lastSent && since < FB_COOLDOWN_MS) {
+      statusEl.textContent = t("Please wait {s}s before sending again.").replace("{s}", Math.ceil((FB_COOLDOWN_MS - since) / 1000));
+      statusEl.classList.add("err"); return;
+    }
     sendBtn.disabled = true; statusEl.textContent = t("Sending…");
     try {
       await db.collection("feedback").add({
@@ -4039,6 +4052,7 @@ function hideExitHint() {
         url: location.href.slice(0, 300),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
+      lastSent = Date.now(); sentCount++;
       statusEl.textContent = t("Thanks! Got it. 🙏"); statusEl.classList.add("ok");
       textEl.value = "";
       setTimeout(() => { close(); statusEl.textContent = ""; statusEl.className = "fb-status"; }, 1600);

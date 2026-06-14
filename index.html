@@ -375,6 +375,8 @@
   <button class="add-btn shelf-only" id="openAddModal">+ New Book</button>
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import Books</button>
 
+  <button class="fb-sidebar-btn" id="feedbackFab" aria-label="Feedback"><span class="fb-fab-icon">💬</span><span class="fb-fab-label">Feedback</span></button>
+
   <div class="sidebar-footer">
     <div class="sidebar-footer-links">
       <a href="privacy.html" target="_blank">Privacy</a>
@@ -988,18 +990,21 @@
   </div>
 </div>
 
-<!-- 意見回饋(左下角浮動;登入/未登入皆可用)-->
-<button class="fb-fab" id="feedbackFab" title="Feedback" aria-label="Feedback">💬</button>
-<div class="fb-panel" id="feedbackPanel">
-  <div class="fb-head">
-    <span class="fb-title" data-i18n>Feedback</span>
-    <button class="fb-close" id="feedbackClose" aria-label="Close">✕</button>
+<!-- 意見回饋 Modal(由左側欄按鈕開啟;置中彈窗)-->
+<div class="modal-overlay" id="feedbackModal">
+  <div class="modal modal-feedback">
+    <div class="modal-header">
+      <h2 data-i18n>Feedback</h2>
+      <button class="modal-close" id="feedbackClose" aria-label="Close">✕</button>
+    </div>
+    <div class="fb-body">
+      <p class="fb-intro" data-i18n>Spotted a bug or have an idea? Tell us — we read every message.</p>
+      <textarea id="feedbackText" rows="4" maxlength="3000"></textarea>
+      <input type="email" id="feedbackEmail" />
+      <button class="fb-send" id="feedbackSend" data-i18n>Send</button>
+      <div class="fb-status" id="feedbackStatus"></div>
+    </div>
   </div>
-  <p class="fb-intro" data-i18n>Spotted a bug or have an idea? Tell us — we read every message.</p>
-  <textarea id="feedbackText" rows="4" maxlength="3000"></textarea>
-  <input type="email" id="feedbackEmail" />
-  <button class="fb-send" id="feedbackSend" data-i18n>Send</button>
-  <div class="fb-status" id="feedbackStatus"></div>
 </div>
 
 <!-- Firebase SDK -->
