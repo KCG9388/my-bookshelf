@@ -214,7 +214,22 @@ function startBooksListener() {
     rebuildSidebarFilters();
     rebuildFormatFilter();
     refreshLayout();
+    maybeShowFirstBookPrivacyNotice();
   });
+}
+
+// 書架出現第一本書時，提醒「公開」狀態的使用者：你的書庫目前公開、可改私密。
+// 只對「預設公開」的人(新帳號)跳，且一輩子只跳一次(profile 旗標 shelfPublicNoticeSeen)。
+function maybeShowFirstBookPrivacyNotice() {
+  if (!currentUser || allBooks.length < 1) return;
+  if (!myProfile || myProfile.shelfPublic !== true) return;   // 私密的人不必提醒
+  if (myProfile.shelfPublicNoticeSeen) return;                // 已看過 → 不再跳
+  myProfile.shelfPublicNoticeSeen = true;                     // 先設記憶體旗標，擋住快照連發重複跳
+  const m = document.getElementById("shelfPublicNoticeModal");
+  if (m) m.classList.add("open");
+  db.collection("users").doc(currentUser.uid)
+    .set({ shelfPublicNoticeSeen: true }, { merge: true })
+    .catch(() => {});                                          // 持久化：跨裝置也只跳一次
 }
 
 // ── 舊書庫自動匯入已移除（多人版修正）──
@@ -292,8 +307,8 @@ async function ensureProfile(user) {
     if (!snap.exists) {
       const init = {
         ...base,
-        shelfPublic:  false,  // 隱私預設：書庫不公開
-        showReading:  false,  // 隱私預設：不顯示「正在閱讀」
+        shelfPublic:  true,   // 預設：書庫公開（社群比對需要；只影響新帳號，現有使用者不變）
+        showReading:  false,  // 「正在閱讀」仍預設關（較即時/私密，使用者要再自行開）
         followerCount: 0,     // 初始化 → discovery 的 orderBy(followerCount) 才排得到
         reviewCount:   0,
         createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
@@ -382,6 +397,7 @@ document.querySelectorAll(".auth-tab").forEach(tab => {
     const isSignup = authMode === "signup";
     document.getElementById("authConfirmWrap").style.display    = isSignup ? "" : "none";
     document.getElementById("authDisplayNameWrap").style.display = isSignup ? "" : "none";
+    document.getElementById("authTermsWrap").style.display       = isSignup ? "flex" : "none";
     document.getElementById("authSubmitBtn").textContent         = isSignup ? "Create Account" : "Sign In";
     document.getElementById("forgotPasswordBtn").style.display   = isSignup ? "none" : "";
     document.getElementById("authPassword").autocomplete = isSignup ? "new-password" : "current-password";
@@ -428,6 +444,9 @@ async function handleAuthSubmit() {
       }
       if (password.length < 6) {
         showAuthError("Password must be at least 6 characters."); return;
+      }
+      if (!document.getElementById("authAgreeTerms").checked) {
+        showAuthError(t("Please agree to the Terms of Use and Privacy Policy to continue.")); return;
       }
       const cred = await auth.createUserWithEmailAndPassword(email, password);
       if (displayName) await cred.user.updateProfile({ displayName });
@@ -2810,6 +2829,20 @@ document.getElementById("cancelPrivacy").addEventListener("click", closePrivacy)
 document.getElementById("privacyModal").addEventListener("click", e => {
   if (e.target.id === "privacyModal") closePrivacy();
 });
+
+// 首本書「書架已公開」一次性提示 modal 的按鈕
+(function setupShelfPublicNotice() {
+  const m = document.getElementById("shelfPublicNoticeModal");
+  if (!m) return;
+  const close = () => m.classList.remove("open");
+  document.getElementById("shelfNoticeClose").addEventListener("click", close);
+  document.getElementById("shelfNoticeOkBtn").addEventListener("click", close);
+  document.getElementById("shelfNoticeSettingsBtn").addEventListener("click", () => {
+    close();
+    document.getElementById("openPrivacyBtn").click();   // 帶他去隱私設定面板
+  });
+  m.addEventListener("click", e => { if (e.target.id === "shelfPublicNoticeModal") close(); });
+})();
 document.getElementById("savePrivacyBtn").addEventListener("click", async () => {
   if (!currentUser) return;
   const btn = document.getElementById("savePrivacyBtn");
@@ -3287,8 +3320,12 @@ const DICT = {
   "✍️ Write a Review": { "zh-TW": "✍️ 寫評論" }, "Your name or nickname": { "zh-TW": "你的名字或暱稱" },
   "Select rating": { "zh-TW": "選擇評分" }, "Share your thoughts... (optional)": { "zh-TW": "分享你的想法...(選填)" }, "Submit Review": { "zh-TW": "送出評論" },
   // 隱私
-  "Control who can see your shelf. Everything is private by default.": { "zh-TW": "控制誰能看到你的書架。預設全部不公開。" },
+  "Your shelf is public by default, so readers with similar taste can find you. Switch it off below to make it private.": { "zh-TW": "你的書架預設為公開,這樣口味相近的讀者才找得到你。隨時可在下方關閉、改為私密。" },
   "Make my library public": { "zh-TW": "公開我的書庫" },
+  "Your shelf is public": { "zh-TW": "你的書架目前是公開的" },
+  "Heads up — your shelf is public by default, so readers with similar taste can discover you and you can find each other's books. You can make it private anytime in Settings.": { "zh-TW": "提醒你——你的書架預設為公開,這樣口味相近的讀者才能發現你、彼此找到好書。隨時可到設定改為私密。" },
+  "Got it": { "zh-TW": "知道了" },
+  "Make it private in Settings": { "zh-TW": "想改私密?到設定關閉公開" },
   "When on, others can browse the books you've read / are reading / want to read, with status and progress.": { "zh-TW": "開啟後,別人可以瀏覽你讀過/在讀/想讀的書,以及狀態與進度。" },
   "Show \"Now Reading\"": { "zh-TW": "顯示「正在閱讀」" },
   "Highlight what you're currently reading on your public library (requires public library).": { "zh-TW": "在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。" },
@@ -3368,7 +3405,9 @@ const DICT = {
   "No replies yet": { "zh-TW": "還沒有回覆" },
   "💬 Book Club Discussion": { "zh-TW": "💬 讀書會討論" }, "Join the discussion...": { "zh-TW": "加入討論..." },
   "Be the first to start the discussion!": { "zh-TW": "搶第一個開始討論吧!" },
-  "Chapter (optional)": { "zh-TW": "章節(可不填)" }, "I've read up to:": { "zh-TW": "我讀到:" },
+  "Chapter (e.g. 1-3 or 4-8)": { "zh-TW": "請填寫章節(範例:1-3或4-8)" }, "I've read up to:": { "zh-TW": "我讀到:" },
+  "{n} comments": { "zh-TW": "{n}則討論" },
+  "Please agree to the Terms of Use and Privacy Policy to continue.": { "zh-TW": "請先勾選同意使用者規範與隱私權政策。" },
   "— not started —": { "zh-TW": "— 還沒開始 —" }, "Whole book": { "zh-TW": "全書" },
   "Whole book (general)": { "zh-TW": "全書討論(未分章)" },
   "may contain spoilers — click to open": { "zh-TW": "可能含爆雷,點開查看" },
@@ -3388,6 +3427,9 @@ const DICT = {
 
 // 含 HTML 標籤的整塊內容(無法用純文字翻)
 const HTML_DICT = {
+  "agree-terms": {
+    "zh-TW": `我已閱讀並同意本站的 <a href="terms.html" target="_blank">使用者規範</a> 與 <a href="privacy.html" target="_blank">隱私權政策</a>。`
+  },
   "ld-headline": {
     "zh-TW": `找到跟你<em>閱讀同頻</em>的人`
   },
@@ -3862,7 +3904,7 @@ function renderDiscussionGroups(catalogKey) {
   if (!list) return;
   list.innerHTML = discSections.map((s, i) => {
     const open   = i <= discReadUpToIdx;     // 後段預設摺疊
-    const header = `${s.label || t("Whole book (general)")} · ${s.posts.length}`;
+    const header = `${s.label || t("Whole book (general)")} · ${t("{n} comments", { n: s.posts.length })}`;
     const warn   = open ? "" : `<span class="disc-spoiler-warn">⚠️ ${t("may contain spoilers — click to open")}</span>`;
     const body   = s.posts.map(discItemHtml).join("");
     return `<div class="disc-group ${open ? "open" : ""}" data-idx="${i}">

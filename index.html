@@ -760,7 +760,7 @@
       </div>
       <div class="discussion-list" id="discussionList"></div>
       <div class="discussion-input-row" id="discussionInputRow">
-        <input type="text" id="discussionSection" class="disc-section-input" list="discSectionOptions" placeholder="Chapter (optional)" maxlength="40" />
+        <input type="text" id="discussionSection" class="disc-section-input" list="discSectionOptions" placeholder="Chapter (e.g. 1-3 or 4-8)" maxlength="40" />
         <datalist id="discSectionOptions"></datalist>
         <input type="text" id="discussionInput" placeholder="Join the discussion..." maxlength="500" />
         <button id="discussionSend">Send</button>
@@ -778,7 +778,7 @@
       <button class="modal-close" id="closePrivacyModal">✕</button>
     </div>
     <div class="privacy-body">
-      <p class="privacy-intro">Control who can see your shelf. Everything is private by default.</p>
+      <p class="privacy-intro">Your shelf is public by default, so readers with similar taste can find you. Switch it off below to make it private.</p>
 
       <label class="privacy-row">
         <div class="privacy-text">
@@ -951,6 +951,10 @@
       <div id="authConfirmWrap" style="display:none">
         <input type="password" id="authConfirmPassword" placeholder="Confirm password" autocomplete="new-password" />
       </div>
+      <label class="auth-terms" id="authTermsWrap" style="display:none">
+        <input type="checkbox" id="authAgreeTerms" />
+        <span data-i18n-html="agree-terms">I have read and agree to the <a href="terms.html" target="_blank">Terms of Use</a> and <a href="privacy.html" target="_blank">Privacy Policy</a>.</span>
+      </label>
       <div class="auth-error" id="authError" style="display:none"></div>
       <button class="btn-auth-submit" id="authSubmitBtn">Sign In</button>
       <div class="auth-reset-wrap">
@@ -986,6 +990,21 @@
         <button class="btn-auth-link" id="resendVerifyBtn">Resend verification email</button>
         <button class="btn-auth-link" id="verifySignOutBtn">Use a different account</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 首本書一次性提示:告知書架預設公開 -->
+<div class="modal-overlay" id="shelfPublicNoticeModal">
+  <div class="modal modal-feedback">
+    <div class="modal-header">
+      <h2 data-i18n>Your shelf is public</h2>
+      <button class="modal-close" id="shelfNoticeClose" aria-label="Close">✕</button>
+    </div>
+    <div class="fb-body">
+      <p class="fb-intro" data-i18n>Heads up — your shelf is public by default, so readers with similar taste can discover you and you can find each other's books. You can make it private anytime in Settings.</p>
+      <button class="fb-send" id="shelfNoticeOkBtn" data-i18n>Got it</button>
+      <button class="fb-textlink" id="shelfNoticeSettingsBtn" data-i18n>Make it private in Settings</button>
     </div>
   </div>
 </div>

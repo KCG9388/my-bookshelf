@@ -1817,6 +1817,18 @@ body::after {
 }
 .auth-form-area input:focus { border-color: #5A7052; background: #fff; }
 
+.auth-terms {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12.5px; color: #5C5546; line-height: 1.45;
+  margin: -2px 0 2px; cursor: pointer; text-align: left;
+}
+.auth-terms input[type="checkbox"] {
+  width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px;
+  padding: 0; border: none; background: none; border-radius: 0;
+  cursor: pointer; accent-color: #5A7052;
+}
+.auth-terms a { color: #46523F; text-decoration: underline; }
+
 .auth-error {
   border-radius: 7px;
   padding: 9px 12px;
@@ -2887,3 +2899,10 @@ body::after {
 .fb-status { font-size: 12.5px; text-align: center; min-height: 16px; }
 .fb-status.ok { color: var(--moss-deep); }
 .fb-status.err { color: var(--clay); }
+.fb-textlink {
+  background: none; border: none; color: var(--moss-deep);
+  font-size: 12.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+  padding: 2px; text-decoration: underline; align-self: center;
+}
+.fb-textlink:hover { color: var(--moss); }
+#shelfPublicNoticeModal { z-index: 200; }
