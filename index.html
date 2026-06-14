@@ -683,7 +683,7 @@
             <input type="number" id="detailProgressPct" min="0" max="100" style="display:none" />
             <span id="detailPctSign" style="display:none">%</span>
             <button id="updatePageBtn">Update</button>
-            <button id="markDoneBtn" class="mark-done-btn">✓ Done</button>
+            <button id="markDoneBtn" class="mark-done-btn">✓ Finished</button>
           </div>
         </div>
       </div>
@@ -732,9 +732,7 @@
         <div class="rating-bars" id="ratingBars"></div>
       </div>
 
-      <div class="reviews-list" id="reviewsList"></div>
-
-      <!-- Write a review -->
+      <!-- Write a review:置頂引導填寫(有自己的評論時由 JS 隱藏) -->
       <div class="write-review">
         <div class="write-review-title">✍️ Write a Review</div>
         <div class="review-form">
@@ -749,6 +747,8 @@
           <button class="btn-submit-review" id="submitReviewBtn">Submit Review</button>
         </div>
       </div>
+
+      <div class="reviews-list" id="reviewsList"></div>
     </div>
 
     <!-- 讀書會討論 -->
@@ -944,7 +944,7 @@
 
     <div class="auth-form-area">
       <div id="authDisplayNameWrap" style="display:none">
-        <input type="text" id="authDisplayName" placeholder="Your name (e.g. Jane)" autocomplete="name" />
+        <input type="text" id="authDisplayName" placeholder="Username (e.g. Lena the lit omnivore)" autocomplete="name" />
       </div>
       <input type="email" id="authEmail" placeholder="Email address" autocomplete="email" />
       <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" />
@@ -1005,6 +1005,26 @@
       <p class="fb-intro" data-i18n>Heads up — your shelf is public by default, so readers with similar taste can discover you and you can find each other's books. You can make it private anytime in Settings.</p>
       <button class="fb-send" id="shelfNoticeOkBtn" data-i18n>Got it</button>
       <button class="fb-textlink" id="shelfNoticeSettingsBtn" data-i18n>Make it private in Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- 讀完一本書 → 邀請評分+評論(鼓勵發表內容)-->
+<div class="modal-overlay" id="finishReviewModal">
+  <div class="modal modal-feedback">
+    <div class="modal-header">
+      <h2 data-i18n>You finished a book! 🎉</h2>
+      <button class="modal-close" id="finishReviewClose" aria-label="Close">✕</button>
+    </div>
+    <div class="fb-body">
+      <p class="fb-intro" id="finishReviewBookTitle"></p>
+      <div class="finish-star-row">
+        <div class="finish-star-input" id="finishStarInput"></div>
+        <span class="finish-star-label" id="finishStarLabel" data-i18n>Tap to rate</span>
+      </div>
+      <textarea id="finishReviewText" placeholder="Share your thoughts... (optional)" rows="3"></textarea>
+      <button class="fb-send" id="finishReviewSubmit" data-i18n>Post review</button>
+      <button class="fb-textlink" id="finishReviewSkip" data-i18n>Maybe later</button>
     </div>
   </div>
 </div>

@@ -308,7 +308,7 @@ async function ensureProfile(user) {
       const init = {
         ...base,
         shelfPublic:  true,   // 預設：書庫公開（社群比對需要；只影響新帳號，現有使用者不變）
-        showReading:  false,  // 「正在閱讀」仍預設關（較即時/私密，使用者要再自行開）
+        showReading:  true,   // 「正在閱讀」也預設公開（KC 2026-06-14；只影響新帳號）
         followerCount: 0,     // 初始化 → discovery 的 orderBy(followerCount) 才排得到
         reviewCount:   0,
         createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
@@ -1765,6 +1765,12 @@ function renderReviews(reviews) {
   const ratingBars  = document.getElementById("ratingBars");
   const reviewsList = document.getElementById("reviewsList");
 
+  // 評論區置頂規則:有自己的評論→表單隱藏(自己的卡會在列表最上面);沒寫過且已登入→表單置頂引導填寫
+  const myUid = currentUser && currentUser.uid;
+  const hasOwnReview = !!(myUid && reviews.some(r => r.uid === myUid || r.id === myUid));
+  const writeReviewBox = document.querySelector(".write-review");
+  if (writeReviewBox) writeReviewBox.style.display = hasOwnReview ? "none" : "";
+
   if (!reviews.length) {
     aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = t("No reviews yet");
     ratingBars.innerHTML = "";
@@ -1774,7 +1780,6 @@ function renderReviews(reviews) {
   }
 
   // 自己的評論置頂(一眼看到自己評過沒);其餘維持原本 createdAt 倒序。slice 不動原陣列
-  const myUid = currentUser && currentUser.uid;
   if (myUid) {
     const own = r => (r.uid === myUid || r.id === myUid) ? 1 : 0;
     reviews = reviews.slice().sort((a, b) => own(b) - own(a));
@@ -1887,6 +1892,80 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
   btn.disabled = false; btn.textContent = t("Submit Review");
 });
 
+// ── 讀完一本書 → 邀請評分+評論(鼓勵發表內容)──
+let finishStarRating = 0;
+let finishReviewCtx  = null;
+
+function buildFinishStars() {
+  const wrap  = document.getElementById("finishStarInput");
+  const label = document.getElementById("finishStarLabel");
+  wrap.innerHTML = [1,2,3,4,5].map(n => `<span class="fstar" data-n="${n}">★</span>`).join("");
+  const paint = v => wrap.querySelectorAll(".fstar").forEach(s => s.classList.toggle("on", +s.dataset.n <= v));
+  wrap.querySelectorAll(".fstar").forEach(s => {
+    s.addEventListener("mouseenter", () => paint(+s.dataset.n));
+    s.addEventListener("click", () => {
+      finishStarRating = +s.dataset.n;
+      paint(finishStarRating);
+      label.textContent = finishStarRating + " ★";
+    });
+  });
+  wrap.addEventListener("mouseleave", () => paint(finishStarRating));
+  paint(0);
+}
+
+// 標記讀完後呼叫:該書還沒被自己評過才跳,避免重複打擾
+async function maybePromptFinishReview(bookId) {
+  if (!currentUser) return;
+  const b = allBooks.find(x => x.id === bookId);
+  if (!b) return;
+  const key = b.catalogKey || catalogKeyFor(b.title, b.author);   // 與 openDetail 同一把鑰匙
+  if (!key) return;
+  try {
+    const snap = await db.collection("catalog").doc(key).collection("reviews").doc(currentUser.uid).get();
+    if (snap.exists) return;   // 已評過 → 不再打擾
+  } catch (e) { /* 查不到就照常邀請 */ }
+  finishReviewCtx = { key, title: b.title, cover: b.cover };
+  finishStarRating = 0;
+  buildFinishStars();
+  document.getElementById("finishReviewText").value = "";
+  document.getElementById("finishReviewBookTitle").textContent = t("How was {title}?", { title: b.title });
+  document.getElementById("finishStarLabel").textContent = t("Tap to rate");
+  document.getElementById("finishReviewModal").classList.add("open");
+}
+
+(function setupFinishReview() {
+  const modal = document.getElementById("finishReviewModal");
+  if (!modal) return;
+  const close = () => modal.classList.remove("open");
+  document.getElementById("finishReviewClose").addEventListener("click", close);
+  document.getElementById("finishReviewSkip").addEventListener("click", close);
+  modal.addEventListener("click", e => { if (e.target.id === "finishReviewModal") close(); });
+  document.getElementById("finishReviewSubmit").addEventListener("click", async () => {
+    if (!currentUser || !finishReviewCtx) return;
+    if (!finishStarRating) {
+      document.getElementById("finishStarLabel").textContent = t("Please tap a star to rate");
+      return;
+    }
+    const btn = document.getElementById("finishReviewSubmit");
+    btn.disabled = true; btn.textContent = t("Submitting...");
+    try {
+      await applyReviewToCatalog(finishReviewCtx.key, currentUser.uid, {
+        uid:          currentUser.uid,
+        reviewerName: (currentUser.displayName || (myProfile && myProfile.displayName) || "Reader"),
+        rating:       finishStarRating,
+        text:         document.getElementById("finishReviewText").value.trim(),
+        readPercent:  100,
+      });
+      logActivity("review", finishReviewCtx, { rating: finishStarRating });
+      close();
+    } catch (e) {
+      alert(t("Failed") + ": " + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = t("Post review");
+    }
+  });
+})();
+
 // 切換「頁數 / %」進度輸入框的顯示
 function setProgressMode(mode) {
   const isPct = mode === "pct";
@@ -1933,8 +2012,10 @@ document.getElementById("markDoneBtn").addEventListener("click", async () => {
   const updates = { status: "Finished" };
   if (b && b.totalPages > 0) { updates.currentPage = b.totalPages; updates.progressPct = null; }
   else { updates.progressPct = 100; }
+  const finishedId = currentDetailId;
   await booksCol.doc(currentDetailId).update(updates);
   openDetail(currentDetailId);
+  maybePromptFinishReview(finishedId);   // 讀完→邀請評分+評論
 });
 
 document.getElementById("editBookBtn").addEventListener("click", () => {
@@ -3319,6 +3400,10 @@ const DICT = {
   "Edit": { "zh-TW": "編輯" }, "Delete": { "zh-TW": "刪除" }, "➕ Add to My Shelf": { "zh-TW": "➕ 加入我的書架" },
   "✍️ Write a Review": { "zh-TW": "✍️ 寫評論" }, "Your name or nickname": { "zh-TW": "你的名字或暱稱" },
   "Select rating": { "zh-TW": "選擇評分" }, "Share your thoughts... (optional)": { "zh-TW": "分享你的想法...(選填)" }, "Submit Review": { "zh-TW": "送出評論" },
+  "You finished a book! 🎉": { "zh-TW": "讀完一本書了!🎉" },
+  "How was {title}?": { "zh-TW": "《{title}》讀起來如何?" },
+  "Tap to rate": { "zh-TW": "點星星評分" }, "Please tap a star to rate": { "zh-TW": "請先點星星給個評分" },
+  "Post review": { "zh-TW": "送出評分" }, "Maybe later": { "zh-TW": "稍後再說" },
   // 隱私
   "Your shelf is public by default, so readers with similar taste can find you. Switch it off below to make it private.": { "zh-TW": "你的書架預設為公開,這樣口味相近的讀者才找得到你。隨時可在下方關閉、改為私密。" },
   "Make my library public": { "zh-TW": "公開我的書庫" },
@@ -3340,7 +3425,7 @@ const DICT = {
   "or click to browse": { "zh-TW": "或點擊瀏覽" },
   "Click to change file": { "zh-TW": "點擊更換檔案" }, "Importing {i} / {total}...": { "zh-TW": "匯入中 {i} / {total}..." },
   "Done! ✓ {ok} imported": { "zh-TW": "完成!✓ 已匯入 {ok} 本" }, ", {n} skipped": { "zh-TW": ",跳過 {n} 本" }, ", ✗ {n} failed": { "zh-TW": ",✗ 失敗 {n} 本" },
-  "Done": { "zh-TW": "完成" },
+  "Done": { "zh-TW": "完成" }, "✓ Finished": { "zh-TW": "✓ 已完成" },
   "Import isn't finished — covers haven't been updated yet. Leaving now will remove the books you just imported. Exit anyway?": { "zh-TW": "匯入還沒完成——封面尚未更新。現在離開會清除你剛匯入的書。確定要跳出嗎?" },
   "Cancelling import — removing {n} books...": { "zh-TW": "取消匯入中——正在移除 {n} 本書..." },
   "Import cancelled. {n} books removed.": { "zh-TW": "已取消匯入,移除了 {n} 本書。" },
@@ -3366,7 +3451,7 @@ const DICT = {
   "Find readers who read like you": { "zh-TW": "找到跟你閱讀同頻的人" },
   "Continue with Google": { "zh-TW": "使用 Google 繼續" }, "or continue with email": { "zh-TW": "或使用 Email 繼續" },
   "Sign In": { "zh-TW": "登入" }, "Create Account": { "zh-TW": "建立帳號" },
-  "Your name (e.g. Jane)": { "zh-TW": "你的名字(例:小明)" }, "Email address": { "zh-TW": "Email 地址" },
+  "Username (e.g. Lena the lit omnivore)": { "zh-TW": "使用者名稱(例:文學雜食者 Lena)" }, "Email address": { "zh-TW": "Email 地址" },
   "Password": { "zh-TW": "密碼" }, "Confirm password": { "zh-TW": "確認密碼" }, "Forgot password?": { "zh-TW": "忘記密碼?" },
   // 動態字串(JS 用 t() 取)
   "Loading...": { "zh-TW": "載入中..." }, "{n} books": { "zh-TW": "{n} 本書" }, "{n} book": { "zh-TW": "{n} 本書" },
