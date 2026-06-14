@@ -2279,6 +2279,82 @@ body::after {
   line-height: 1.5;
 }
 
+/* ── 個人檔案設定(版本A:堆疊式) ── */
+.modal-profile { max-width: 460px; }
+.profile-body { padding: 14px 20px 6px; display: flex; flex-direction: column; gap: 18px; max-height: 70vh; overflow-y: auto; }
+.pf-field { display: flex; flex-direction: column; gap: 6px; }
+.pf-label { font-size: 13px; font-weight: 700; color: #3B372E; }
+.pf-hint { font-size: 12px; color: #8A8270; line-height: 1.4; }
+.profile-body input[type="text"],
+.profile-body textarea {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid #E2DAC6; border-radius: 8px;
+  padding: 9px 11px; font-size: 14px; color: #3B372E;
+  background: #fffdf7; font-family: inherit;
+}
+.profile-body textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+.profile-body input:focus, .profile-body textarea:focus { outline: none; border-color: var(--moss, #5A7052); }
+
+/* 頭像列 */
+.pf-avatar-row { display: flex; align-items: center; gap: 16px; }
+.pf-avatar {
+  width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+  background: #EDE6D4; color: #6E6557;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 22px; overflow: hidden;
+}
+.pf-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pf-avatar-side { display: flex; flex-direction: column; gap: 4px; }
+.btn-light {
+  align-self: flex-start;
+  border: 1px solid #D9D0BC; background: #fffdf7; color: #4A4537;
+  border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-light:hover { background: #f6f1e4; }
+.btn-light:disabled { opacity: .55; cursor: default; }
+
+/* 名稱 + 鑑別碼 */
+.pf-name-row { display: flex; align-items: center; gap: 8px; }
+.pf-name-row input { flex: 1; }
+.pf-tag {
+  font-size: 14px; font-weight: 700; color: #8A8270;
+  background: #f3eee0; border-radius: 6px; padding: 8px 10px; white-space: nowrap;
+}
+
+/* 年度最愛 */
+.pf-fav-picked {
+  display: flex; align-items: center; gap: 10px;
+  background: #faf8f0; border: 1px solid #EFEADB; border-radius: 8px; padding: 8px 10px;
+}
+.pf-fav-picked img { width: 34px; height: 50px; object-fit: cover; border-radius: 3px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.pf-fav-title { flex: 1; font-size: 14px; color: #3B372E; font-weight: 600; }
+.pf-fav-clear { border: none; background: none; color: #B5654A; font-size: 15px; cursor: pointer; padding: 4px; }
+.pf-fav-results { display: flex; flex-direction: column; gap: 2px; }
+.pf-fav-hit {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  border: none; background: none; padding: 6px 8px; border-radius: 7px; cursor: pointer;
+}
+.pf-fav-hit:hover { background: #f6f1e4; }
+.pf-fav-hit img { width: 26px; height: 38px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.pf-fav-noimg { width: 26px; height: 38px; display: flex; align-items: center; justify-content: center; background: #EDE6D4; border-radius: 3px; flex-shrink: 0; }
+.pf-fav-hit-t { font-size: 13px; color: #3B372E; }
+.pf-fav-empty { font-size: 12px; color: #8A8270; padding: 6px 8px; }
+
+/* 帳號連結狀態 */
+.pf-links { display: flex; flex-direction: column; gap: 6px; }
+.pf-link-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.pf-link-name { color: #4A4537; font-weight: 600; }
+.pf-link-val { color: #A39A86; }
+.pf-link-val.is-on { color: var(--moss, #5A7052); font-weight: 600; }
+
+.pf-error {
+  font-size: 13px; color: #c0392b; background: #fde8e8;
+  border-radius: 6px; padding: 8px 11px; line-height: 1.4;
+}
+
+/* 註冊頁名稱提示 */
+.auth-field-hint { font-size: 11.5px; color: #8A8270; margin: -2px 2px 4px; }
+
 /* ── 閱讀相容度面板(核心賣點:圓環儀表 + 分級配色 + 細項小卡)── */
 .compat-panel {
   display: flex;

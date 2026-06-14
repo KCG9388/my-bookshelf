@@ -295,6 +295,68 @@ async function upsertCatalog(book, desc) {
   return key;
 }
 
+// 四碼鑑別碼(0000–9999):同名使用者靠它區分，全站顯示成 name#tag
+function genTag() {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+}
+// 輕量查重:撈同名使用者已用掉的 tag 盡量避開;查詢失敗(規則/網路)就退回純隨機(碰撞機率極低)
+async function uniqueTag(name) {
+  let tag = genTag();
+  try {
+    const snap = await db.collection("users").where("displayName", "==", name).limit(50).get();
+    const used = new Set(snap.docs.map(d => d.data().tag).filter(Boolean));
+    for (let i = 0; i < 20 && used.has(tag); i++) tag = genTag();
+  } catch (e) { /* 退回純隨機 */ }
+  return tag;
+}
+// 顯示名:有鑑別碼就接 #tag
+function fmtName(p) {
+  if (!p) return "Reader";
+  const n = p.displayName || "Reader";
+  return p.tag ? `${n}#${p.tag}` : n;
+}
+// 去正規化資料(評論/動態/討論)用:名稱 + 可選 #tag(舊資料沒 tag 就只顯示名稱)
+function nameTag(name, tag) { return tag ? `${name || "Reader"}#${tag}` : (name || "Reader"); }
+// 寫入去正規化資料時要帶上的本人鑑別碼(沒有就 null)
+function myTag() { return (myProfile && myProfile.tag) || null; }
+// 本人頭像來源:一律以 profile photoURL 為準(自訂 base64 頭像也走這裡),退回 Auth 照片
+function myPhoto() { return (myProfile && myProfile.photoURL) || (currentUser && currentUser.photoURL) || ""; }
+
+// 把使用者選的圖在瀏覽器端壓成小頭像(最長邊 128px、JPEG)→ 回傳 base64 data URL
+// 這樣頭像直接存進 Firestore profile,免開 Firebase Storage / 免 Blaze 綁卡
+function resizeImageToDataURL(file, maxSide = 128, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      try { resolve(canvas.toDataURL("image/jpeg", quality)); }
+      catch (e) { reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image load failed")); };
+    img.src = url;
+  });
+}
+// ensureProfile 拿到(含 tag 的)profile 後,把右上角名字補上 #tag、頭像換成 profile 的 photoURL
+function refreshIdentityUI() {
+  const nameEl = document.getElementById("userDisplayName");
+  const avEl   = document.getElementById("userAvatarSm");
+  if (nameEl) nameEl.textContent = fmtName(myProfile);
+  if (avEl) {
+    const url = myProfile.photoURL || (currentUser && currentUser.photoURL) || "";
+    const nm  = myProfile.displayName || "R";
+    if (url) avEl.innerHTML = `<img src="${url}" alt="${escHtml(nm)}" />`;
+    else     avEl.textContent = nm.slice(0, 2).toUpperCase();
+  }
+}
+
 // 確保使用者公開檔案存在（顯示名稱/頭像/隱私開關；email 不放這裡）
 async function ensureProfile(user) {
   const ref = db.collection("users").doc(user.uid);
@@ -307,6 +369,10 @@ async function ensureProfile(user) {
     if (!snap.exists) {
       const init = {
         ...base,
+        tag:          await uniqueTag(base.displayName),  // 四碼鑑別碼
+        bio:          "",
+        discord:      "",
+        favBook:      null,   // 年度最愛的書 {key,title,cover}
         shelfPublic:  true,   // 預設：書庫公開（社群比對需要；只影響新帳號，現有使用者不變）
         showReading:  true,   // 「正在閱讀」也預設公開（KC 2026-06-14；只影響新帳號）
         followerCount: 0,     // 初始化 → discovery 的 orderBy(followerCount) 才排得到
@@ -320,9 +386,11 @@ async function ensureProfile(user) {
       const patch = { ...base };               // 只更新名稱/頭像，不動隱私開關
       if (d.followerCount == null) patch.followerCount = 0;   // 自我修復:補上缺的計數欄
       if (d.reviewCount   == null) patch.reviewCount   = 0;   //  → 公開後在 discovery 排得到
+      if (d.tag == null) patch.tag = await uniqueTag(d.displayName || base.displayName);  // 老帳號補鑑別碼
       await ref.set(patch, { merge: true });
       myProfile = { ...d, ...patch };
     }
+    refreshIdentityUI();
   } catch (e) { console.warn("ensureProfile failed:", e); }
 }
 
@@ -1820,7 +1888,7 @@ function renderReviews(reviews) {
     return `<div class="review-card${isOwn ? " review-card-own" : ""}">
       <div class="review-top">
         <div class="reviewer-avatar">${escHtml(initials)}</div>
-        <div class="reviewer-name clickable" data-uid="${escHtml(r.uid || r.id || "")}">${escHtml(r.reviewerName || "Anonymous")}</div>
+        <div class="reviewer-name clickable" data-uid="${escHtml(r.uid || r.id || "")}">${escHtml(nameTag(r.reviewerName || "Anonymous", r.tag))}</div>
         ${isOwn ? `<span class="review-own-tag">${t("Your review")}</span>` : ""}
         ${r.rating ? `<div class="review-stars">${starsHTML(r.rating)}<span class="review-score">${r.rating}</span></div>` : ""}
         ${r.readPercent != null ? `<div class="review-read-badge">Read ${r.readPercent}%</div>` : ""}
@@ -1878,10 +1946,11 @@ document.getElementById("submitReviewBtn").addEventListener("click", async () =>
     const { isNew } = await applyReviewToCatalog(catalogKey, currentUser.uid, {
       uid:          currentUser.uid,
       reviewerName: name,
+      tag:          myTag(),
       rating:       selectedRating,
       text,
       readPercent:  Number.isFinite(pct) ? pct : null,
-      photoURL:     currentUser.photoURL || "",
+      photoURL:     myPhoto(),
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
     });
@@ -1980,6 +2049,8 @@ async function maybePromptFinishReview(bookId) {
       await applyReviewToCatalog(finishReviewCtx.key, currentUser.uid, {
         uid:          currentUser.uid,
         reviewerName: (currentUser.displayName || (myProfile && myProfile.displayName) || "Reader"),
+        tag:          myTag(),
+        photoURL:     myPhoto(),
         rating:       finishStarRating,
         text:         document.getElementById("finishReviewText").value.trim(),
         readPercent:  100,
@@ -2792,7 +2863,7 @@ function renderPeople() {
       return `<div class="pcard" data-uid="${escHtml(u.uid)}">
         ${avatar}
         <div class="pcard-body">
-          <div class="pcard-name">${escHtml(u.displayName || "Reader")}</div>
+          <div class="pcard-name">${escHtml(fmtName(u))}</div>
           <div class="pcard-stats">${stats || t("New reader")}</div>
         </div>
         <span class="pcard-go">›</span>
@@ -2997,6 +3068,172 @@ document.getElementById("savePrivacyBtn").addEventListener("click", async () => 
   btn.disabled = false; btn.textContent = t("Save");
 });
 
+// ── 個人檔案設定(版本A:右上角點名字進入) ──
+(function setupProfileModal() {
+  const modal = document.getElementById("profileModal");
+  if (!modal) return;
+  const $ = id => document.getElementById(id);
+  let pickedFav = null;   // 暫存選定的年度最愛 {key,title,cover}
+
+  function open() {
+    if (!currentUser) { alert(t("Please sign in first.")); return; }
+    const p = myProfile || {};
+    renderAvatar(p);
+    $("pfDisplayName").value = p.displayName || "";
+    $("pfTag").textContent   = p.tag ? "#" + p.tag : "";
+    $("pfBio").value     = p.bio || "";
+    $("pfDiscord").value = p.discord || "";
+    pickedFav = p.favBook || null;
+    renderFav();
+    $("pfFavSearch").value = "";
+    $("pfFavResults").innerHTML = "";
+    renderLinks();
+    hideErr();
+    modal.classList.add("open");
+  }
+  function close() { modal.classList.remove("open"); }
+
+  function renderAvatar(p) {
+    const av  = $("pfAvatar");
+    const url = (p && p.photoURL) || (currentUser && currentUser.photoURL) || "";
+    const nm  = (p && p.displayName) || "R";
+    if (url) av.innerHTML = `<img src="${escHtml(url)}" alt="${escHtml(nm)}" />`;
+    else { av.innerHTML = ""; av.textContent = nm.slice(0, 2).toUpperCase(); }
+  }
+
+  function renderFav() {
+    const wrap = $("pfFavPicked");
+    if (pickedFav && pickedFav.title) {
+      wrap.style.display = "";
+      const cov = $("pfFavCover");
+      cov.src = pickedFav.cover || "";
+      cov.style.display = pickedFav.cover ? "" : "none";
+      $("pfFavTitle").textContent = pickedFav.title;
+    } else { wrap.style.display = "none"; }
+  }
+
+  function renderLinks() {
+    const providers = (currentUser && currentUser.providerData) || [];
+    const hasGoogle = providers.some(x => x.providerId === "google.com");
+    const hasEmail  = providers.some(x => x.providerId === "password");
+    const dc = ($("pfDiscord").value || "").trim();
+    const row = (label, value, on) =>
+      `<div class="pf-link-row"><span class="pf-link-name">${label}</span>`
+      + `<span class="pf-link-val ${on ? "is-on" : ""}">${escHtml(value)}</span></div>`;
+    $("pfLinks").innerHTML =
+        row("Google",  hasGoogle ? (currentUser.email || t("Linked")) : t("Not linked"), hasGoogle)
+      + row("Email",   hasEmail  ? (currentUser.email || "")           : t("Not linked"), hasEmail)
+      + row("Discord", dc || t("Not linked"), !!dc);
+  }
+
+  function showErr(msg) { const e = $("pfError"); e.textContent = msg; e.style.display = ""; }
+  function hideErr() { $("pfError").style.display = "none"; }
+
+  // 年度最愛:從自己書架 allBooks 即時搜尋
+  $("pfFavSearch").addEventListener("input", () => {
+    const q = $("pfFavSearch").value.trim().toLowerCase();
+    const box = $("pfFavResults");
+    if (!q) { box.innerHTML = ""; return; }
+    const hits = allBooks.filter(b =>
+      (b.title || "").toLowerCase().includes(q) ||
+      (b.author || "").toLowerCase().includes(q)
+    ).slice(0, 6);
+    box.innerHTML = hits.length ? hits.map(b => {
+      const key = b.catalogKey || catalogKeyFor(b.title, b.author);
+      return `<button class="pf-fav-hit" data-key="${escHtml(key)}" data-title="${escHtml(b.title || "")}" data-cover="${escHtml(b.cover || "")}">`
+        + (b.cover ? `<img src="${escHtml(b.cover)}" alt="" />` : `<span class="pf-fav-noimg">📕</span>`)
+        + `<span class="pf-fav-hit-t">${escHtml(b.title || "Untitled")}</span></button>`;
+    }).join("") : `<div class="pf-fav-empty">${t("No matches in your shelf.")}</div>`;
+  });
+  $("pfFavResults").addEventListener("click", e => {
+    const btn = e.target.closest(".pf-fav-hit");
+    if (!btn) return;
+    pickedFav = { key: btn.dataset.key, title: btn.dataset.title, cover: btn.dataset.cover || "" };
+    renderFav();
+    $("pfFavSearch").value = "";
+    $("pfFavResults").innerHTML = "";
+  });
+  $("pfFavClear").addEventListener("click", () => { pickedFav = null; renderFav(); });
+
+  // Discord 欄位即時反映到「已連結帳號」摘要
+  $("pfDiscord").addEventListener("input", renderLinks);
+
+  // 頭像:瀏覽器端壓成 ~128px 小圖,base64 存進 profile(免 Storage / 免 Blaze;Google 使用者也能換)
+  $("pfChangeAvatarBtn").addEventListener("click", () => $("pfAvatarFile").click());
+  $("pfAvatarFile").addEventListener("change", async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { showErr(t("Please choose an image file.")); e.target.value = ""; return; }
+    if (file.size > 8 * 1024 * 1024) { showErr(t("Image too large (max 8 MB).")); e.target.value = ""; return; }
+    hideErr();
+    const btn = $("pfChangeAvatarBtn");
+    btn.disabled = true; btn.textContent = t("Uploading...");
+    try {
+      const dataUrl = await resizeImageToDataURL(file, 128, 0.82);
+      await db.collection("users").doc(currentUser.uid).set({ photoURL: dataUrl }, { merge: true });
+      myProfile.photoURL = dataUrl;        // 全站頭像統一讀 profile photoURL → 立即生效
+      renderAvatar(myProfile);
+      refreshIdentityUI();
+    } catch (err) { showErr(t("Couldn't process that image. Try another.")); }
+    btn.disabled = false; btn.textContent = t("Change photo");
+    e.target.value = "";
+  });
+
+  // 儲存
+  $("pfSaveBtn").addEventListener("click", async () => {
+    if (!currentUser) return;
+    hideErr();
+    const newName = $("pfDisplayName").value.trim();
+    const bio     = $("pfBio").value.trim();
+    const discord = $("pfDiscord").value.trim();
+    if (!newName) { showErr(t("Name can't be empty.")); return; }
+
+    const patch = { bio, discord, favBook: pickedFav || null };
+    const curName = (myProfile && myProfile.displayName) || "";
+    let nameChanged = false;
+    if (newName !== curName) {
+      const last = myProfile && myProfile.nameChangedAt;
+      let lastMs = 0;
+      if (last && typeof last.toMillis === "function") lastMs = last.toMillis();
+      else if (last && last.seconds) lastMs = last.seconds * 1000;
+      if (lastMs && Date.now() - lastMs < 24 * 3600 * 1000) {
+        const hrs = Math.ceil((24 * 3600 * 1000 - (Date.now() - lastMs)) / 3600000);
+        showErr(t("You can only change your name once a day. Try again in {h}h.", { h: hrs }));
+        return;
+      }
+      patch.displayName  = newName;
+      patch.nameChangedAt = firebase.firestore.FieldValue.serverTimestamp();
+      nameChanged = true;
+    }
+
+    const btn = $("pfSaveBtn");
+    btn.disabled = true; btn.textContent = t("Saving...");
+    try {
+      await db.collection("users").doc(currentUser.uid).set(patch, { merge: true });
+      if (nameChanged) await currentUser.updateProfile({ displayName: newName });
+      myProfile.bio = bio; myProfile.discord = discord; myProfile.favBook = patch.favBook;
+      if (nameChanged) {
+        myProfile.displayName  = newName;
+        myProfile.nameChangedAt = { toMillis: () => Date.now() };  // 本地近似,下次重載取真值
+      }
+      refreshIdentityUI();
+      close();
+    } catch (e) { showErr(t("Failed to save") + ": " + e.message); }
+    btn.disabled = false; btn.textContent = t("Save");
+  });
+
+  // 開窗入口:右上角名字 + 頭像(真節點搬進手機抽屜後監聽仍在)
+  const nameEl = document.getElementById("userDisplayName");
+  const avEl   = document.getElementById("userAvatarSm");
+  if (nameEl) { nameEl.style.cursor = "pointer"; nameEl.title = "Profile settings"; nameEl.addEventListener("click", open); }
+  if (avEl)   { avEl.style.cursor = "pointer"; avEl.addEventListener("click", open); }
+
+  // 關窗
+  $("closeProfileModal").addEventListener("click", close);
+  $("pfCancelBtn").addEventListener("click", close);
+  modal.addEventListener("click", e => { if (e.target.id === "profileModal") close(); });
+})();
+
 // ── 一次性:清掉私人書架 notes 裡的舊星等文字(只保留真正的筆記) ──
 async function cleanupRatingNotesOnce(uid) {
   const profRef = db.collection("users").doc(uid);
@@ -3037,7 +3274,7 @@ async function loadPublicShelf(uid) {
   try {
     const prof  = await db.collection("users").doc(uid).get();
     const pdata = prof.exists ? prof.data() : {};
-    const name  = pdata.displayName || "Reader";
+    const name  = fmtName(pdata);   // 身分顯示一律帶 #tag(全站一致)
     publicShelfOwner = { uid, name, rating: null };   // 供三評分面板的「他的評分」
     setupFollowButton(uid);
     if (!pdata.shelfPublic) {
@@ -3359,6 +3596,32 @@ const LANGS = ["en", "zh-TW"];
 let currentLang = "en";
 
 const DICT = {
+  // 個人檔案設定(版本A)
+  "Profile settings": { "zh-TW": "個人檔案設定" },
+  "Display name": { "zh-TW": "顯示名稱" },
+  "About me": { "zh-TW": "自我介紹" },
+  "My favorite book this year": { "zh-TW": "我的年度最愛" },
+  "Linked accounts": { "zh-TW": "已連結帳號" },
+  "Change photo": { "zh-TW": "更換頭像" },
+  "Linked": { "zh-TW": "已連結" },
+  "Not linked": { "zh-TW": "未連結" },
+  "Uploading...": { "zh-TW": "上傳中..." },
+  "Upload failed": { "zh-TW": "上傳失敗" },
+  "You can change your name once a day. The #number stays the same.": { "zh-TW": "名稱一天只能改一次,#數字不會變。" },
+  "Shown on your profile so book friends can find you on Discord.": { "zh-TW": "顯示在你的檔案上,書友可以在 Discord 找到你。" },
+  "JPG or PNG — we'll resize it for you.": { "zh-TW": "JPG 或 PNG,我們會自動幫你縮圖。" },
+  "You can change this anytime in settings.": { "zh-TW": "日後可在設定隨時更改。" },
+  "Name can't be empty.": { "zh-TW": "名稱不能空白。" },
+  "No matches in your shelf.": { "zh-TW": "你的書架沒有相符的書。" },
+  "Please choose an image file.": { "zh-TW": "請選擇圖片檔。" },
+  "Image too large (max 8 MB).": { "zh-TW": "圖片太大(上限 8 MB)。" },
+  "Couldn't process that image. Try another.": { "zh-TW": "這張圖處理失敗,換一張試試。" },
+  "You can only change your name once a day. Try again in {h}h.": { "zh-TW": "名稱一天只能改一次,請 {h} 小時後再試。" },
+  // placeholder
+  "Your name": { "zh-TW": "你的名字" },
+  "A line or two about what you read…": { "zh-TW": "簡單寫幾句你都讀些什麼…" },
+  "Search your shelf…": { "zh-TW": "搜尋你的書架…" },
+  "e.g. yourname or yourname#0000": { "zh-TW": "例如 yourname 或 yourname#0000" },
   // 信箱驗證關卡
   "Verify your email": { "zh-TW": "驗證你的信箱" },
   "We sent a verification link to your email.": { "zh-TW": "我們已寄出驗證連結至你的信箱。" },
@@ -3764,7 +4027,7 @@ async function toggleFollow(targetUid) {
   }
   const ts = firebase.firestore.FieldValue.serverTimestamp();
   await meRef.set({ createdAt: ts });
-  await themRef.set({ createdAt: ts, displayName: currentUser.displayName || "", photoURL: currentUser.photoURL || "" }).catch(() => {});
+  await themRef.set({ createdAt: ts, displayName: currentUser.displayName || "", tag: myTag(), photoURL: myPhoto() }).catch(() => {});
   inc(1);      // 追蹤 → 對方 followerCount +1
   return true;
 }
@@ -3808,7 +4071,8 @@ async function logActivity(type, book, extra) {
     await db.collection("activity").add({
       uid:         currentUser.uid,
       displayName: currentUser.displayName || (currentUser.email ? currentUser.email.split("@")[0] : "Reader"),
-      photoURL:    currentUser.photoURL || "",
+      tag:         myTag(),
+      photoURL:    myPhoto(),
       type,
       bookKey:   (book && book.key)   || "",
       bookTitle: (book && book.title) || "",
@@ -3870,7 +4134,7 @@ async function renderFeed() {
     const avatar = a.photoURL
       ? `<div class="feed-avatar" data-uid="${escHtml(a.uid)}"><img src="${escHtml(a.photoURL)}" alt=""></div>`
       : `<div class="feed-avatar" data-uid="${escHtml(a.uid)}">${escHtml(initials)}</div>`;
-    const nameHtml = `<span class="feed-name" data-uid="${escHtml(a.uid)}">${escHtml(a.displayName || "Reader")}</span>`;
+    const nameHtml = `<span class="feed-name" data-uid="${escHtml(a.uid)}">${escHtml(nameTag(a.displayName, a.tag))}</span>`;
     const bookHtml = `<span class="feed-book" data-key="${escHtml(a.bookKey)}">${escHtml(a.bookTitle || "")}</span>`;
     let line;
     if (a.type === "review")        line = t("{name} reviewed {book}", { name: nameHtml, book: bookHtml }) + (a.rating ? ` <span style="color:var(--gold)">${starsHTML(a.rating)}</span>` : "");
@@ -3932,7 +4196,7 @@ async function expandReplies(reviewUid, container) {
     sendBtn.disabled = true;
     try {
       await db.collection("catalog").doc(currentCatalogKey()).collection("reviews").doc(reviewUid).collection("replies").add({
-        uid: currentUser.uid, displayName: myDisplayName(), photoURL: currentUser.photoURL || "",
+        uid: currentUser.uid, displayName: myDisplayName(), tag: myTag(), photoURL: myPhoto(),
         text, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
       input.value = "";
@@ -3957,7 +4221,7 @@ async function renderReplies(reviewUid) {
     const date = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleDateString() : "";
     const mine = currentUser && r.uid === currentUser.uid;
     return `<div class="reply-item">
-      <span class="reply-name clickable" data-uid="${escHtml(r.uid)}">${escHtml(r.displayName || "Reader")}</span>
+      <span class="reply-name clickable" data-uid="${escHtml(r.uid)}">${escHtml(nameTag(r.displayName, r.tag))}</span>
       <span class="reply-text">${escHtml(r.text)}</span>
       <span class="reply-date">${date}</span>
       ${mine ? `<button class="reply-del" data-id="${d.id}" title="Delete">🗑</button>` : ""}
@@ -4049,7 +4313,7 @@ function discItemHtml(m) {
   return `<div class="disc-item">
     ${avatar}
     <div class="disc-body">
-      <div class="disc-head"><span class="disc-name clickable" data-uid="${escHtml(m.uid)}">${escHtml(m.displayName || "Reader")}</span><span class="disc-date">${date}</span>${mine ? `<button class="disc-del" data-id="${m.id}" title="Delete">🗑</button>` : ""}</div>
+      <div class="disc-head"><span class="disc-name clickable" data-uid="${escHtml(m.uid)}">${escHtml(nameTag(m.displayName, m.tag))}</span><span class="disc-date">${date}</span>${mine ? `<button class="disc-del" data-id="${m.id}" title="Delete">🗑</button>` : ""}</div>
       <div class="disc-text">${escHtml(m.text)}</div>
     </div>
   </div>`;
@@ -4099,7 +4363,7 @@ async function sendDiscussion() {
   btn.disabled = true;
   try {
     await db.collection("catalog").doc(key).collection("discussion").add({
-      uid: currentUser.uid, displayName: myDisplayName(), photoURL: currentUser.photoURL || "",
+      uid: currentUser.uid, displayName: myDisplayName(), tag: myTag(), photoURL: myPhoto(),
       text, section, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     input.value = "";   // 保留 section,方便連續發同章節

@@ -813,6 +813,75 @@
   </div>
 </div>
 
+<!-- Profile Settings Modal(版本A:堆疊式個人檔案設定，右上角點名字進入)-->
+<div class="modal-overlay" id="profileModal" style="z-index:200">
+  <div class="modal modal-profile">
+    <div class="modal-header">
+      <h2>Profile settings</h2>
+      <button class="modal-close" id="closeProfileModal">✕</button>
+    </div>
+    <div class="profile-body">
+
+      <!-- 頭像 -->
+      <div class="pf-avatar-row">
+        <div class="pf-avatar" id="pfAvatar"></div>
+        <div class="pf-avatar-side">
+          <button class="btn-light" id="pfChangeAvatarBtn">Change photo</button>
+          <input type="file" id="pfAvatarFile" accept="image/*" style="display:none" />
+          <div class="pf-hint" id="pfAvatarHint">JPG or PNG — we'll resize it for you.</div>
+        </div>
+      </div>
+
+      <!-- 名稱 + 鑑別碼 -->
+      <div class="pf-field">
+        <label class="pf-label">Display name</label>
+        <div class="pf-name-row">
+          <input type="text" id="pfDisplayName" maxlength="40" placeholder="Your name" />
+          <span class="pf-tag" id="pfTag">#0000</span>
+        </div>
+        <div class="pf-hint">You can change your name once a day. The #number stays the same.</div>
+      </div>
+
+      <!-- 自我介紹 -->
+      <div class="pf-field">
+        <label class="pf-label">About me</label>
+        <textarea id="pfBio" maxlength="300" rows="3" placeholder="A line or two about what you read…"></textarea>
+      </div>
+
+      <!-- 年度最愛的書 -->
+      <div class="pf-field">
+        <label class="pf-label">My favorite book this year</label>
+        <div class="pf-fav-picked" id="pfFavPicked" style="display:none">
+          <img id="pfFavCover" alt="" />
+          <span class="pf-fav-title" id="pfFavTitle"></span>
+          <button class="pf-fav-clear" id="pfFavClear" title="Remove">✕</button>
+        </div>
+        <input type="text" id="pfFavSearch" placeholder="Search your shelf…" />
+        <div class="pf-fav-results" id="pfFavResults"></div>
+      </div>
+
+      <!-- Discord -->
+      <div class="pf-field">
+        <label class="pf-label">Discord</label>
+        <input type="text" id="pfDiscord" maxlength="40" placeholder="e.g. yourname or yourname#0000" />
+        <div class="pf-hint">Shown on your profile so book friends can find you on Discord.</div>
+      </div>
+
+      <!-- 帳號連結狀態 -->
+      <div class="pf-field">
+        <label class="pf-label">Linked accounts</label>
+        <div class="pf-links" id="pfLinks"></div>
+      </div>
+
+      <div class="pf-error" id="pfError" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="pfCancelBtn">Cancel</button>
+      <button class="btn-save" id="pfSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Shared Reviews Modal(#6:共同書的雙方評分/評論比對)-->
 <div class="modal-overlay" id="sharedReviewsModal">
   <div class="modal modal-shared">
@@ -953,6 +1022,7 @@
     <div class="auth-form-area">
       <div id="authDisplayNameWrap" style="display:none">
         <input type="text" id="authDisplayName" placeholder="Username (e.g. Lena the lit omnivore)" autocomplete="name" />
+        <div class="auth-field-hint">You can change this anytime in settings.</div>
       </div>
       <input type="email" id="authEmail" placeholder="Email address" autocomplete="email" />
       <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password" />
