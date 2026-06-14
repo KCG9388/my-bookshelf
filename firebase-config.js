@@ -1,6 +1,6 @@
 const firebaseConfig = {
   apiKey: "AIzaSyAKmsuwxb2xnty_hsO0rT-aI_egWgcWXGY",
-  authDomain: "my-bookshelf-5bfa2.firebaseapp.com",
+  authDomain: "auth.concento.io",
   projectId: "my-bookshelf-5bfa2",
   storageBucket: "my-bookshelf-5bfa2.firebasestorage.app",
   messagingSenderId: "863145070272",
