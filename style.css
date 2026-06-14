@@ -2234,6 +2234,7 @@ body::after {
   flex-shrink: 0;
 }
 .pb-follow.following { background: transparent; color: #4E5F48; }
+.cp-head .pb-follow { margin-left: 0; }   /* 在相似度標題列裡緊貼標題、不推到最右 */
 .public-banner .pb-back {
   margin-right: 4px;
   background: transparent;
