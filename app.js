@@ -1500,6 +1500,7 @@ function openDetail(id) {
   detailMode = "shelf";
   activeCatalogKey = b.catalogKey || catalogKeyFor(b.title, b.author);
   document.querySelectorAll(".detail-shelf-only").forEach(el => el.style.display = "");
+  updateHideToggleUI(b.hidden);   // 反映這本書目前是否對別人隱藏
   const addShelfBtn = document.getElementById("addToShelfBtn");
   if (addShelfBtn) addShelfBtn.style.display = "none";
   document.getElementById("detailCover").style.display = "";
@@ -1771,13 +1772,20 @@ function renderReviews(reviews) {
   const writeReviewBox = document.querySelector(".write-review");
   if (writeReviewBox) writeReviewBox.style.display = hasOwnReview ? "none" : "";
 
+  // 沒人評論時藏掉「平均分/星等/長條」彙總列,讓「✍️ 寫評論」表單成為最上面那一欄
+  const reviewsAggregate = document.getElementById("reviewsAggregate");
+  const showAggregate = show => {
+    if (reviewsAggregate) reviewsAggregate.style.display = show ? "" : "none";
+    if (ratingBars)       ratingBars.style.display       = show ? "" : "none";
+  };
+
   if (!reviews.length) {
-    aggScore.textContent = "—"; aggStars.innerHTML = ""; aggCount.textContent = t("No reviews yet");
-    ratingBars.innerHTML = "";
+    showAggregate(false);
     reviewsList.innerHTML = `<div class="reviews-empty">${t("📝 No reviews yet — be the first!")}</div>`;
     renderTripleRating([], 0, 0);
     return;
   }
+  showAggregate(true);
 
   // 自己的評論置頂(一眼看到自己評過沒);其餘維持原本 createdAt 倒序。slice 不動原陣列
   if (myUid) {
@@ -1897,20 +1905,40 @@ let finishStarRating = 0;
 let finishReviewCtx  = null;
 
 function buildFinishStars() {
-  const wrap  = document.getElementById("finishStarInput");
-  const label = document.getElementById("finishStarLabel");
-  wrap.innerHTML = [1,2,3,4,5].map(n => `<span class="fstar" data-n="${n}">★</span>`).join("");
-  const paint = v => wrap.querySelectorAll(".fstar").forEach(s => s.classList.toggle("on", +s.dataset.n <= v));
-  wrap.querySelectorAll(".fstar").forEach(s => {
-    s.addEventListener("mouseenter", () => paint(+s.dataset.n));
-    s.addEventListener("click", () => {
-      finishStarRating = +s.dataset.n;
-      paint(finishStarRating);
-      label.textContent = finishStarRating + " ★";
+  const picker = document.getElementById("finishStarInput");
+  const label  = document.getElementById("finishStarLabel");
+  picker.innerHTML = "";
+  for (let i = 1; i <= 5; i++) {
+    const unit = document.createElement("span");
+    unit.className    = "star-unit";
+    unit.dataset.star = i;
+    unit.innerHTML    = `<span class="star-bg">★</span><span class="star-fg">★</span>`;
+    picker.appendChild(unit);
+  }
+  // 與主評論框同一套 0.25 粒度演算法(滑鼠位置→四分之一顆)
+  const ratingFromEvent = e => {
+    const rect      = picker.getBoundingClientRect();
+    const x         = Math.max(0, e.clientX - rect.left);
+    const starWidth = rect.width / 5;
+    const starIdx   = Math.min(4, Math.floor(x / starWidth));
+    const fraction  = (x - starIdx * starWidth) / starWidth;
+    const quarter   = Math.ceil(fraction / 0.25) * 0.25 || 0.25;
+    return Math.min(5, +(starIdx + quarter).toFixed(2));
+  };
+  const paint = rating => {
+    picker.querySelectorAll(".star-unit").forEach((unit, i) => {
+      const fg = unit.querySelector(".star-fg");
+      const diff = rating - i;
+      fg.style.width = diff >= 1 ? "100%" : diff > 0 ? (diff * 100).toFixed(0) + "%" : "0%";
     });
-  });
-  wrap.addEventListener("mouseleave", () => paint(finishStarRating));
+  };
+  const showLabel = rating => { label.textContent = rating ? (rating + " ★") : t("Tap to rate"); };
+  picker.onmousemove  = e => { const r = ratingFromEvent(e); paint(r); showLabel(r); };
+  picker.onmouseleave = () => { paint(finishStarRating); showLabel(finishStarRating); };
+  picker.onclick      = e => { finishStarRating = ratingFromEvent(e); paint(finishStarRating); showLabel(finishStarRating); };
+  finishStarRating = 0;
   paint(0);
+  showLabel(0);
 }
 
 // 標記讀完後呼叫:該書還沒被自己評過才跳,避免重複打擾
@@ -2037,6 +2065,30 @@ document.getElementById("deleteBookBtn").addEventListener("click", async () => {
   if (!confirm("Delete this book?")) return;
   await booksCol.doc(currentDetailId).delete();
   detailModal.classList.remove("open");
+});
+
+// 個別書籍「隱藏」:即便整個書架公開,也能單獨把某本書藏起來不給別人看
+function updateHideToggleUI(hidden) {
+  const btn = document.getElementById("toggleHideBtn");
+  if (!btn) return;
+  btn.classList.toggle("is-hidden", !!hidden);
+  const lbl = btn.querySelector(".hide-label");
+  if (lbl) lbl.textContent = hidden ? t("Hidden") : t("Visible");
+  btn.title = hidden ? t("Hidden from others — click to show")
+                     : t("Others can see this book — click to hide");
+}
+
+document.getElementById("toggleHideBtn").addEventListener("click", async () => {
+  if (!currentDetailId || !booksCol) return;
+  const b = allBooks.find(x => x.id === currentDetailId);
+  const newHidden = !(b && b.hidden);
+  updateHideToggleUI(newHidden);     // 先即時反映,體感順
+  try {
+    await booksCol.doc(currentDetailId).update({ hidden: newHidden });
+  } catch (e) {
+    updateHideToggleUI(!newHidden);  // 失敗還原
+    alert(t("Failed") + ": " + e.message);
+  }
 });
 
 // ══════════════════════════════════════════
@@ -2986,7 +3038,7 @@ async function loadPublicShelf(uid) {
       lastPublicShelf = { state: "private", name };
     } else {
       const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
-      const books = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const books = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(b => !b.hidden);   // 別人看不到被隱藏的書
       lastPublicShelf = { state: "ok", books, name };
     }
   } catch (e) {
@@ -3216,7 +3268,9 @@ async function openSharedReviews(sharedKeys, theirUid, theirName) {
       : `<div class="sr-stars sr-norate">${t("Not rated")}</div>`;
     const text = (rev && rev.text)
       ? `<div class="sr-text">${escHtml(rev.text)}</div>`
-      : `<div class="sr-text sr-empty">${t("Rated only — no written review")}</div>`;
+      : rating
+        ? `<div class="sr-text sr-empty">${t("Rated only — no written review")}</div>`
+        : `<div class="sr-text sr-empty">${t("Hasn't reviewed this book")}</div>`;
     return `<div class="sr-col"><div class="sr-who">${escHtml(who)}</div>${stars}${text}</div>`;
   };
   body.innerHTML = rows.map(({ sk, mine, theirs }) => {
@@ -3411,6 +3465,9 @@ const DICT = {
   "Heads up — your shelf is public by default, so readers with similar taste can discover you and you can find each other's books. You can make it private anytime in Settings.": { "zh-TW": "提醒你——你的書架預設為公開,這樣口味相近的讀者才能發現你、彼此找到好書。隨時可到設定改為私密。" },
   "Got it": { "zh-TW": "知道了" },
   "Make it private in Settings": { "zh-TW": "想改私密?到設定關閉公開" },
+  "Visible": { "zh-TW": "公開可見" }, "Hidden": { "zh-TW": "已隱藏" },
+  "Others can see this book — click to hide": { "zh-TW": "別人看得到這本書,點一下隱藏" },
+  "Hidden from others — click to show": { "zh-TW": "別人看不到這本書,點一下公開" },
   "When on, others can browse the books you've read / are reading / want to read, with status and progress.": { "zh-TW": "開啟後,別人可以瀏覽你讀過/在讀/想讀的書,以及狀態與進度。" },
   "Show \"Now Reading\"": { "zh-TW": "顯示「正在閱讀」" },
   "Highlight what you're currently reading on your public library (requires public library).": { "zh-TW": "在你的公開書庫醒目顯示目前正在讀的書(需先公開書庫)。" },
@@ -3462,6 +3519,7 @@ const DICT = {
   "Shared books with {name}": { "zh-TW": "和 {name} 的共同書" },
   "You": { "zh-TW": "你" }, "Not rated": { "zh-TW": "未評分" },
   "Rated only — no written review": { "zh-TW": "只給了分,沒寫評論" },
+  "Hasn't reviewed this book": { "zh-TW": "還沒評論這本書" },
   "No shared books": { "zh-TW": "沒有共同書" },
   "Differ": { "zh-TW": "分歧" }, "Agree": { "zh-TW": "一致" },
   "Press back again to leave": { "zh-TW": "再按一次返回鍵即離開" },

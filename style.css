@@ -1257,6 +1257,20 @@ body::after {
   font-size: 13px;
 }
 .btn-delete:hover { background: #f5c6c6; }
+/* 個別書籍「隱藏」眼睛 toggle:推到動作列最右、與編輯/刪除同高對齊 */
+.btn-hide-toggle {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  background: #F3EFE2; border: 1px solid #DDD6C2; color: var(--ink-soft);
+  font-family: inherit; line-height: 1;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.btn-hide-toggle:hover { background: #EDE7D6; }
+.btn-hide-toggle svg { display: block; }
+.btn-hide-toggle .eye-slash { display: none; }
+.btn-hide-toggle.is-hidden { background: #F3E7DF; color: var(--clay); border-color: #E6D2C4; }
+.btn-hide-toggle.is-hidden .eye-slash { display: inline; }
 
 /* ── Filter Bar(透明:子頁籤/排序直接浮在背景上,不再橫一條半透明帶)── */
 .filter-bar {
@@ -2909,9 +2923,5 @@ body::after {
 
 /* 讀完一本書 → 評分彈窗 */
 #finishReviewModal { z-index: 210; }   /* 蓋過詳情 modal(100) */
-.finish-star-row { display: flex; align-items: center; gap: 12px; margin: 2px 0; }
-.finish-star-input { display: flex; gap: 5px; font-size: 32px; line-height: 1; cursor: pointer; user-select: none; }
-.finish-star-input .fstar { color: #D8D2C0; transition: color .1s, transform .1s; }
-.finish-star-input .fstar.on { color: var(--gold); }
-.finish-star-input .fstar:hover { transform: scale(1.12); }
+.finish-star-row { display: flex; align-items: center; gap: 12px; margin: 2px 0; flex-wrap: wrap; }
 .finish-star-label { font-size: 13px; color: var(--ink-soft); }

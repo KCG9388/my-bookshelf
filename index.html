@@ -697,6 +697,14 @@
           <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
           <button class="btn-delete detail-shelf-only" id="deleteBookBtn">Delete</button>
           <button class="btn-add-shelf" id="addToShelfBtn" style="display:none">➕ Add to My Shelf</button>
+          <button class="btn-hide-toggle detail-shelf-only" id="toggleHideBtn" type="button" title="Hide this book from others">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/>
+              <circle cx="12" cy="12" r="3"/>
+              <line class="eye-slash" x1="3.5" y1="20.5" x2="20.5" y2="3.5"/>
+            </svg>
+            <span class="hide-label">Visible</span>
+          </button>
         </div>
 
         <div class="triple-rating" id="tripleRating" style="display:none"></div>
@@ -1019,7 +1027,7 @@
     <div class="fb-body">
       <p class="fb-intro" id="finishReviewBookTitle"></p>
       <div class="finish-star-row">
-        <div class="finish-star-input" id="finishStarInput"></div>
+        <div class="star-picker-quarter" id="finishStarInput"></div>
         <span class="finish-star-label" id="finishStarLabel" data-i18n>Tap to rate</span>
       </div>
       <textarea id="finishReviewText" placeholder="Share your thoughts... (optional)" rows="3"></textarea>
