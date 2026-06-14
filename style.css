@@ -419,6 +419,12 @@ body::after {
 }
 .book-grid::-webkit-scrollbar { display: none; }
 
+/* ── 探索頁「書評人」列表:內部垂直捲動,長名單不再被裁(書牆維持原橫向設定、不動)── */
+#exPeople { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.people-grid { flex: 1; min-height: 0; overflow-y: auto; }
+.people-grid::-webkit-scrollbar { width: 8px; }
+.people-grid::-webkit-scrollbar-thumb { background: rgba(90,112,82,.28); border-radius: 4px; }
+
 /* 空狀態/載入:襯線斜體,有「書頁註記」感,不再是死灰小字 */
 .loading, .empty-state, .feed-empty, .reviews-empty, .discussion-empty {
   font-family: var(--serif);
@@ -2215,7 +2221,7 @@ body::after {
   font-size: 13px;
   color: #4E5F48;
 }
-.public-banner .pb-follow {
+.pb-follow {     /* 不綁 .public-banner:搬到相似度面板標題旁也套同樣式 */
   margin-left: auto;
   background: #4E5F48;
   color: #fff;
@@ -2225,10 +2231,11 @@ body::after {
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
-.public-banner .pb-follow.following { background: transparent; color: #4E5F48; }
+.pb-follow.following { background: transparent; color: #4E5F48; }
 .public-banner .pb-back {
-  margin-left: 8px;
+  margin-right: 4px;
   background: transparent;
   border: 1px solid #CBC4AC;
   border-radius: 5px;
@@ -2236,6 +2243,7 @@ body::after {
   cursor: pointer;
   color: #4E5F48;
   font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* 評論者名稱可點(連到公開書架) */

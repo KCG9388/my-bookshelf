@@ -2713,6 +2713,7 @@ function switchView(view) {
     switchExploreSubtab(exploreSubtab || "people");
   }
   if (view === "feed") loadFeed();
+  if (window.__backReconcile) window.__backReconcile();   // 同步「探索/動態層」→ 上一頁回書架
 }
 
 // ── 探索子頁:書評人(找人) / 書籍(共享書庫) ──
@@ -2742,6 +2743,10 @@ function switchExploreSubtab(which) {
 }
 // 載入公開使用者:server 端 where(公開)+orderBy(粉絲數)+limit 分頁,只讀一頁(免撈全庫)。
 // 顯示時頁內再以完整人氣分(追蹤+評論*5)次排序,保留「獎勵發言」語意;搜尋只搜已載入頁(規模大需搜尋服務)。
+// 探索頁不顯示的帳號(測試/種子);要再藏就往這 Set 加 uid
+const DISCOVERY_HIDE = new Set([
+  "g4fu6FZzRMNlqSSJk5E2IF7BNaE2",   // DVE(test@test.com)純測試帳號
+]);
 async function loadPeople(reset = true) {
   const grid = document.getElementById("peopleGrid");
   const se = document.getElementById("peopleSearch"); if (se) se.placeholder = t("Search curators...");
@@ -2756,7 +2761,7 @@ async function loadPeople(reset = true) {
     const snap = await q.get();
     const me = currentUser ? currentUser.uid : null;
     snap.docs.forEach(d => {
-      if (d.id === me || peopleList.some(u => u.uid === d.id)) return;
+      if (d.id === me || DISCOVERY_HIDE.has(d.id) || peopleList.some(u => u.uid === d.id)) return;
       const u = { uid: d.id, ...d.data() };
       u._score = (u.followerCount || 0) + (u.reviewCount || 0) * 5;
       peopleList.push(u);
@@ -3015,6 +3020,7 @@ async function cleanupRatingNotesOnce(uid) {
 async function loadPublicShelf(uid) {
   // 直接切到探索容器(不走 switchView,避免它非同步載入 catalog 後覆蓋掉公開書架)
   currentView = "explore";
+  if (window.__backReconcile) window.__backReconcile();   // 進公開書架也算「探索層」→ 上一頁回書架
   setViewClass("explore");
   document.querySelectorAll(".nav-tab").forEach(t => t.classList.toggle("active", t.dataset.view === "explore"));
   document.querySelectorAll(".shelf-only").forEach(el => el.style.display = "none");
@@ -3159,9 +3165,14 @@ function computeCompatibility(mine, theirs) {
 function renderCompatPanel(theirBooks, name) {
   const panel = document.getElementById("compatPanel");
   if (!panel) return;
+  // 追蹤鈕平時掛在相似度面板標題旁;面板不顯示時放回 banner(才不會消失)
+  const followBtn = document.getElementById("publicFollowBtn");
+  const banner = document.getElementById("publicBanner");
+  const restoreFollowToBanner = () => { if (followBtn && banner && followBtn.parentElement !== banner) banner.appendChild(followBtn); };
   const mine = (typeof allBooks !== "undefined") ? allBooks : [];
   // 沒登入 / 自己的書太少 / 看自己 → 不顯示面板
   if (!currentUser || viewingPublicUid === currentUser.uid || mine.length < 5 || !theirBooks.length) {
+    restoreFollowToBanner();
     panel.style.display = "none"; return;
   }
   const r = computeCompatibility(mine, theirBooks);
@@ -3202,6 +3213,8 @@ function renderCompatPanel(theirBooks, name) {
       </div>
     </div>`;
   panel.classList.remove("cp-collapsed");
+  const cpHead = panel.querySelector(".cp-head");
+  if (cpHead && followBtn) cpHead.appendChild(followBtn);   // 追蹤鈕搬到「與 XXX 的閱讀相似度」標題旁
   panel.querySelector(".cp-toggle").addEventListener("click", () => panel.classList.add("cp-collapsed"));
   panel.querySelector(".cp-collapsed-bar").addEventListener("click", () => panel.classList.remove("cp-collapsed"));
   setupCompatScrollCollapse(panel);
@@ -4115,6 +4128,9 @@ document.getElementById("discussionInput").addEventListener("keydown", e => { if
   });
   // 手機抽屜(body.side-open)
   watched.push({ el: body, drawer: true, isOpen: () => body.classList.contains("side-open"), close: () => body.classList.remove("side-open") });
+  // 「不在書架」(探索/動態)也當一層 → 按上一頁先回我的書架,不直接離站
+  watched.push({ view: true, el: body, isOpen: () => typeof currentView !== "undefined" && !!currentView && currentView !== "shelf",
+                 close: () => { if (typeof switchView === "function") switchView("shelf"); } });
 
   let stack = [];          // 目前開著的層(LIFO)
   let histDepth = 0;       // 已 push 的 history 筆數(=層數)
@@ -4169,6 +4185,7 @@ document.getElementById("discussionInput").addEventListener("keydown", e => { if
 
   // 載入時壓一筆 sentinel,讓第一次「上一頁」有東西可退、不直接離站
   try { history.pushState({ cdRoot: true }, ""); } catch (e) {}
+  window.__backReconcile = schedule;   // 換頁(switchView/loadPublicShelf)時呼叫,同步「探索層」
 })();
 
 function showExitHint() {
