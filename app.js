@@ -372,6 +372,7 @@ async function ensureProfile(user) {
         tag:          await uniqueTag(base.displayName),  // 四碼鑑別碼
         bio:          "",
         discord:      "",
+        discordPublic: true,  // Discord 是否在公開檔案顯示(預設開)
         favBook:      null,   // 年度最愛的書 {key,title,cover}
         shelfPublic:  true,   // 預設：書庫公開（社群比對需要；只影響新帳號，現有使用者不變）
         showReading:  true,   // 「正在閱讀」也預設公開（KC 2026-06-14；只影響新帳號）
@@ -2871,6 +2872,14 @@ function renderPeople() {
     }).join("");
     grid.querySelectorAll(".pcard").forEach(c =>
       c.addEventListener("click", () => loadPublicShelf(c.dataset.uid)));
+    // 點頭像 → 直接開唯讀個人檔案(不進書架)
+    grid.querySelectorAll(".pcard-av").forEach(av =>
+      av.addEventListener("click", e => {
+        e.stopPropagation();
+        const card = av.closest(".pcard");
+        const u = card && peopleList.find(x => x.uid === card.dataset.uid);
+        if (u) openPublicProfile(u);
+      }));
   }
   // 「載入更多」鈕(搜尋中隱藏,因為搜尋只涵蓋已載入頁)
   let more = document.getElementById("peopleMore");
@@ -3083,6 +3092,7 @@ document.getElementById("savePrivacyBtn").addEventListener("click", async () => 
     $("pfTag").textContent   = p.tag ? "#" + p.tag : "";
     $("pfBio").value     = p.bio || "";
     $("pfDiscord").value = p.discord || "";
+    $("pfDiscordPublic").checked = p.discordPublic !== false;   // 預設開(填了就是想被找到)
     pickedFav = p.favBook || null;
     renderFav();
     $("pfFavSearch").value = "";
@@ -3186,9 +3196,10 @@ document.getElementById("savePrivacyBtn").addEventListener("click", async () => 
     const newName = $("pfDisplayName").value.trim();
     const bio     = $("pfBio").value.trim();
     const discord = $("pfDiscord").value.trim();
+    const discordPublic = $("pfDiscordPublic").checked;
     if (!newName) { showErr(t("Name can't be empty.")); return; }
 
-    const patch = { bio, discord, favBook: pickedFav || null };
+    const patch = { bio, discord, discordPublic, favBook: pickedFav || null };
     const curName = (myProfile && myProfile.displayName) || "";
     let nameChanged = false;
     if (newName !== curName) {
@@ -3211,7 +3222,7 @@ document.getElementById("savePrivacyBtn").addEventListener("click", async () => 
     try {
       await db.collection("users").doc(currentUser.uid).set(patch, { merge: true });
       if (nameChanged) await currentUser.updateProfile({ displayName: newName });
-      myProfile.bio = bio; myProfile.discord = discord; myProfile.favBook = patch.favBook;
+      myProfile.bio = bio; myProfile.discord = discord; myProfile.discordPublic = discordPublic; myProfile.favBook = patch.favBook;
       if (nameChanged) {
         myProfile.displayName  = newName;
         myProfile.nameChangedAt = { toMillis: () => Date.now() };  // 本地近似,下次重載取真值
@@ -3275,14 +3286,15 @@ async function loadPublicShelf(uid) {
     const prof  = await db.collection("users").doc(uid).get();
     const pdata = prof.exists ? prof.data() : {};
     const name  = fmtName(pdata);   // 身分顯示一律帶 #tag(全站一致)
-    publicShelfOwner = { uid, name, rating: null };   // 供三評分面板的「他的評分」
+    const profile = { uid, ...pdata };   // 完整檔案 → banner 頭像 + 唯讀個人檔案視窗
+    publicShelfOwner = { uid, name, rating: null, profile };   // 供三評分面板的「他的評分」
     setupFollowButton(uid);
     if (!pdata.shelfPublic) {
-      lastPublicShelf = { state: "private", name };
+      lastPublicShelf = { state: "private", name, profile };
     } else {
       const snap  = await db.collection("users").doc(uid).collection("books").orderBy("createdAt","desc").get();
       const books = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(b => !b.hidden);   // 別人看不到被隱藏的書
-      lastPublicShelf = { state: "ok", books, name };
+      lastPublicShelf = { state: "ok", books, name, profile };
     }
   } catch (e) {
     lastPublicShelf = { state: "error" };
@@ -3299,6 +3311,8 @@ function renderPublicShelfView() {
   const pbText = banner.querySelector(".pb-text");
   const compat = document.getElementById("compatPanel");
   banner.style.display = "flex";
+  // banner 頭像:點開對方的唯讀個人檔案(load/error 都顯示,只有載入失敗時藏)
+  paintBannerAvatar(c.profile);
   if (c.state === "private") {
     compat.style.display = "none";
     pbText.textContent = t("🔒 {name}'s library is private", { name: c.name });
@@ -3313,6 +3327,56 @@ function renderPublicShelfView() {
     renderCompatPanel(c.books, c.name);
   }
 }
+
+// 公開書架 banner 上的小頭像(點開對方唯讀個人檔案)
+function paintBannerAvatar(profile) {
+  const btn = document.getElementById("publicAvatarBtn");
+  if (!btn) return;
+  if (!profile) { btn.style.display = "none"; return; }
+  const url = profile.photoURL || "";
+  const nm  = profile.displayName || "R";
+  btn.innerHTML = url ? `<img src="${escHtml(url)}" alt="" />` : "";
+  if (!url) btn.textContent = nm.slice(0, 2).toUpperCase();
+  btn.title = t("View profile");
+  btn.style.display = "";
+  btn.onclick = () => openPublicProfile(profile);
+}
+
+// 唯讀個人檔案視窗:把別人填的頭像/自介/年度最愛/Discord 秀出來
+function openPublicProfile(p) {
+  if (!p) return;
+  const $ = id => document.getElementById(id);
+  const url = p.photoURL || "";
+  const nm  = p.displayName || "Reader";
+  if (url) $("ppAvatar").innerHTML = `<img src="${escHtml(url)}" alt="" />`;
+  else { $("ppAvatar").innerHTML = ""; $("ppAvatar").textContent = nm.slice(0, 2).toUpperCase(); }
+  $("ppName").textContent = fmtName(p);
+  const stats = [p.followerCount ? `👥 ${fmtCount(p.followerCount)}` : "",
+                 p.reviewCount   ? `💬 ${p.reviewCount}` : ""].filter(Boolean).join("　·　");
+  $("ppStats").textContent = stats; $("ppStats").style.display = stats ? "" : "none";
+  const bio = (p.bio || "").trim();
+  $("ppBio").textContent = bio; $("ppBio").style.display = bio ? "" : "none";
+  if (p.favBook && p.favBook.title) {
+    $("ppFav").style.display = "";
+    const cov = $("ppFavCover");
+    cov.src = p.favBook.cover || ""; cov.style.display = p.favBook.cover ? "" : "none";
+    $("ppFavTitle").textContent = p.favBook.title;
+  } else $("ppFav").style.display = "none";
+  // Discord 只在對方設為公開時才顯示(discordPublic !== false = 顯示;舊資料無此欄預設顯示)
+  const dc = (p.discord || "").trim();
+  if (dc && p.discordPublic !== false) { $("ppDiscord").style.display = ""; $("ppDiscordVal").textContent = dc; }
+  else $("ppDiscord").style.display = "none";
+  // 「查看書架」:從探索卡點進來時帶你去他書架;已在他書架就只關閉
+  $("ppShelfBtn").onclick = () => { closePublicProfile(); if (p.uid && p.uid !== viewingPublicUid) loadPublicShelf(p.uid); };
+  document.getElementById("publicProfileModal").classList.add("open");
+}
+function closePublicProfile() { document.getElementById("publicProfileModal").classList.remove("open"); }
+(function setupPublicProfileModal() {
+  const m = document.getElementById("publicProfileModal");
+  if (!m) return;
+  document.getElementById("closePublicProfile").addEventListener("click", closePublicProfile);
+  m.addEventListener("click", e => { if (e.target.id === "publicProfileModal") closePublicProfile(); });
+})();
 
 // ══════════════════════════════════════════
 //  閱讀相容度引擎(口味比對)
@@ -3603,6 +3667,10 @@ const DICT = {
   "My favorite book this year": { "zh-TW": "我的年度最愛" },
   "Linked accounts": { "zh-TW": "已連結帳號" },
   "Change photo": { "zh-TW": "更換頭像" },
+  "Show my Discord on my public profile": { "zh-TW": "在公開檔案顯示我的 Discord" },
+  "When off, only you can see it — book friends won't.": { "zh-TW": "關閉時只有你看得到,書友看不到。" },
+  "View shelf": { "zh-TW": "查看書架" },
+  "View profile": { "zh-TW": "查看個人檔案" },
   "Linked": { "zh-TW": "已連結" },
   "Not linked": { "zh-TW": "未連結" },
   "Uploading...": { "zh-TW": "上傳中..." },

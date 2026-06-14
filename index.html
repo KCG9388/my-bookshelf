@@ -410,6 +410,7 @@
   <div id="exploreView" style="display:none">
     <div class="public-banner" id="publicBanner">
       <button class="pb-back" id="publicBackBtn">← Back to Explore</button>
+      <button class="pb-avatar" id="publicAvatarBtn" style="display:none" title="View profile"></button>
       <span class="pb-text"></span>
       <button class="pb-follow" id="publicFollowBtn" style="display:none">Follow</button>
     </div>
@@ -864,7 +865,11 @@
       <div class="pf-field">
         <label class="pf-label">Discord</label>
         <input type="text" id="pfDiscord" maxlength="40" placeholder="e.g. yourname or yourname#0000" />
-        <div class="pf-hint">Shown on your profile so book friends can find you on Discord.</div>
+        <label class="pf-toggle-row">
+          <input type="checkbox" id="pfDiscordPublic" />
+          <span>Show my Discord on my public profile</span>
+        </label>
+        <div class="pf-hint">When off, only you can see it — book friends won't.</div>
       </div>
 
       <!-- 帳號連結狀態 -->
@@ -878,6 +883,30 @@
     <div class="modal-footer">
       <button class="btn-cancel" id="pfCancelBtn">Cancel</button>
       <button class="btn-save" id="pfSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Public Profile Modal(唯讀:看別人的個人檔案)-->
+<div class="modal-overlay" id="publicProfileModal" style="z-index:200">
+  <div class="modal modal-pubprofile">
+    <button class="modal-close pp-close" id="closePublicProfile">✕</button>
+    <div class="pp-body">
+      <div class="pp-avatar" id="ppAvatar"></div>
+      <div class="pp-name" id="ppName"></div>
+      <div class="pp-stats" id="ppStats"></div>
+      <div class="pp-bio" id="ppBio" style="display:none"></div>
+      <div class="pp-fav" id="ppFav" style="display:none">
+        <div class="pp-fav-label">My favorite book this year</div>
+        <div class="pp-fav-card">
+          <img id="ppFavCover" alt="" />
+          <span class="pp-fav-title" id="ppFavTitle"></span>
+        </div>
+      </div>
+      <div class="pp-discord" id="ppDiscord" style="display:none">
+        <span class="pp-discord-tag">Discord</span><b id="ppDiscordVal"></b>
+      </div>
+      <button class="btn-save pp-shelf-btn" id="ppShelfBtn">View shelf</button>
     </div>
   </div>
 </div>

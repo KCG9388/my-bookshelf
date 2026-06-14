@@ -2352,6 +2352,54 @@ body::after {
   border-radius: 6px; padding: 8px 11px; line-height: 1.4;
 }
 
+/* Discord 隱私 toggle 列 */
+.pf-toggle-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #4A4537; margin-top: 2px; }
+.pf-toggle-row input { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+
+/* 公開書架 banner 上的小頭像 */
+.pb-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  border: none; padding: 0; cursor: pointer; overflow: hidden;
+  background: #EDE6D4; color: #6E6557;
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.pb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pb-avatar:hover { box-shadow: 0 0 0 2px var(--moss, #5A7052); }
+
+/* 探索書評人卡頭像:可點開檔案 */
+.pcard-av { cursor: pointer; }
+.pcard-av:hover { box-shadow: 0 0 0 2px var(--moss, #5A7052); }
+
+/* 唯讀個人檔案視窗 */
+.modal-pubprofile { max-width: 380px; position: relative; }
+.pp-close { position: absolute; top: 12px; right: 12px; z-index: 1; }
+.pp-body { padding: 28px 24px 22px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.pp-avatar {
+  width: 88px; height: 88px; border-radius: 50%; overflow: hidden;
+  background: #EDE6D4; color: #6E6557;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 28px;
+}
+.pp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pp-name { font-family: var(--serif); font-size: 21px; font-weight: 700; color: #3B372E; letter-spacing: -.01em; }
+.pp-stats { font-size: 13px; color: #8A8270; }
+.pp-bio { font-size: 14px; color: #5A5446; line-height: 1.55; margin-top: 2px; white-space: pre-wrap; }
+.pp-fav { width: 100%; margin-top: 6px; }
+.pp-fav-label { font-size: 12px; font-weight: 700; color: #8A8270; margin-bottom: 6px; }
+.pp-fav-card {
+  display: flex; align-items: center; gap: 10px;
+  background: #faf8f0; border: 1px solid #EFEADB; border-radius: 10px; padding: 8px 12px; text-align: left;
+}
+.pp-fav-card img { width: 38px; height: 56px; object-fit: cover; border-radius: 3px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.pp-fav-title { font-size: 14px; color: #3B372E; font-weight: 600; }
+.pp-discord {
+  display: flex; align-items: center; gap: 8px; font-size: 14px; color: #3B372E;
+  background: #f0f1fa; border: 1px solid #e2e3f5; border-radius: 8px; padding: 7px 12px; margin-top: 2px;
+}
+.pp-discord-tag { font-size: 11px; font-weight: 700; color: #5865F2; letter-spacing: .03em; }
+.pp-shelf-btn { margin-top: 8px; width: 100%; }
+
 /* 註冊頁名稱提示 */
 .auth-field-hint { font-size: 11.5px; color: #8A8270; margin: -2px 2px 4px; }
 
