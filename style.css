@@ -2853,3 +2853,48 @@ body::after {
   opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
 }
 .exit-hint.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ── 意見回饋小工具(左下角浮動)── */
+.fb-fab {
+  position: fixed; left: 20px; bottom: 20px; z-index: 80;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--moss); color: #fff; border: none;
+  font-size: 22px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-lift);
+  transition: background .15s, transform .15s;
+}
+.fb-fab:hover { background: var(--moss-deep); transform: translateY(-2px); }
+.fb-panel {
+  position: fixed; left: 20px; bottom: 80px; z-index: 81;
+  width: 320px; max-width: calc(100vw - 40px);
+  background: var(--paper-card); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--shadow-pop);
+  padding: 16px; display: none; flex-direction: column; gap: 10px;
+}
+.fb-panel.open { display: flex; }
+.fb-head { display: flex; align-items: center; justify-content: space-between; }
+.fb-title { font-family: var(--serif); font-size: 17px; font-weight: 600; color: var(--ink); }
+.fb-close { background: none; border: none; font-size: 16px; color: var(--ink-faint); cursor: pointer; padding: 4px; line-height: 1; }
+.fb-intro { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin: 0; }
+#feedbackText, #feedbackEmail {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px;
+  padding: 9px 11px; font-size: 13.5px; font-family: inherit; color: var(--ink); background: #fff;
+  outline: none;
+}
+#feedbackText { resize: vertical; min-height: 64px; }
+#feedbackText:focus, #feedbackEmail:focus { border-color: var(--moss); }
+.fb-send {
+  background: var(--moss); color: #fff; border: none; border-radius: 10px;
+  padding: 10px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: background .15s;
+}
+.fb-send:hover { background: var(--moss-deep); }
+.fb-send:disabled { opacity: .55; cursor: default; }
+.fb-status { font-size: 12.5px; text-align: center; min-height: 16px; }
+.fb-status.ok { color: var(--moss-deep); }
+.fb-status.err { color: var(--clay); }
+@media (max-width: 600px) {
+  .fb-fab { width: 44px; height: 44px; left: 14px; bottom: 14px; font-size: 20px; }
+  .fb-panel { left: 14px; right: 14px; bottom: 66px; width: auto; max-width: none; }
+}

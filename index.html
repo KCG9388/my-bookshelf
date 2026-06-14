@@ -988,6 +988,20 @@
   </div>
 </div>
 
+<!-- 意見回饋(左下角浮動;登入/未登入皆可用)-->
+<button class="fb-fab" id="feedbackFab" title="Feedback" aria-label="Feedback">💬</button>
+<div class="fb-panel" id="feedbackPanel">
+  <div class="fb-head">
+    <span class="fb-title" data-i18n>Feedback</span>
+    <button class="fb-close" id="feedbackClose" aria-label="Close">✕</button>
+  </div>
+  <p class="fb-intro" data-i18n>Spotted a bug or have an idea? Tell us — we read every message.</p>
+  <textarea id="feedbackText" rows="4" maxlength="3000"></textarea>
+  <input type="email" id="feedbackEmail" />
+  <button class="fb-send" id="feedbackSend" data-i18n>Send</button>
+  <div class="fb-status" id="feedbackStatus"></div>
+</div>
+
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>

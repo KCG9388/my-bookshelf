@@ -82,5 +82,15 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
       allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
     }
+
+    // ⑤ 意見回饋:任何人(含未登入)可投,但只能「新增」+ 嚴格驗證;
+    //    一律不可讀/改/刪(只給 Admin SDK 的本機 watcher 或控制台看)。
+    match /feedback/{id} {
+      allow read, update, delete: if false;
+      allow create: if request.resource.data.text is string
+                    && request.resource.data.text.size() >= 3
+                    && request.resource.data.text.size() <= 3000
+                    && request.resource.data.createdAt == request.time;
+    }
   }
 }

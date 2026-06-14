@@ -3343,6 +3343,15 @@ const DICT = {
   "No shared books": { "zh-TW": "沒有共同書" },
   "Differ": { "zh-TW": "分歧" }, "Agree": { "zh-TW": "一致" },
   "Press back again to leave": { "zh-TW": "再按一次返回鍵即離開" },
+  "Feedback": { "zh-TW": "意見回饋" },
+  "Spotted a bug or have an idea? Tell us — we read every message.": { "zh-TW": "發現 bug 或有點子?跟我們說——每則我們都會看。" },
+  "Send": { "zh-TW": "送出" },
+  "Type your feedback…": { "zh-TW": "寫下你的意見…" },
+  "Email (optional, if you want a reply)": { "zh-TW": "信箱(選填,想收到回覆再填)" },
+  "Please write a bit more.": { "zh-TW": "再多寫一點吧。" },
+  "Sending…": { "zh-TW": "送出中…" },
+  "Thanks! Got it. 🙏": { "zh-TW": "收到了,謝謝!🙏" },
+  "Failed to send — please try again.": { "zh-TW": "送出失敗,請再試一次。" },
   "No ratings yet": { "zh-TW": "尚無評分" }, "No books in the shared library yet": { "zh-TW": "共享書庫還沒有書" },
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
@@ -3514,6 +3523,7 @@ function setLang(lang) {
   if (ldBtn) ldBtn.textContent = lang === "en" ? "中" : "EN";
   // 重新渲染含動態文字的可見區塊
   try {
+    if (window.__fbSetPlaceholders) window.__fbSetPlaceholders();   // 回饋框 placeholder 跟著語言
     buildGenreSelect();   // 類型下拉選項跟著語言重標(保留當前選擇)
     if (allBooks.length) { rebuildSidebarFilters(); rebuildFormatFilter(); }
     if (currentView === "explore" && viewingPublicUid && lastPublicShelf) renderPublicShelfView();
@@ -3984,3 +3994,57 @@ function hideExitHint() {
   const el = document.getElementById("exitHint");
   if (el) el.classList.remove("show");
 }
+
+// ── 意見回饋小工具:寫進 Firestore feedback/(Telegram 推播由本機 watcher 接;見 PROJECT_CONTEXT)──
+(function setupFeedback() {
+  const fab = document.getElementById("feedbackFab");
+  const panel = document.getElementById("feedbackPanel");
+  const closeBtn = document.getElementById("feedbackClose");
+  const textEl = document.getElementById("feedbackText");
+  const emailEl = document.getElementById("feedbackEmail");
+  const sendBtn = document.getElementById("feedbackSend");
+  const statusEl = document.getElementById("feedbackStatus");
+  if (!fab || !panel) return;
+
+  function setPlaceholders() {
+    textEl.placeholder = t("Type your feedback…");
+    emailEl.placeholder = t("Email (optional, if you want a reply)");
+  }
+  setPlaceholders();
+  window.__fbSetPlaceholders = setPlaceholders;   // 供 setLang 切語言時重設 placeholder
+
+  const open  = () => { panel.classList.add("open"); textEl.focus(); };
+  const close = () => panel.classList.remove("open");
+  fab.addEventListener("click", () => panel.classList.contains("open") ? close() : open());
+  closeBtn.addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && panel.classList.contains("open")) close(); });
+  document.addEventListener("click", e => {
+    if (panel.classList.contains("open") && !panel.contains(e.target) && !fab.contains(e.target)) close();
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    const text = textEl.value.trim();
+    statusEl.className = "fb-status";
+    if (text.length < 3) { statusEl.textContent = t("Please write a bit more."); statusEl.classList.add("err"); return; }
+    sendBtn.disabled = true; statusEl.textContent = t("Sending…");
+    try {
+      await db.collection("feedback").add({
+        text: text.slice(0, 3000),
+        email: (emailEl.value || "").trim().slice(0, 200) || null,
+        uid: (currentUser && currentUser.uid) || null,
+        displayName: (currentUser && (currentUser.displayName || currentUser.email)) || null,
+        page: (typeof currentView !== "undefined" && currentView) || "landing",
+        lang: currentLang,
+        userAgent: navigator.userAgent.slice(0, 300),
+        url: location.href.slice(0, 300),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      statusEl.textContent = t("Thanks! Got it. 🙏"); statusEl.classList.add("ok");
+      textEl.value = "";
+      setTimeout(() => { close(); statusEl.textContent = ""; statusEl.className = "fb-status"; }, 1600);
+    } catch (e) {
+      statusEl.textContent = t("Failed to send — please try again."); statusEl.classList.add("err");
+    }
+    sendBtn.disabled = false;
+  });
+})();
