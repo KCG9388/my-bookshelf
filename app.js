@@ -3274,6 +3274,7 @@ async function loadPublicShelf(uid) {
   document.querySelectorAll(".shelf-only").forEach(el => el.style.display = "none");
   document.getElementById("sidebar").style.display = "none";
   document.getElementById("shelfView").style.display   = "none";
+  document.getElementById("feedView").style.display    = "none";   // 從動態點人名進來時要藏動態,否則兩層疊一起
   document.getElementById("exploreView").style.display = "";
   exploreLoaded = true;
   viewingPublicUid = uid;
