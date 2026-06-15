@@ -2255,12 +2255,14 @@ body::after {
 }
 .pb-follow.following { background: transparent; color: #5A7052; border-color: #D9D0BC; }
 
-/* 回探索(推到最右、淡色)*/
+/* 回探索:跟追蹤同樣式的苔綠藥丸,緊貼在追蹤右邊(不推到最右)*/
 .pb-back {
-  margin-left: auto; flex: 0 0 auto; background: transparent; border: none;
-  cursor: pointer; color: #8A8270; font-size: 13px; white-space: nowrap; padding: 4px;
+  flex: 0 0 auto; background: #5A7052; color: #fff; border: 1px solid #5A7052;
+  border-radius: 999px; padding: 6px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+  white-space: nowrap;
 }
-.pb-back:hover { color: #5A7052; }
+.pb-back::before { content: "←"; font-size: .76em; margin-right: 5px; vertical-align: 1px; opacity: .85; }   /* 箭頭縮小 → 「回探索」更置中 */
+.pb-back:hover { background: #4E5F48; border-color: #4E5F48; }
 
 /* 底部共同書列 */
 .ph-facts { display: flex; align-items: center; gap: 7px; border-top: 1px solid #EFEADB; background: #FAF6EC; padding: 8px 20px; font-size: 13px; color: #6E6557; }

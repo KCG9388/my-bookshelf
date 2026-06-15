@@ -3898,7 +3898,7 @@ const DICT = {
   "Failed to load": { "zh-TW": "載入失敗" }, "✓ Already on your shelf": { "zh-TW": "✓ 已在你的書架" },
   "Failed": { "zh-TW": "失敗" }, "Failed to save": { "zh-TW": "儲存失敗" },
   "Follow": { "zh-TW": "追蹤" }, "Following": { "zh-TW": "已追蹤" },
-  "← Back to Explore": { "zh-TW": "← 回探索" },
+  "Back to Explore": { "zh-TW": "回探索" },
   "📰 Feed": { "zh-TW": "📰 動態" }, "All": { "zh-TW": "全部" },
   "No activity yet": { "zh-TW": "還沒有動態" }, "No activity from people you follow yet": { "zh-TW": "你追蹤的人還沒有動態" },
   "{name} reviewed {book}": { "zh-TW": "{name} 評論了《{book}》" },
