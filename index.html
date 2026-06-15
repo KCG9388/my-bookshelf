@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260615b" />
+  <link rel="stylesheet" href="style.css?v=20260616a" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -408,13 +408,19 @@
 
   <!-- 探索(共享書庫,公開)-->
   <div id="exploreView" style="display:none">
-    <div class="public-banner" id="publicBanner">
-      <button class="pb-back" id="publicBackBtn">← Back to Explore</button>
-      <button class="pb-avatar" id="publicAvatarBtn" style="display:none" title="View profile"></button>
-      <span class="pb-text"></span>
-      <button class="pb-follow" id="publicFollowBtn" style="display:none">Follow</button>
+    <div class="public-header" id="publicBanner">
+      <div class="ph-top">
+        <div class="ph-gauge" id="phGauge" style="display:none"></div>
+        <button class="ph-avatar" id="publicAvatarBtn" style="display:none" title="View profile"></button>
+        <div class="ph-id">
+          <div class="ph-name" id="phName"></div>
+          <div class="ph-sub" id="phSub"></div>
+        </div>
+        <button class="pb-follow" id="publicFollowBtn" style="display:none">Follow</button>
+        <button class="pb-back" id="publicBackBtn">← Back to Explore</button>
+      </div>
+      <div class="ph-facts" id="phFacts" style="display:none"></div>
     </div>
-    <div class="compat-panel" id="compatPanel" style="display:none"></div>
 
     <!-- 探索子頁切換:書評人 | 書籍 -->
     <div class="filter-bar" id="exploreSubtabBar">
@@ -1158,6 +1164,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260615b"></script>
+<script src="app.js?v=20260616a"></script>
 </body>
 </html>

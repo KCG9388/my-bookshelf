@@ -664,18 +664,19 @@ function shelfHorizontal() { return !SHELF_MOBILE.matches; }
 // 直欄排數:依可視高度塞得下幾排(桌面橫向用;手機排版交給 CSS)
 // 微縮救排:只差一點點就能塞兩排時(縮 ≤15% 且不低於 ZMIN),自動微縮封面把第二排救回來
 // (1080p 實測差距常只有幾 px,排數對瀏覽體驗的影響遠大於封面差幾 px)
-function applyShelfRows() {
+function applyShelfRows(grid) {
+  grid = grid || bookGrid;   // 預設主書架;公開書架傳 #exploreGrid 進來(同樣吃 --card-w-fit)
   const root = document.documentElement.style;
   const base = getCardW();
   if (!shelfHorizontal()) { root.setProperty("--card-w-fit", base + "px"); return; }
-  const cs   = getComputedStyle(bookGrid);
+  const cs   = getComputedStyle(grid);
   const gap  = parseFloat(cs.rowGap) || 20;
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-  const innerH = bookGrid.clientHeight - padY;
+  const innerH = grid.clientHeight - padY;
   // 卡高 = 封面(寬×1.5)+ 資訊區(固定高,量測)+ 邊框等雜項
-  const info  = bookGrid.querySelector(".book-info");
+  const info  = grid.querySelector(".book-info");
   const infoH = info ? info.getBoundingClientRect().height : 150;
-  const card  = bookGrid.querySelector(".book-card");
+  const card  = grid.querySelector(".book-card");
   const extra = card ? Math.max(0, card.getBoundingClientRect().height - card.getBoundingClientRect().width * 1.5 - infoH) : 2;
   const cardH = w => w * 1.5 + infoH + extra;
   let rows  = Math.max(1, Math.floor((innerH + gap) / (cardH(base) + gap)));
@@ -933,9 +934,12 @@ function getCardW() {
 
 // 初次/縮放/resize 後:先用估計值定排數再渲染(渲染完 renderGrid 會用真卡高修正)
 function refreshLayout() {
-  if (currentView !== "shelf") return;
-  applyShelfRows();
-  renderGrid();
+  if (currentView === "shelf") { applyShelfRows(bookGrid); renderGrid(); return; }
+  // 公開書架(探索→某人書架)也用同一套 .book-grid → 縮放/resize 時也要重算欄寬,
+  // 但不重渲染書卡(那是 renderPublicShelf 的事、且需要 books 資料)
+  if (currentView === "explore" && viewingPublicUid) {
+    applyShelfRows(document.getElementById("exploreGrid"));
+  }
 }
 
 // 只改卡片大小(便宜的 CSS 變更,拖曳時即時用)
@@ -957,7 +961,10 @@ function setZoom(w) { applyCardW(w); refreshLayout(); }
   const inn   = document.getElementById("zoomInBtn");
   if (range) {
     range.value = saved;
-    range.addEventListener("input",  () => applyCardW(+range.value)); // 拖曳中:即時縮放
+    range.addEventListener("input",  () => {                          // 拖曳中:即時縮放(只調欄寬、不重渲染)
+      applyCardW(+range.value);
+      applyShelfRows((currentView === "explore" && viewingPublicUid) ? document.getElementById("exploreGrid") : bookGrid);
+    });
     range.addEventListener("change", () => refreshLayout());          // 放開:重算填滿
   }
   if (out) out.addEventListener("click", () => setZoom(getCardW() - ZSTEP));
@@ -2779,6 +2786,7 @@ function switchView(view) {
   document.getElementById("shelfView").style.display   = view === "shelf"   ? "" : "none";
   document.getElementById("exploreView").style.display = view === "explore" ? "" : "none";
   document.getElementById("feedView").style.display    = view === "feed"    ? "" : "none";
+  if (view === "shelf") refreshLayout();   // 回自己書架:重算欄寬,蓋掉剛才在公開書架縮放留下的 --card-w-fit
   if (view === "explore") {
     viewingPublicUid = null;
     lastPublicShelf = null;
@@ -2800,8 +2808,7 @@ function setExploreMode(mode) {   // 'people' | 'books' | 'shelf'
   show("exBooksBar", mode === "books");
   show("exploreGrid", mode !== "people");
   if (mode !== "shelf") {
-    document.getElementById("publicBanner").style.display = "none";
-    document.getElementById("compatPanel").style.display = "none";
+    document.getElementById("publicBanner").style.display = "none";   // 整合 header(含相似度)一起藏
   }
 }
 function switchExploreSubtab(which) {
@@ -3280,8 +3287,6 @@ async function loadPublicShelf(uid) {
   viewingPublicUid = uid;
   setExploreMode("shelf");
   const grid   = document.getElementById("exploreGrid");
-  const banner = document.getElementById("publicBanner");
-  const pbText = banner.querySelector(".pb-text");
   grid.innerHTML = `<div class="loading">${t("Loading...")}</div>`;
   try {
     const prof  = await db.collection("users").doc(uid).get();
@@ -3307,25 +3312,32 @@ async function loadPublicShelf(uid) {
 function renderPublicShelfView() {
   const c = lastPublicShelf;
   if (!c) return;
-  const grid   = document.getElementById("exploreGrid");
-  const banner = document.getElementById("publicBanner");
-  const pbText = banner.querySelector(".pb-text");
-  const compat = document.getElementById("compatPanel");
-  banner.style.display = "flex";
-  // banner 頭像:點開對方的唯讀個人檔案(load/error 都顯示,只有載入失敗時藏)
+  const grid    = document.getElementById("exploreGrid");
+  const banner  = document.getElementById("publicBanner");
+  const nameEl  = document.getElementById("phName");
+  const subEl   = document.getElementById("phSub");
+  const gaugeEl = document.getElementById("phGauge");
+  const factsEl = document.getElementById("phFacts");
+  banner.style.display = "flex";   // .public-header 用 flex-direction:column 疊「身分列 + 共同書列」
+  // 頭像:點開對方唯讀個人檔案
   paintBannerAvatar(c.profile);
+  // 名字(#tag 灰字)
+  const p = c.profile || {};
+  if (nameEl) nameEl.innerHTML = escHtml(p.displayName || "Reader")
+    + (p.tag ? ` <span class="ph-tag">#${escHtml(p.tag)}</span>` : "");
+  // 預設先藏儀表/共同書(各狀態再決定)
+  if (gaugeEl) gaugeEl.style.display = "none";
+  if (factsEl) factsEl.style.display = "none";
   if (c.state === "private") {
-    compat.style.display = "none";
-    pbText.textContent = t("🔒 {name}'s library is private", { name: c.name });
+    subEl.textContent = t("🔒 Library is private");
     grid.innerHTML = `<div class="loading">${t("This user has no public library")}</div>`;
   } else if (c.state === "error") {
-    compat.style.display = "none";
-    pbText.textContent = t("🔒 Cannot load this shelf");
+    subEl.textContent = t("🔒 Cannot load this shelf");
     grid.innerHTML = `<div class="loading">${t("Could not load — they may have made it private")}</div>`;
   } else {
-    pbText.textContent = t("📖 {name}'s library ({n} books)", { name: c.name, n: c.books.length });
+    subEl.textContent = t("Library · {n} books", { n: c.books.length });
     renderPublicShelf(c.books);
-    renderCompatPanel(c.books, c.name);
+    renderCompatHeader(c.books, c.name);
   }
 }
 
@@ -3464,72 +3476,55 @@ function computeCompatibility(mine, theirs) {
     })),
   };
 }
-function renderCompatPanel(theirBooks, name) {
-  const panel = document.getElementById("compatPanel");
-  if (!panel) return;
-  // 追蹤鈕平時掛在相似度面板標題旁;面板不顯示時放回 banner(才不會消失)
-  const followBtn = document.getElementById("publicFollowBtn");
-  const banner = document.getElementById("publicBanner");
-  const restoreFollowToBanner = () => { if (followBtn && banner && followBtn.parentElement !== banner) banner.appendChild(followBtn); };
+// 相似度分級配色:>=55 苔綠 / 30~54 金 / <30 陶土
+function tierColor(pct) { return pct >= 55 ? "#5A7052" : pct >= 30 ? "#C28E2D" : "#B5654A"; }
+// 270° 開口拱形儀表(底部缺口),依 pct 畫填充弧 → 比滿環矮、較有文學感
+function arcGaugeSVG(pct, color) {
+  const r = 19, C = 2 * Math.PI * r;                 // 119.4
+  const arc = C * 0.75;                              // 270° 軌道
+  const fill = arc * Math.max(0, Math.min(100, pct)) / 100;
+  const cx = 23, cy = 23, rot = `rotate(135 ${cx} ${cy})`;   // 轉 135° → 缺口落在正下方
+  return `<svg class="ph-arc" width="46" height="46" viewBox="0 0 46 46" aria-hidden="true">`
+    + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EDE6D4" stroke-width="5" stroke-linecap="round" stroke-dasharray="${arc.toFixed(1)} ${C.toFixed(1)}" transform="${rot}"/>`
+    + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${C.toFixed(1)}" transform="${rot}"/>`
+    + `</svg>`;
+}
+// 最近一次算出的相容度明細(供「並排比對」視窗頂部顯示評分一致度/冷門共讀/品味衝突)
+let lastCompat = null;
+// 整合 header 的相似度區:儀表 + 大字% + 共同書列(填進 #phGauge / #phFacts)
+function renderCompatHeader(theirBooks, name) {
+  const gaugeEl = document.getElementById("phGauge");
+  const factsEl = document.getElementById("phFacts");
+  if (!gaugeEl || !factsEl) return;
   const mine = (typeof allBooks !== "undefined") ? allBooks : [];
-  // 沒登入 / 自己的書太少 / 看自己 → 不顯示面板
+  // 沒登入 / 看自己 / 自己書太少 / 對方沒書 → 只留身分列,不算相似度
   if (!currentUser || viewingPublicUid === currentUser.uid || mine.length < 5 || !theirBooks.length) {
-    restoreFollowToBanner();
-    panel.style.display = "none"; return;
+    gaugeEl.style.display = "none";
+    factsEl.style.display = "none";
+    lastCompat = null;
+    return;
   }
   const r = computeCompatibility(mine, theirBooks);
+  lastCompat = r;
   const pct = Math.round(r.score * 100);
-  const niche = r.nicheShared.length
-    ? `<div class="cp-row">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>` : "";
-  const shared = r.sharedCount
-    ? `<div class="cp-row cp-shared-link" role="button" tabindex="0" title="${t("Compare your reviews")}">📚 ${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""} <span class="cp-row-go">›</span></div>` : "";
-  const agree = r.coRated
-    ? `<div class="cp-row">🎯 ${t("Rating agreement")}: <b>${Math.round(r.ratingAgreement * 100)}%</b> ${t("over {n} co-rated", { n: r.coRated })}</div>` : "";
-  const loved = r.bothLoved.length
-    ? `<div class="cp-row">💜 ${t("You both rated highly")}: <b>${r.bothLoved.map(escHtml).join("、")}</b></div>` : "";
-  const clash = r.topClash
-    ? `<div class="cp-row cp-clash">⚡ ${t("Taste clash")}: ${escHtml(r.topClash.title)} — ${t("them")} ${"★".repeat(r.topClash.theirs)} / ${t("you")} ${"★".repeat(r.topClash.mine)}</div>` : "";
-  panel.style.display = "flex";
-  // 分級配色:>=55 苔綠 / 30~54 金 / <30 陶土(信任分數的視覺語意)
-  panel.classList.remove("cp-mid", "cp-lo");
-  if (pct < 30) panel.classList.add("cp-lo");
-  else if (pct < 55) panel.classList.add("cp-mid");
-  const CIRC = 326.7;   // 2πr, r=52(與 CSS stroke-dasharray 同步)
-  panel.innerHTML = `
-    <button class="cp-collapsed-bar" type="button">📊 ${t("Reading compatibility with {name}", { name: escHtml(name) })} · <b>${pct}%</b> <span class="cp-chev">▾</span></button>
-    <button class="cp-toggle" type="button" aria-label="collapse">▴</button>
-    <div class="cp-gauge">
-      <svg viewBox="0 0 120 120">
-        <circle class="cp-g-track" cx="60" cy="60" r="52"/>
-        <circle class="cp-g-fill" cx="60" cy="60" r="52" style="stroke-dashoffset:${(CIRC * (1 - pct / 100)).toFixed(1)}"/>
-      </svg>
-      <div class="cp-g-num">${pct}<span>%</span></div>
-    </div>
-    <div class="cp-main">
-      <div class="cp-head">
-        <span class="cp-title">${t("Reading compatibility with {name}", { name: escHtml(name) })}</span>
-      </div>
-      <div class="cp-facts">
-        ${shared}${agree}${niche}${loved}${clash}
-        ${r.sharedCount ? "" : `<div class="cp-row cp-dim">${t("No overlap yet — taste match is based on genres only")}</div>`}
-      </div>
-    </div>`;
-  panel.classList.remove("cp-collapsed");
-  const cpHead = panel.querySelector(".cp-head");
-  if (cpHead && followBtn) cpHead.appendChild(followBtn);   // 追蹤鈕搬到「與 XXX 的閱讀相似度」標題旁
-  panel.querySelector(".cp-toggle").addEventListener("click", () => panel.classList.add("cp-collapsed"));
-  panel.querySelector(".cp-collapsed-bar").addEventListener("click", () => panel.classList.remove("cp-collapsed"));
-  setupCompatScrollCollapse(panel);
-  const sharedLink = panel.querySelector(".cp-shared-link");
-  if (sharedLink && r.sharedKeys && r.sharedKeys.length) {
-    sharedLink.addEventListener("click", () => openSharedReviews(r.sharedKeys, viewingPublicUid, name));
-  }
-  // 圓環從 0 畫到目標值(先設滿 offset,下一幀換成目標讓 transition 生效)
-  const fillEl = panel.querySelector(".cp-g-fill");
-  if (fillEl) {
-    const target = fillEl.style.strokeDashoffset;
-    fillEl.style.strokeDashoffset = CIRC;
-    requestAnimationFrame(() => requestAnimationFrame(() => { fillEl.style.strokeDashoffset = target; }));
+  const color = tierColor(pct);
+  gaugeEl.style.display = "flex";
+  gaugeEl.innerHTML = arcGaugeSVG(pct, color)
+    + `<div class="ph-gnum"><span class="ph-gpct" style="color:${color}">${pct}<span class="ph-gpctsign">%</span></span>`
+    + `<span class="ph-glabel">${t("Reading similarity")}</span></div>`;
+  factsEl.style.display = "flex";
+  if (r.sharedCount) {
+    factsEl.classList.add("ph-facts-link");
+    factsEl.classList.remove("ph-facts-dim");
+    factsEl.innerHTML = `<span class="ph-facts-ico">📚</span>`
+      + `<span class="ph-facts-txt">${t("{n} books in common", { n: r.sharedCount })}${r.topShared.length ? ` — ${r.topShared.map(escHtml).join("、")}${r.sharedCount > 4 ? "…" : ""}` : ""}</span>`
+      + `<span class="ph-facts-go">›</span>`;
+    factsEl.onclick = () => { if (r.sharedKeys && r.sharedKeys.length) openSharedReviews(r.sharedKeys, viewingPublicUid, name); };
+  } else {
+    factsEl.classList.remove("ph-facts-link");
+    factsEl.classList.add("ph-facts-dim");
+    factsEl.innerHTML = `<span class="ph-facts-txt">${t("No overlap yet — taste match is based on genres only")}</span>`;
+    factsEl.onclick = null;
   }
 }
 
@@ -3588,7 +3583,7 @@ async function openSharedReviews(sharedKeys, theirUid, theirName) {
         : `<div class="sr-text sr-empty">${t("Hasn't reviewed this book")}</div>`;
     return `<div class="sr-col"><div class="sr-who">${escHtml(who)}</div>${stars}${text}</div>`;
   };
-  body.innerHTML = rows.map(({ sk, mine, theirs }) => {
+  const cards = rows.map(({ sk, mine, theirs }) => {
     const coverHtml = sk.cover
       ? `<img class="sr-cover" ${coverAttrs(sk.cover)} alt="" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return;if(window.__retryProxy(this))return;this.style.display='none'">`
       : `<div class="sr-cover sr-nocover">📖</div>`;
@@ -3600,6 +3595,21 @@ async function openSharedReviews(sharedKeys, theirUid, theirName) {
       <div class="sr-cols">${col(mine, sk.myRating, t("You"))}${col(theirs, sk.theirRating, theirName)}</div>
     </div>`;
   }).join("") || `<div class="loading">${t("No shared books")}</div>`;
+  // 頂部:相似度明細(評分一致度/冷門共讀/都評高分/品味衝突)——從 header 搬進來
+  body.innerHTML = compatFactsHTML(lastCompat) + cards;
+}
+
+// 相似度明細摘要(顯示在「並排比對」視窗頂部)
+function compatFactsHTML(r) {
+  if (!r) return "";
+  const pct = Math.round(r.score * 100);
+  const color = tierColor(pct);
+  const rows = [];
+  if (r.coRated) rows.push(`<div class="sr-fact">🎯 ${t("Rating agreement")}: <b>${Math.round(r.ratingAgreement * 100)}%</b> ${t("over {n} co-rated", { n: r.coRated })}</div>`);
+  if (r.nicheShared && r.nicheShared.length) rows.push(`<div class="sr-fact">🔥 ${t("You both read niche")}: <b>${r.nicheShared.map(escHtml).join("、")}</b></div>`);
+  if (r.bothLoved && r.bothLoved.length) rows.push(`<div class="sr-fact">💜 ${t("You both rated highly")}: <b>${r.bothLoved.map(escHtml).join("、")}</b></div>`);
+  if (r.topClash) rows.push(`<div class="sr-fact sr-fact-clash">⚡ ${t("Taste clash")}: ${escHtml(r.topClash.title)} — ${t("them")} ${"★".repeat(r.topClash.theirs)} / ${t("you")} ${"★".repeat(r.topClash.mine)}</div>`);
+  return `<div class="sr-facts"><div class="sr-facts-score" style="color:${color}">${pct}% · ${t("Reading similarity")}</div>${rows.join("")}</div>`;
 }
 function closeSharedReviews() {
   document.getElementById("sharedReviewsModal").classList.remove("open");
@@ -3627,6 +3637,8 @@ function renderPublicShelf(books) {
       </div>
     </div>`;
   }).join("");
+  // 公開書架也吃 --card-w-fit → 進場/縮放都要依「這個 grid」重算欄寬,否則沿用主書架舊值、縮放沒反應
+  requestAnimationFrame(() => applyShelfRows(grid));
   grid.querySelectorAll(".book-card").forEach(card =>
     card.addEventListener("click", async () => {
       try {
@@ -3672,6 +3684,9 @@ const DICT = {
   "When off, only you can see it — book friends won't.": { "zh-TW": "關閉時只有你看得到,書友看不到。" },
   "View shelf": { "zh-TW": "查看書架" },
   "View profile": { "zh-TW": "查看個人檔案" },
+  "Reading similarity": { "zh-TW": "閱讀相似度" },
+  "Library · {n} books": { "zh-TW": "書庫 {n} 本" },
+  "🔒 Library is private": { "zh-TW": "🔒 此書庫不公開" },
   "Linked": { "zh-TW": "已連結" },
   "Not linked": { "zh-TW": "未連結" },
   "Uploading...": { "zh-TW": "上傳中..." },
