@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260616c" />
+  <link rel="stylesheet" href="style.css?v=20260616d" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -321,6 +321,7 @@
           <select id="sortSelect">
             <option value="createdAt_desc">Date Added ↓</option>
             <option value="createdAt_asc">Date Added ↑</option>
+            <option value="status_asc">Status (reading → done)</option>
             <option value="title_asc">Title A → Z</option>
             <option value="title_desc">Title Z → A</option>
             <option value="author_asc">Author A → Z</option>
@@ -1175,7 +1176,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260616c"></script>
+<script src="app.js?v=20260616d"></script>
 <script>
   /* 註冊 service worker → 讓 Android 可「安裝 App」、離線殼層兜底(網路優先、不服務舊版) */
   if ("serviceWorker" in navigator) {

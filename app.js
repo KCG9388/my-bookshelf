@@ -392,6 +392,7 @@ async function ensureProfile(user) {
       myProfile = { ...d, ...patch };
     }
     refreshIdentityUI();
+    applySortPref();   // 套用雲端記住的書架排序(跨裝置同步)
   } catch (e) { console.warn("ensureProfile failed:", e); }
 }
 
@@ -574,6 +575,9 @@ function getAuthErrorMessage(code) {
 //  RENDER
 // ══════════════════════════════════════════
 
+// 「依閱讀狀態」排序的優先序(數字小=排前):正在讀 → TBR → 想讀 → 完成 →（DNF 最後)
+const STATUS_SORT = { "Now Reading": 0, "TBR": 1, "Want to Read": 2, "Finished": 3, "DNF": 4 };
+
 function filterBooks() {
   const { status, year, genre, search, format } = currentFilter;
   let books = allBooks.filter(b => {
@@ -598,6 +602,12 @@ function filterBooks() {
     });
   }
   books.sort((a, b) => {
+    if (field === "status") {
+      // 依閱讀狀態分群排;同狀態內照加入日期(新→舊)
+      const pa = STATUS_SORT[a.status] ?? 9, pb = STATUS_SORT[b.status] ?? 9;
+      if (pa !== pb) return pa - pb;
+      return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+    }
     let va, vb;
     if (field === "title" || field === "author") {
       va = (a[field] || "").toLowerCase(); vb = (b[field] || "").toLowerCase();
@@ -885,9 +895,28 @@ searchInput.addEventListener("input", e => {
 // ── Filter Bar ──
 document.getElementById("sortSelect").addEventListener("change", e => {
   currentSort = e.target.value;
+  localStorage.setItem("sortPref", currentSort);                       // 本地即時快取
+  if (myProfile) myProfile.sortPref = currentSort;
+  if (currentUser) db.collection("users").doc(currentUser.uid)         // 寫進 Firebase → 跨裝置同步
+    .set({ sortPref: currentSort }, { merge: true }).catch(() => {});
   bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
 });
+
+// 套用「記住的排序」:優先用 Firebase 個人檔案(跨裝置同步),退回本地 localStorage(登入前即時)。
+// 在腳本載入時(用本地值)與 ensureProfile 取到雲端值後各呼叫一次。
+function applySortPref() {
+  const pref = (myProfile && myProfile.sortPref) || localStorage.getItem("sortPref");
+  if (!pref) return;
+  const sel = document.getElementById("sortSelect");
+  if (!sel || ![...sel.options].some(o => o.value === pref)) return;   // 無效/舊值 → 略過
+  localStorage.setItem("sortPref", pref);                              // 雲端值回寫本地快取
+  if (currentSort === pref && sel.value === pref) return;              // 已是該排序就不重排
+  currentSort = pref;
+  sel.value = pref;
+  if (currentView === "shelf" && allBooks.length) renderGrid();        // 已渲染過 → 立即重排
+}
+applySortPref();   // 載入即套用本地快取(雲端值稍後 ensureProfile 再覆蓋)
 
 document.getElementById("formatSelect").addEventListener("change", e => {
   currentFilter.format = e.target.value;
@@ -900,8 +929,7 @@ document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   currentFilter = { ...currentFilter, status: "all", year: "all", genre: "all", format: "all", search: "" };
   document.getElementById("searchInput").value = "";
   document.getElementById("formatSelect").value = "all";
-  document.getElementById("sortSelect").value = "createdAt_desc";
-  currentSort = "createdAt_desc";
+  // 排序是「記住的偏好」,清篩選不動它(由 sortSelect 自己維持)
   bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   document.querySelectorAll("#statusFilter li").forEach(li => li.classList.remove("active"));
   document.querySelector("#statusFilter li[data-filter='all']").classList.add("active");
@@ -3752,6 +3780,7 @@ const DICT = {
   // 篩選列
   "Sort by": { "zh-TW": "排序" },
   "Date Added ↓": { "zh-TW": "加入日期 ↓" }, "Date Added ↑": { "zh-TW": "加入日期 ↑" },
+  "Status (reading → done)": { "zh-TW": "依閱讀狀態(正在讀 → 完成)" },
   "Title A → Z": { "zh-TW": "書名 A → Z" }, "Title Z → A": { "zh-TW": "書名 Z → A" },
   "Author A → Z": { "zh-TW": "作者 A → Z" }, "Date Finished ↓": { "zh-TW": "讀完日期 ↓" },
   "Progress ↓": { "zh-TW": "進度 ↓" }, "Pages ↓": { "zh-TW": "頁數 ↓" },
