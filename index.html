@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260626a" />
+  <link rel="stylesheet" href="style.css?v=20260626c" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -307,6 +307,7 @@
   <div class="hdr-search">
     <span class="hdr-search-icon">🔍</span>
     <input class="search-input" id="searchInput" type="text" placeholder="Search books..." />
+    <button class="hdr-search-clear" id="searchClear" type="button" aria-label="Clear search" style="display:none">✕</button>
   </div>
 
   <div class="hdr-actions">
@@ -388,6 +389,7 @@
   <button class="import-btn shelf-only" id="openImportModal">⬆ Import Books</button>
 
   <button class="fb-sidebar-btn" id="feedbackFab" aria-label="Feedback"><span class="fb-fab-icon">💬</span><span class="fb-fab-label">Feedback</span></button>
+  <button class="fb-sidebar-btn" id="changelogFab" aria-label="What's New"><span class="fb-fab-icon">📋</span><span class="fb-fab-label">What's New</span></button>
 
   <div class="sidebar-footer">
     <div class="sidebar-footer-links">
@@ -1181,12 +1183,26 @@
   </div>
 </div>
 
+<!-- 更新日誌 Modal(由左側欄按鈕開啟;內容由 app.js 的 CHANGELOG 渲染)-->
+<div class="modal-overlay" id="changelogModal">
+  <div class="modal modal-feedback modal-changelog">
+    <div class="modal-header">
+      <h2 data-i18n>What's New</h2>
+      <button class="modal-close" id="changelogClose" aria-label="Close">✕</button>
+    </div>
+    <div class="fb-body">
+      <p class="fb-intro" data-i18n>Recent updates to Concento.</p>
+      <div id="changelogList" class="changelog-list"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260626a"></script>
+<script src="app.js?v=20260626c"></script>
 <script>
   /* 註冊 service worker → 讓 Android 可「安裝 App」、離線殼層兜底(網路優先、不服務舊版) */
   if ("serviceWorker" in navigator) {

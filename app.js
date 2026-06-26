@@ -886,10 +886,22 @@ document.getElementById("statusFilter").querySelectorAll("li").forEach(li => {
   });
 });
 
+const searchClear = document.getElementById("searchClear");
+function syncSearchClear() { if (searchClear) searchClear.style.display = searchInput.value ? "" : "none"; }
 searchInput.addEventListener("input", e => {
   currentFilter.search = e.target.value.trim();
+  syncSearchClear();
   bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
   renderGrid();
+});
+// 搜尋框 ✕:清掉打的字 → 直接回原本(未搜尋)的畫面(ERI 要求)
+if (searchClear) searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  currentFilter.search = "";
+  syncSearchClear();
+  bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;
+  renderGrid();
+  searchInput.focus();
 });
 
 // ── Filter Bar ──
@@ -928,6 +940,7 @@ document.getElementById("formatSelect").addEventListener("change", e => {
 document.getElementById("clearFiltersBtn").addEventListener("click", () => {
   currentFilter = { ...currentFilter, status: "all", year: "all", genre: "all", format: "all", search: "" };
   document.getElementById("searchInput").value = "";
+  syncSearchClear();
   document.getElementById("formatSelect").value = "all";
   // 排序是「記住的偏好」,清篩選不動它(由 sortSelect 自己維持)
   bookGrid.scrollLeft = 0; bookGrid.scrollTop = 0;   // 換條件就捲回開頭
@@ -1008,8 +1021,12 @@ function updateActiveFilters() {
   clearBtn.style.display = anyActive ? "" : "none";
 }
 
+const FORMAT_ORDER = ["Physical", "Ebook", "Audiobook", "Borrowed"];   // 固定順序:實體書→電子書→有聲書→借閱(ERI 要求:別隨新增的書亂跳)
 function rebuildFormatFilter() {
-  const formats = [...new Set(allBooks.map(b => b.format).filter(Boolean))].sort();
+  const present = new Set(allBooks.map(b => b.format).filter(Boolean));
+  const known = FORMAT_ORDER.filter(f => present.has(f));               // 已知版本照固定順序
+  const extra = [...present].filter(f => !FORMAT_ORDER.includes(f)).sort();   // 非標準值(舊資料)補在後面
+  const formats = [...known, ...extra];
   const sel = document.getElementById("formatSelect");
   const cur = sel.value;
   sel.innerHTML = `<option value="all">${t("All Formats")}</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(t(f))}</option>`).join("");
@@ -3932,6 +3949,8 @@ const DICT = {
   "Differ": { "zh-TW": "分歧" }, "Agree": { "zh-TW": "一致" },
   "Press back again to leave": { "zh-TW": "再按一次返回鍵即離開" },
   "Feedback": { "zh-TW": "意見回饋" },
+  "What's New": { "zh-TW": "更新日誌" },
+  "Recent updates to Concento.": { "zh-TW": "Concento 最近的更新。" },
   "Spotted a bug or have an idea? Tell us — we read every message.": { "zh-TW": "發現 bug 或有點子?跟我們說——每則我們都會看。" },
   "Send": { "zh-TW": "送出" },
   "Type your feedback…": { "zh-TW": "寫下你的意見…" },
@@ -4659,6 +4678,84 @@ function hideExitHint() {
     }
     sendBtn.disabled = false;
   });
+})();
+
+// ── 更新日誌:資料驅動。新增更新 → 在最上面加一個 { date, zh:[...], en:[...] } 即可 ──
+const CHANGELOG = [
+  { date: "2026-06-26", zh: [
+      "書本可標記「版本」:實體書 / 電子書 / 有聲書 / 借閱,並能依版本篩選",
+      "書架新增「依閱讀狀態」排序,設定會跨裝置記住",
+      "標上閱讀進度(頁數或 %)會自動把書轉成「正在閱讀」",
+      "可把網站加到手機主畫面,像 App 一樣開啟",
+      "介面細修:搜尋框可一鍵清除、版本篩選改成固定順序",
+    ], en: [
+      "Tag each book's format — physical, ebook, audiobook, or borrowed — and filter by it",
+      "New “by reading status” shelf sort, remembered across your devices",
+      "Logging progress (pages or %) now auto-moves a book to “Now Reading”",
+      "Add the site to your phone home screen and open it like an app",
+      "Polish: one-tap clear in the search box, and a fixed order for the format filter",
+    ] },
+  { date: "2026-06-16", zh: [
+      "公開書架改版:把「閱讀相似度」和個人資料整合成一條精簡的頂部資訊",
+      "修正公開書架的封面縮放",
+    ], en: [
+      "Public shelves: reading-similarity and profile merged into one compact header",
+      "Fixed cover zoom on public shelves",
+    ] },
+  { date: "2026-06-15", zh: [
+      "個人檔案:自訂頭像、自介、#識別碼、年度最愛書、Discord",
+      "從別人的書架點頭像,就能看對方的唯讀個人檔案(含 Discord 隱私開關)",
+    ], en: [
+      "Profiles: custom avatar, bio, #handle, favorite book of the year, Discord",
+      "Tap an avatar on someone's shelf to view their read-only profile (with a Discord privacy switch)",
+    ] },
+  { date: "2026-06-14", zh: [
+      "讀完一本書會跳出評分與評論邀請",
+      "評論區重排:自己的評論置頂",
+      "Google 登入改用自有網域 auth.concento.io",
+    ], en: [
+      "Finishing a book now invites you to rate and review it",
+      "Reviews reordered so your own review sits on top",
+      "Google sign-in now uses our own domain, auth.concento.io",
+    ] },
+  { date: "2026-06-13", zh: [
+      "手機版大改版:側欄收進漢堡選單,各種手機都不再爆出畫面",
+    ], en: [
+      "Big mobile revamp: sidebar tucked into a hamburger menu, no more overflow on any phone",
+    ] },
+  { date: "2026-06-12", zh: [
+      "探索頁:瀏覽書評人、依類型篩選",
+      "匯入中心改版:支援 Goodreads、通用 CSV、網頁 ISBN 多來源匯入",
+    ], en: [
+      "Explore page: browse reviewers and filter by genre",
+      "Revamped import center: Goodreads, generic CSV, and web-page ISBN sources",
+    ] },
+  { date: "2026-06-11", zh: [
+      "桌面書架改成橫向書牆,可拖曳與滾輪翻頁",
+    ], en: [
+      "Desktop shelf became a horizontal book wall with drag and scroll paging",
+    ] },
+];
+(function setupChangelog() {
+  const fab = document.getElementById("changelogFab");
+  const modal = document.getElementById("changelogModal");
+  const closeBtn = document.getElementById("changelogClose");
+  const list = document.getElementById("changelogList");
+  if (!fab || !modal || !list) return;
+
+  function render() {
+    const lang = currentLang === "zh-TW" ? "zh" : "en";
+    list.innerHTML = CHANGELOG.map(e => {
+      const items = (e[lang] || e.en).map(s => `<li>${escHtml(s)}</li>`).join("");
+      return `<div class="cl-entry"><div class="cl-date">${escHtml(e.date)}</div><ul class="cl-items">${items}</ul></div>`;
+    }).join("");
+  }
+  const open  = () => { document.body.classList.remove("side-open"); render(); modal.classList.add("open"); };
+  const close = () => modal.classList.remove("open");
+  fab.addEventListener("click", () => modal.classList.contains("open") ? close() : open());
+  closeBtn.addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && modal.classList.contains("open")) close(); });
+  modal.addEventListener("click", e => { if (e.target.id === "changelogModal") close(); });   // 點背景遮罩關閉
 })();
 
 // ── PWA「加到主畫面」提示(Android 一鍵安裝 / iOS Safari 給手動步驟)──
