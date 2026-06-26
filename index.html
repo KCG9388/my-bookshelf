@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260616d" />
+  <link rel="stylesheet" href="style.css?v=20260626a" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -626,8 +626,11 @@
           <input type="text" id="bookGenre" class="genre-custom" placeholder="自訂類型 Custom genre" style="display:none;margin-top:8px" />
         </div>
         <div class="form-group">
-          <label>Total Pages</label>
-          <input type="number" id="bookTotalPages" placeholder="e.g. 400" min="1" />
+          <label>Pages</label>
+          <div class="page-pair">
+            <span class="pp-box"><input type="number" id="bookTotalPages" placeholder="e.g. 400" min="1" /><span class="pp-cap">Total Pages</span></span>
+            <span class="pp-box"><input type="number" id="bookCurrentPage" placeholder="e.g. 120" min="0" /><span class="pp-cap">Current Page</span></span>
+          </div>
         </div>
       </div>
 
@@ -643,8 +646,14 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Current Page</label>
-          <input type="number" id="bookCurrentPage" placeholder="e.g. 120" min="0" />
+          <label>Format</label>
+          <select id="bookFormat">
+            <option value="">Unspecified</option>
+            <option value="Physical">Physical</option>
+            <option value="Ebook">Ebook</option>
+            <option value="Audiobook">Audiobook</option>
+            <option value="Borrowed">Borrowed</option>
+          </select>
         </div>
       </div>
 
@@ -711,6 +720,7 @@
         <div class="detail-author" id="detailAuthor"></div>
         <div class="detail-genre" id="detailGenre"></div>
         <div class="detail-status-badge" id="detailStatus"></div>
+        <div class="detail-format" id="detailFormat" style="display:none"></div>
 
         <div class="detail-actions">
           <button class="btn-edit detail-shelf-only" id="editBookBtn">Edit</button>
@@ -1176,7 +1186,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260616d"></script>
+<script src="app.js?v=20260626a"></script>
 <script>
   /* 註冊 service worker → 讓 Android 可「安裝 App」、離線殼層兜底(網路優先、不服務舊版) */
   if ("serviceWorker" in navigator) {

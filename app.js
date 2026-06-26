@@ -1012,7 +1012,7 @@ function rebuildFormatFilter() {
   const formats = [...new Set(allBooks.map(b => b.format).filter(Boolean))].sort();
   const sel = document.getElementById("formatSelect");
   const cur = sel.value;
-  sel.innerHTML = `<option value="all">${t("All Formats")}</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
+  sel.innerHTML = `<option value="all">${t("All Formats")}</option>` + formats.map(f => `<option value="${escHtml(f)}">${escHtml(t(f))}</option>`).join("");
   if (formats.includes(cur)) sel.value = cur;
 }
 
@@ -1432,6 +1432,7 @@ function resetAddForm() {
     .forEach(id => document.getElementById(id).value = "");
   document.getElementById("bookTotalPages").value = "";
   document.getElementById("bookStatus").value = "Want to Read";
+  document.getElementById("bookFormat").value = "";
   setCover(""); closePicker();
   fetchStatus.textContent = "";
   pendingBookDesc = "";
@@ -1456,6 +1457,7 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     totalPages:  parseInt(document.getElementById("bookTotalPages").value) || 0,
     currentPage: parseInt(document.getElementById("bookCurrentPage").value) || 0,
     status:      document.getElementById("bookStatus").value,
+    format:      document.getElementById("bookFormat").value || "",
     cover:       document.getElementById("coverUrl").value.trim(),
     startDate,
     finishDate:  document.getElementById("bookFinishDate").value,
@@ -1620,6 +1622,12 @@ function openDetail(id) {
 
   const statusEl = document.getElementById("detailStatus");
   statusEl.innerHTML = `<span class="status-badge status-${escHtml(b.status)}">${escHtml(t(b.status))}</span>`;
+
+  const fmtEl = document.getElementById("detailFormat");
+  if (fmtEl) {
+    if (b.format) { fmtEl.textContent = `📚 ${t(b.format)}`; fmtEl.style.display = ""; }
+    else fmtEl.style.display = "none";
+  }
 
   const pct = bookPct(b);
   const byPct = b.progressPct != null && b.progressPct !== "";   // 這本是用 % 追蹤?
@@ -2168,6 +2176,7 @@ document.getElementById("editBookBtn").addEventListener("click", () => {
   openAddModal({ title: b.title, author: b.author, genre: b.genre, totalPages: b.totalPages, cover: b.cover });
   document.getElementById("bookCurrentPage").value = b.currentPage || 0;
   document.getElementById("bookStatus").value       = b.status || "Want to Read";
+  document.getElementById("bookFormat").value       = b.format || "";
   document.getElementById("bookStartDate").value    = b.startDate || "";
   document.getElementById("bookFinishDate").value   = b.finishDate || "";
   document.getElementById("bookNotes").value        = b.notes || "";
@@ -3786,6 +3795,8 @@ const DICT = {
   "Progress ↓": { "zh-TW": "進度 ↓" }, "Pages ↓": { "zh-TW": "頁數 ↓" },
   "Progress ↓ (currently reading)": { "zh-TW": "進度 ↓(正在讀)" },
   "Format": { "zh-TW": "版本" }, "All Formats": { "zh-TW": "所有版本" },
+  "Unspecified": { "zh-TW": "未指定" }, "Physical": { "zh-TW": "實體書" },
+  "Ebook": { "zh-TW": "電子書" }, "Audiobook": { "zh-TW": "有聲書" }, "Borrowed": { "zh-TW": "借閱" },
   "✕ Clear filters": { "zh-TW": "✕ 清除篩選" },
   "Rating ↓": { "zh-TW": "評分 ↓" }, "Popularity ↓": { "zh-TW": "熱度 ↓" }, "Recently Added": { "zh-TW": "最新加入" },
   "Search books...": { "zh-TW": "搜尋書籍..." },
@@ -3808,6 +3819,7 @@ const DICT = {
   "🗑 Remove cover": { "zh-TW": "🗑 移除封面" }, "Close": { "zh-TW": "關閉" },
   "Title *": { "zh-TW": "書名 *" }, "Book title": { "zh-TW": "書名" }, "Author *": { "zh-TW": "作者 *" }, "Author name": { "zh-TW": "作者名" },
   "e.g. Fantasy, Mystery": { "zh-TW": "例:奇幻、推理" }, "Total Pages": { "zh-TW": "總頁數" }, "e.g. 400": { "zh-TW": "例:400" },
+  "Pages": { "zh-TW": "頁數" },
   "Want to Read": { "zh-TW": "想讀" }, "TBR": { "zh-TW": "待讀" }, "Now Reading": { "zh-TW": "正在閱讀" }, "Finished": { "zh-TW": "已讀完" }, "DNF": { "zh-TW": "棄讀" },
   "Current Page": { "zh-TW": "目前頁數" }, "e.g. 120": { "zh-TW": "例:120" },
   "Start Date": { "zh-TW": "開始日期" }, "Finish Date": { "zh-TW": "讀完日期" },

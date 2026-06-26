@@ -712,6 +712,10 @@ body::after {
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus { border-color: #9C937F; }
+.page-pair { display: flex; gap: 8px; }
+.page-pair .pp-box { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.page-pair .pp-box input { width: 100%; box-sizing: border-box; }
+.page-pair .pp-cap { font-size: 11px; color: #8A8270; text-align: center; }
 
 /* ── Cover Picker ── */
 .cover-picker-group { gap: 8px; }
@@ -1146,6 +1150,7 @@ body::after {
 .modal-detail:not(.disc-open) .discussion-section { display: none; }
 .modal-detail.disc-open .reviews-section { display: none; }
 .detail-genre { font-size: 13px; color: #8A8270; }
+.detail-format { font-size: 13px; color: #8A8270; margin-top: 3px; }
 .detail-status-badge .status-badge { font-size: 12px; padding: 3px 9px; }
 
 /* 進度區:裸表單收進一張米紙小卡,跟簡介卡同語言 */
