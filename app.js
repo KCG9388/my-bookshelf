@@ -1437,6 +1437,11 @@ document.getElementById("saveBook").addEventListener("click", async () => {
                           : (existing?.startYear ?? new Date().getFullYear()),
     userId:      currentUser?.uid || null,
   };
+  // 有打上進度(頁數)→ 自動視為「正在閱讀」:只升級「還沒開始」的狀態(Want to Read / TBR),
+  // 不覆蓋使用者明確選的 Finished / DNF / Now Reading;滿頁則視為已讀完
+  if (book.currentPage > 0 && (book.status === "Want to Read" || book.status === "TBR")) {
+    book.status = (book.totalPages > 0 && book.currentPage >= book.totalPages) ? "Finished" : "Now Reading";
+  }
   // createdAt(加入時間)只在「新增」蓋章;編輯不動它，否則加入日期會被刷成現在
   if (!isEdit) book.createdAt = firebase.firestore.FieldValue.serverTimestamp();
 
@@ -2094,12 +2099,14 @@ document.getElementById("updatePageBtn").addEventListener("click", async () => {
     pct = Math.max(0, Math.min(100, pct));
     updates.progressPct = pct;
     if (pct >= 100) updates.status = "Finished";
+    else if (pct > 0 && b && b.status !== "Now Reading") updates.status = "Now Reading";   // 有進度=正在閱讀
   } else {
     // 用頁數:存 currentPage,並清掉 progressPct(回到頁數推算)
     const newPage = parseInt(document.getElementById("detailCurrentPage").value) || 0;
     updates.currentPage = newPage;
     updates.progressPct = null;
     if (b && b.totalPages && newPage >= b.totalPages) updates.status = "Finished";
+    else if (newPage > 0 && b && b.status !== "Now Reading") updates.status = "Now Reading";   // 有進度=正在閱讀
   }
   await booksCol.doc(currentDetailId).update(updates);
   openDetail(currentDetailId);
@@ -4611,4 +4618,50 @@ function hideExitHint() {
     }
     sendBtn.disabled = false;
   });
+})();
+
+// ── PWA「加到主畫面」提示(Android 一鍵安裝 / iOS Safari 給手動步驟)──
+(function setupInstallHint() {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  if (standalone) return;                                         // 已在 App 模式 → 不提示
+  if (localStorage.getItem("installHintDismissed") === "1") return;
+  if (!window.matchMedia("(max-width: 600px)").matches) return;   // 只在手機提示
+
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isiOSSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|GSA/.test(ua);
+  let deferred = null, banner = null;
+
+  function build(mode) {
+    if (banner) return;
+    const zh = (typeof currentLang !== "undefined" && currentLang !== "en");
+    const title = zh ? "把 Concento 加到主畫面" : "Add Concento to your home screen";
+    const sub = mode === "ios"
+      ? (zh ? "點下方 分享 ⬆ → 加入主畫面" : "Tap Share ⬆ → Add to Home Screen")
+      : (zh ? "像 App 一樣一鍵打開" : "Open it like an app");
+    banner = document.createElement("div");
+    banner.className = "install-hint";
+    banner.innerHTML =
+      `<img src="icon-192.png" alt="" class="ih-icon"/>` +
+      `<div class="ih-txt"><b>${title}</b><span>${sub}</span></div>` +
+      (mode === "android" ? `<button class="ih-go" type="button">${zh ? "安裝" : "Install"}</button>` : "") +
+      `<button class="ih-x" type="button" aria-label="close">✕</button>`;
+    document.body.appendChild(banner);
+    banner.querySelector(".ih-x").addEventListener("click", dismiss);
+    const go = banner.querySelector(".ih-go");
+    if (go) go.addEventListener("click", async () => {
+      if (!deferred) return dismiss();
+      deferred.prompt();
+      try { await deferred.userChoice; } catch (_) {}
+      deferred = null; dismiss();
+    });
+    requestAnimationFrame(() => banner.classList.add("show"));
+  }
+  function dismiss() {
+    localStorage.setItem("installHintDismissed", "1");
+    if (banner) { banner.classList.remove("show"); setTimeout(() => banner && banner.remove(), 320); }
+  }
+
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; build("android"); });
+  if (isiOSSafari) setTimeout(() => build("ios"), 2500);   // iOS 沒有 beforeinstallprompt
 })();

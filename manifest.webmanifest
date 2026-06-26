@@ -1,0 +1,19 @@
+{
+  "name": "Concento — 找到跟你讀得像的人",
+  "short_name": "Concento",
+  "description": "社群閱讀與閱讀相似度：把你的書架變成找書友的地方。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "start_url": "./?utm_source=pwa&utm_medium=homescreen",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F4EC",
+  "theme_color": "#5A7052",
+  "categories": ["books", "social", "lifestyle"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

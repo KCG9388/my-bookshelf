@@ -2,12 +2,23 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Concento</title>
+
+  <!-- PWA / 加到主畫面(iOS + Android)-->
+  <meta name="theme-color" content="#5A7052" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Concento" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260616b" />
+  <link rel="stylesheet" href="style.css?v=20260616c" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -623,9 +634,9 @@
         <div class="form-group">
           <label>Status</label>
           <select id="bookStatus">
-            <option value="Want to Read">Want to Read</option>
-            <option value="TBR">TBR</option>
             <option value="Now Reading">Now Reading</option>
+            <option value="TBR">TBR</option>
+            <option value="Want to Read">Want to Read</option>
             <option value="Finished">Finished</option>
             <option value="DNF">DNF</option>
           </select>
@@ -1164,6 +1175,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260616b"></script>
+<script src="app.js?v=20260616c"></script>
+<script>
+  /* 註冊 service worker → 讓 Android 可「安裝 App」、離線殼層兜底(網路優先、不服務舊版) */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
 </body>
 </html>
