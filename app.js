@@ -2,6 +2,8 @@
 firebase.initializeApp(firebaseConfig);
 const db   = firebase.firestore();
 const auth = firebase.auth();
+// 明確要求登入狀態存 IndexedDB(本就是預設,寫死防環境差異/未來 SDK 變更把 token 存不住)
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
 // ── State ──
 let allBooks = [];
@@ -51,12 +53,35 @@ function needsEmailVerify(user) {
   return true;
 }
 
+let everEnteredApp = false;        // 這次頁面載入是否曾真正進過 app(判斷 null 是「主動登出」還是「階段被異常丟掉」)
+let userInitiatedSignOut = false;  // 使用者按了登出鈕才設 true
+
+// 60 秒內已嘗試過自救重整 → 不再重整(防迴圈:session 真的死掉時別一直 reload)
+function recentlyTriedAuthRecovery() {
+  try {
+    const t = parseInt(sessionStorage.getItem("authRecoverAt") || "0", 10);
+    return t && (Date.now() - t < 60000);
+  } catch (_) { return false; }
+}
+
 auth.onAuthStateChanged(user => {
   currentUser = user;
   if (user) {
     if (needsEmailVerify(user)) { showVerifyGate(user); return; }
+    everEnteredApp = true;
     enterApp(user);
   } else {
+    // 不是使用者主動登出、原本又在 app 內、且有網路 → 多半是 token 刷新/階段還原暫時失敗
+    // (手機 + 約 1 小時 token 邊界最常見)。先重整一次讓 Firebase 從 IndexedDB 重新還原 session;
+    // 暫時性 blip 會無痛救回,真的掉了才落到 landing(60 秒守門防迴圈)。
+    if (!userInitiatedSignOut && everEnteredApp && navigator.onLine && !recentlyTriedAuthRecovery()) {
+      try { localStorage.setItem("lastAuthDrop", JSON.stringify({ at: Date.now(), online: navigator.onLine, ua: navigator.userAgent.slice(0, 160) })); } catch (_) {}
+      try { sessionStorage.setItem("authRecoverAt", String(Date.now())); } catch (_) {}
+      location.reload();
+      return;
+    }
+    userInitiatedSignOut = false;
+    everEnteredApp = false;
     closeVerifyGate();
     hideApp();
     showLanding();          // 未登入 → 產品介紹首頁(按 CTA 才彈登入框)
@@ -162,7 +187,7 @@ document.getElementById("resendVerifyBtn").addEventListener("click", async () =>
   }
 });
 
-document.getElementById("verifySignOutBtn").addEventListener("click", () => auth.signOut());
+document.getElementById("verifySignOutBtn").addEventListener("click", () => { userInitiatedSignOut = true; auth.signOut(); });
 
 function showApp() {
   document.getElementById("appHeader").style.display = "";
@@ -452,7 +477,7 @@ async function migrateRatingsOnce(uid) {
 
 // ── Sign Out ──
 document.getElementById("signOutBtn").addEventListener("click", () => {
-  if (confirm("確定要登出嗎？")) auth.signOut();
+  if (confirm("確定要登出嗎？")) { userInitiatedSignOut = true; auth.signOut(); }
 });
 
 // ── Auth Modal 邏輯 ──
