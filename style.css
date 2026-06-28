@@ -1951,6 +1951,8 @@ body::after {
     flex-direction: column; flex-wrap: nowrap;
     gap: 14px; padding: 18px 16px;
     overflow-y: auto;
+    overscroll-behavior: contain;        /* 抽屜捲到邊界時不把捲動鏈傳給背後主畫面(iOS) */
+    -webkit-overflow-scrolling: touch;
     background: var(--cream);
     box-shadow: var(--shadow-pop);
     transform: translateX(-108%);
@@ -1958,10 +1960,19 @@ body::after {
   }
   body.side-open .sidebar { transform: translateX(0); }
   body.side-open .side-backdrop { display: block; }
+  /* 抽屜開啟時凍結背後主畫面的捲動 → 滑左邊選單不會穿透捲到書牆 */
+  body.side-open .main,
+  body.side-open .book-grid { overflow: hidden; }
   .sidebar-section { flex-direction: column; align-items: stretch; gap: 6px; }
   .filter-list { flex-direction: column; }
   .add-btn { margin-top: 6px; }
   .main { overflow: auto; }
+
+  /* iOS Safari 對 font-size <16px 的輸入框會在聚焦時自動放大整個畫面(評分/編輯時右上角 X 被推出視窗)
+     → 手機上把所有可聚焦的輸入控制項拉到 16px,直接擋掉這個自動縮放 */
+  input, select, textarea,
+  .search-input,
+  .form-group input, .form-group select, .form-group textarea { font-size: 16px; }
 
   /* 抽屜落腳處:身分列 + 工具列(由 JS 搬入次要 header 控制項)*/
   .drawer-only { display: flex; flex-direction: column; }

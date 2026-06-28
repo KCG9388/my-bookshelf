@@ -1799,9 +1799,14 @@ function renderTripleRating(reviews, avg, count) {
     picker.appendChild(unit);
   }
 
+  function eventClientX(e) {
+    if (e.touches && e.touches[0]) return e.touches[0].clientX;
+    if (e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientX;
+    return e.clientX;
+  }
   function ratingFromEvent(e) {
     const rect      = picker.getBoundingClientRect();
-    const x         = Math.max(0, e.clientX - rect.left);
+    const x         = Math.max(0, eventClientX(e) - rect.left);
     const starWidth = rect.width / 5;
     const starIdx   = Math.min(4, Math.floor(x / starWidth));
     const fraction  = (x - starIdx * starWidth) / starWidth;
@@ -1816,6 +1821,15 @@ function renderTripleRating(reviews, avg, count) {
     renderStars(selectedRating);
     updateStarLabel(selectedRating, true);
   });
+  // 觸控:手指拖過星星即時設定評分;preventDefault 擋住彈窗/頁面跟著捲動(手機「拖不動」的主因)
+  const onStarTouch = e => {
+    e.preventDefault();
+    selectedRating = ratingFromEvent(e);
+    renderStars(selectedRating);
+    updateStarLabel(selectedRating, true);
+  };
+  picker.addEventListener("touchstart", onStarTouch, { passive: false });
+  picker.addEventListener("touchmove",  onStarTouch, { passive: false });
 })();
 
 function renderStars(rating) {
@@ -2083,7 +2097,10 @@ function buildFinishStars() {
   // 與主評論框同一套 0.25 粒度演算法(滑鼠位置→四分之一顆)
   const ratingFromEvent = e => {
     const rect      = picker.getBoundingClientRect();
-    const x         = Math.max(0, e.clientX - rect.left);
+    const cx        = (e.touches && e.touches[0]) ? e.touches[0].clientX
+                    : (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX
+                    : e.clientX;
+    const x         = Math.max(0, cx - rect.left);
     const starWidth = rect.width / 5;
     const starIdx   = Math.min(4, Math.floor(x / starWidth));
     const fraction  = (x - starIdx * starWidth) / starWidth;
@@ -2101,6 +2118,16 @@ function buildFinishStars() {
   picker.onmousemove  = e => { const r = ratingFromEvent(e); paint(r); showLabel(r); };
   picker.onmouseleave = () => { paint(finishStarRating); showLabel(finishStarRating); };
   picker.onclick      = e => { finishStarRating = ratingFromEvent(e); paint(finishStarRating); showLabel(finishStarRating); };
+  // 觸控拖曳:手指拖過星星即時設定;preventDefault 擋彈窗捲動。
+  // 去重(buildFinishStars 每次開彈窗會重跑)→ 先移除上一輪的 listener 再加,避免累積。
+  if (picker._onTouch) {
+    picker.removeEventListener("touchstart", picker._onTouch);
+    picker.removeEventListener("touchmove",  picker._onTouch);
+  }
+  const onTouch = e => { e.preventDefault(); finishStarRating = ratingFromEvent(e); paint(finishStarRating); showLabel(finishStarRating); };
+  picker._onTouch = onTouch;
+  picker.addEventListener("touchstart", onTouch, { passive: false });
+  picker.addEventListener("touchmove",  onTouch, { passive: false });
   finishStarRating = 0;
   paint(0);
   showLabel(0);
