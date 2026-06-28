@@ -22,3 +22,6 @@ video/chrome_*
 video/claude_*
 goodreads*.csv
 key/
+.secrets/
+*credentials*.json
+.testuser.json
