@@ -590,6 +590,13 @@ body::after {
   box-shadow: 0 12px 48px rgba(0,0,0,.18);
 }
 
+/* 彈窗滾動穿透防治:① 彈窗自己的捲動到邊界不外溢給背後 ② 任何彈窗開著時凍結背後 body/書架的捲動
+   → 在彈窗上點擊/拖曳不會再穿透捲到後面的書架(手機 iOS 最明顯) */
+.modal-overlay, .modal { overscroll-behavior: contain; }
+body:has(.modal-overlay.open) { overflow: hidden; }
+body:has(.modal-overlay.open) .main,
+body:has(.modal-overlay.open) .book-grid { overflow: hidden; }
+
 .modal-header {
   display: flex;
   align-items: center;
