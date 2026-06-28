@@ -10,6 +10,7 @@ let allBooks = [];
 let currentUser  = null;
 let booksCol     = null;
 let booksUnsub   = null;
+let booksLoaded  = false;   // 首次書庫 snapshot 是否已回來(用來分辨「載入中」vs「真的沒書」,避免 bookmark 開啟閃「沒有書」)
 let currentFilter = { status: "all", year: "all", genre: "all", search: "", format: "all" };
 let currentSort   = "createdAt_desc";
 let currentDetailId = null;
@@ -87,6 +88,7 @@ auth.onAuthStateChanged(user => {
     showLanding();          // 未登入 → 產品介紹首頁(按 CTA 才彈登入框)
     if (booksUnsub) { booksUnsub(); booksUnsub = null; }
     allBooks = [];
+    booksLoaded = false;
   }
 });
 
@@ -234,8 +236,10 @@ function updateUserUI(user) {
 // 開始監聽使用者書庫
 function startBooksListener() {
   if (booksUnsub) booksUnsub();
+  booksLoaded = false;   // 重新訂閱 → 回到「載入中」,等第一筆 snapshot
   booksUnsub = booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
     allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    booksLoaded = true;   // 首筆(及之後)snapshot 已到 → 之後若空才是「真的沒書」
     rebuildSidebarFilters();
     rebuildFormatFilter();
     refreshLayout();
@@ -658,7 +662,8 @@ function renderGrid() {
   bookCountEl.textContent = t(books.length === 1 ? "{n} book" : "{n} books", { n: books.length });
 
   if (books.length === 0) {
-    bookGrid.innerHTML = `<div class="empty-state">No books found.</div>`;
+    // 還沒載入完 → 顯示「載入中」,別誤報「沒有書」(bookmark/PWA 開啟的載入空檔最明顯)
+    bookGrid.innerHTML = `<div class="empty-state">${booksLoaded ? t("No books found.") : t("Loading...")}</div>`;
     updateShelfNav();
     return;
   }
@@ -3841,7 +3846,7 @@ const DICT = {
   "Ebook": { "zh-TW": "電子書" }, "Audiobook": { "zh-TW": "有聲書" }, "Borrowed": { "zh-TW": "借閱" },
   "✕ Clear filters": { "zh-TW": "✕ 清除篩選" },
   "Rating ↓": { "zh-TW": "評分 ↓" }, "Popularity ↓": { "zh-TW": "熱度 ↓" }, "Recently Added": { "zh-TW": "最新加入" },
-  "Search books...": { "zh-TW": "搜尋書籍..." },
+  "Search books...": { "zh-TW": "搜尋書籍..." }, "No books found.": { "zh-TW": "找不到書。" },
   // 截圖 / Toast
   "Drag to select the area you want as the cover": { "zh-TW": "拖曳選取要當封面的區域" },
   "✕ Cancel": { "zh-TW": "✕ 取消" }, "✓ Use this area": { "zh-TW": "✓ 使用此區域" }, "↺ Re-select": { "zh-TW": "↺ 重選" },
