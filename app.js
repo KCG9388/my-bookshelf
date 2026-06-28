@@ -671,7 +671,7 @@ function renderGrid() {
   bookGrid.innerHTML = books.map(b => {
     const pct = bookPct(b);
     const coverHTML = b.cover
-      ? `<div class="book-cover"><img ${coverAttrs(b.cover)} alt="${escHtml(b.title)}" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
+      ? `<div class="book-cover"><img loading="lazy" decoding="async" ${coverAttrs(b.cover)} alt="${escHtml(b.title)}" referrerpolicy="no-referrer" onerror="if(window.__coverFallback(this))return; if(window.__retryProxy(this))return; this.parentElement.innerHTML='<div class=no-cover><div class=no-cover-icon>📖</div><div class=no-cover-title>${escHtml(b.title)}</div></div>'" /></div>`
       : `<div class="no-cover"><div class="no-cover-icon">📖</div><div class="no-cover-title">${escHtml(b.title)}</div></div>`;
     return `
       <div class="book-card" data-id="${b.id}">

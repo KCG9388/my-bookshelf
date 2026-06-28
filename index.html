@@ -17,8 +17,16 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- 提早建連線:Firebase SDK CDN + Firestore 資料 + 自有 authDomain(關鍵路徑) -->
+  <link rel="preconnect" href="https://www.gstatic.com" />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://auth.concento.io" crossorigin />
+  <!-- 書封網域(次要,先解析 DNS) -->
+  <link rel="dns-prefetch" href="https://books.google.com" />
+  <link rel="dns-prefetch" href="https://books.googleusercontent.com" />
+  <link rel="dns-prefetch" href="https://covers.openlibrary.org" />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260626h" />
+  <link rel="stylesheet" href="style.css?v=20260626i" />
 </head>
 <body>
 <!-- ── Landing(未登入訪客的產品介紹首頁;登入後隱藏直接進 app)── -->
@@ -1202,7 +1210,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=20260626h"></script>
+<script src="app.js?v=20260626i"></script>
 <script>
   /* 註冊 service worker → 讓 Android 可「安裝 App」、離線殼層兜底(網路優先、不服務舊版) */
   if ("serviceWorker" in navigator) {
