@@ -1540,6 +1540,8 @@ document.getElementById("saveBook").addEventListener("click", async () => {
       else if (book.status === "Now Reading" && myProfile.showReading) logActivity("now_reading", ctx);
     }
     closeAddModal();
+    // 編輯表單把書改成「完成」也邀請評分(已評過的書靠 maybePromptFinishReview 的 snap.exists 守門)
+    if (isEdit && book.status === "Finished" && statusChanged) maybePromptFinishReview(currentDetailId);
   } catch (e) {
     alert("Save failed: " + e.message);
   }
@@ -2218,8 +2220,12 @@ document.getElementById("updatePageBtn").addEventListener("click", async () => {
     if (b && b.totalPages && newPage >= b.totalPages) updates.status = "Finished";
     else if (newPage > 0 && b && b.status !== "Now Reading") updates.status = "Now Reading";   // 有進度=正在閱讀
   }
+  // 用頁數/% 把書讀到完(手機最常走這條),也要邀請評分——只在「剛從未完成→完成」時觸發
+  const finishedNow = updates.status === "Finished" && (!b || b.status !== "Finished");
+  const fid = currentDetailId;
   await booksCol.doc(currentDetailId).update(updates);
   openDetail(currentDetailId);
+  if (finishedNow) maybePromptFinishReview(fid);
 });
 
 // 進度輸入框按 Enter = 按下「更新」鈕
