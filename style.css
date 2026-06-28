@@ -1929,7 +1929,8 @@ body::after {
   .sidebar, .app-header, .app-body { grid-column: auto; grid-row: auto; }
   .app-body { flex-direction: column; overflow: auto; }
   .app-header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
-  .hdr-search { position: static; transform: none; width: 100%; max-width: none; order: 3; }
+  /* relative(非 static):放大鏡圖示是 absolute,要靠這個當定位基準才會回到框內左邊,不會飄出去 */
+  .hdr-search { position: relative; transform: none; width: 100%; max-width: none; order: 3; }
   .sidebar-brand { font-size: 16px; }
   html, body { overflow-x: hidden; }    /* 保險:任何漏網元素只內捲、不推寬整頁 */
   .nav-tabs { flex: 1; min-width: 0; }  /* 分頁可縮,不再把次要控制項擠到爆寬 */
