@@ -2130,28 +2130,29 @@ function buildFinishStars() {
   picker._onTouch = onTouch;
   picker.addEventListener("touchstart", onTouch, { passive: false });
   picker.addEventListener("touchmove",  onTouch, { passive: false });
-  finishStarRating = 0;
-  paint(0);
-  showLabel(0);
+  // 畫出呼叫端先設好的 finishStarRating(新書=0;已評過=預填原星等),不要永遠歸零
+  paint(finishStarRating);
+  showLabel(finishStarRating);
 }
 
-// 標記讀完後呼叫:該書還沒被自己評過才跳,避免重複打擾
+// 標記讀完後呼叫:一律跳出評分窗讓使用者在原地評分(不必滑到下面)。
+// 已評過的書 → 預先填入原本的星等+評語,讓他直接確認或調整(不再「已評過就不跳」)。
 async function maybePromptFinishReview(bookId) {
   if (!currentUser) return;
   const b = allBooks.find(x => x.id === bookId);
   if (!b) return;
   const key = b.catalogKey || catalogKeyFor(b.title, b.author);   // 與 openDetail 同一把鑰匙
   if (!key) return;
+  let existing = null;
   try {
     const snap = await db.collection("catalog").doc(key).collection("reviews").doc(currentUser.uid).get();
-    if (snap.exists) return;   // 已評過 → 不再打擾
-  } catch (e) { /* 查不到就照常邀請 */ }
+    if (snap.exists) existing = snap.data();
+  } catch (e) { /* 查不到就當沒評過、空白邀請 */ }
   finishReviewCtx = { key, title: b.title, cover: b.cover };
-  finishStarRating = 0;
-  buildFinishStars();
-  document.getElementById("finishReviewText").value = "";
+  finishStarRating = (existing && existing.rating) || 0;          // 已評過 → 預填原星等
+  buildFinishStars();                                            // 會依 finishStarRating 畫好星星+標籤
+  document.getElementById("finishReviewText").value = (existing && existing.text) || "";
   document.getElementById("finishReviewBookTitle").textContent = t("How was {title}?", { title: b.title });
-  document.getElementById("finishStarLabel").textContent = t("Tap to rate");
   document.getElementById("finishReviewModal").classList.add("open");
 }
 
