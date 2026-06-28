@@ -96,6 +96,13 @@ function runSmoke() {
     (!a && b) ? ok("auth 自救防迴圈守門") : bad("auth 自救防迴圈守門", "fresh=" + a + " set=" + b);
   });
 
+  test("手機輸入框 16px(防 iOS 聚焦放大)", () => {
+    if (window.innerWidth > 600) { ok("手機輸入框 16px [桌面寬度略過]"); return; }
+    const ids = ["detailCurrentPage", "detailProgressPct", "progressMode", "bookTitle", "bookTotalPages", "searchInput", "finishReviewText"];
+    const small = ids.filter(id => { const el = document.getElementById(id); return el && parseFloat(getComputedStyle(el).fontSize) < 16; });
+    small.length === 0 ? ok("手機輸入框 16px(防 iOS 聚焦放大)") : bad("手機輸入框 16px(防 iOS 聚焦放大)", "<16px: " + small.join(","));
+  });
+
   // 還原全域狀態
   allBooks = bak.allBooks; booksLoaded = bak.booksLoaded; currentSort = bak.currentSort;
   currentFilter = bak.currentFilter; selectedRating = bak.selectedRating; finishStarRating = bak.finishStarRating;

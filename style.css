@@ -1968,11 +1968,10 @@ body::after {
   .add-btn { margin-top: 6px; }
   .main { overflow: auto; }
 
-  /* iOS Safari 對 font-size <16px 的輸入框會在聚焦時自動放大整個畫面(評分/編輯時右上角 X 被推出視窗)
-     → 手機上把所有可聚焦的輸入控制項拉到 16px,直接擋掉這個自動縮放 */
-  input, select, textarea,
-  .search-input,
-  .form-group input, .form-group select, .form-group textarea { font-size: 16px; }
+  /* iOS Safari 對 font-size <16px 的輸入框會在聚焦時自動放大整個畫面,且放大後不會自己縮回
+     → 右上角關閉 X 被推出視窗。手機上一律用 !important 壓成 16px,蓋過所有更具體的小字級規則
+     (例如 .page-edit-row input 13px / .form-group input 13.5px),確保沒有任何欄位會觸發放大。 */
+  input, select, textarea { font-size: 16px !important; }
 
   /* 抽屜落腳處:身分列 + 工具列(由 JS 搬入次要 header 控制項)*/
   .drawer-only { display: flex; flex-direction: column; }
