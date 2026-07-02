@@ -1,3 +1,27 @@
+// ── 登入診斷檢視(免開 DevTools)──
+// 在網址加 ?diag=auth(例:concento.io/?diag=auth)→ 直接把登入事件黑盒子印在畫面上,
+// 讓非技術的 Eri 能一鍵截圖回傳,不必開開發者工具。登出狀態也能看(不依賴 Firebase)。
+(function () {
+  if (!/[?&]diag=auth/.test(location.search)) return;
+  function render() {
+    var log, drop;
+    try { log = localStorage.getItem("authLog") || "[]"; } catch (e) { log = "(讀不到 localStorage)"; }
+    try { drop = localStorage.getItem("lastAuthDrop") || "(無)"; } catch (e) { drop = "(讀不到)"; }
+    var pretty; try { pretty = JSON.stringify(JSON.parse(log), null, 2); } catch (e) { pretty = log; }
+    var pre = document.createElement("pre");
+    pre.style.cssText = "position:fixed;inset:0;z-index:99999;margin:0;padding:16px;background:#181818;color:#c9f7c9;font:12px/1.55 monospace;white-space:pre-wrap;word-break:break-all;overflow:auto";
+    pre.textContent =
+      "=== Concento 登入診斷（把整頁截圖給 KC）===\n現在時間: " + new Date().toString() +
+      "\n目前在線: " + navigator.onLine +
+      "\n瀏覽器: " + navigator.userAgent +
+      "\n\n--- 最近登入事件 authLog ---\n" + pretty +
+      "\n\n--- 最後一次掉線 lastAuthDrop ---\n" + drop +
+      "\n\n關閉此頁：把網址結尾的 ?diag=auth 刪掉再前往。";
+    document.body.appendChild(pre);
+  }
+  if (document.body) render(); else document.addEventListener("DOMContentLoaded", render);
+})();
+
 // ── Firebase Init ──
 firebase.initializeApp(firebaseConfig);
 const db   = firebase.firestore();
