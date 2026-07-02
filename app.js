@@ -65,6 +65,34 @@ function recentlyTriedAuthRecovery() {
   } catch (_) { return false; }
 }
 
+// ── 登入事件黑盒子 ──
+// 滾動保留最近 20 筆驗證事件到 localStorage("authLog"),含時間/類型/錯誤碼/是否救回。
+// 下次 Eri 又被登出時,叫她在該分頁 console 貼 localStorage.getItem("authLog") 就能看到「幾點、什麼原因、有沒有自救」,
+// 不用再靠她口頭描述。lastAuthDrop 保留給舊版相容。
+function logAuthEvent(type, extra) {
+  try {
+    const arr = JSON.parse(localStorage.getItem("authLog") || "[]");
+    arr.push(Object.assign({ t: new Date().toISOString(), type, online: navigator.onLine }, extra || {}));
+    while (arr.length > 20) arr.shift();
+    localStorage.setItem("authLog", JSON.stringify(arr));
+  } catch (_) {}
+}
+
+// ── Token 主動保活 ──
+// 每小時 ID token 到期由 SDK 自動換新;但若換新那一刻正好撞到分頁在背景/網路瞬斷,
+// 換新失敗就會被丟回 landing(=「被登出」)。這裡在「使用者回到分頁 / 視窗取得焦點 / 網路恢復」時,
+// 主動確認並提前換新 token — 趁 Eri 剛回來、還沒動手操作前就把邊界問題解掉,失敗也記進黑盒子。
+let _lastTokenPoke = 0;
+function pokeToken(reason) {
+  const u = auth.currentUser;
+  if (!u) return;
+  const now = Date.now();
+  if (now - _lastTokenPoke < 30000) return;   // 30 秒節流,避免頻繁切分頁狂打
+  _lastTokenPoke = now;
+  // forceRefresh=false:SDK 只在接近到期時才真的換,平時走快取、不浪費配額
+  u.getIdToken(false).catch(err => logAuthEvent("token_refresh_fail", { code: (err && err.code) || String(err), reason }));
+}
+
 auth.onAuthStateChanged(user => {
   currentUser = user;
   if (user) {
@@ -76,11 +104,14 @@ auth.onAuthStateChanged(user => {
     // (手機 + 約 1 小時 token 邊界最常見)。先重整一次讓 Firebase 從 IndexedDB 重新還原 session;
     // 暫時性 blip 會無痛救回,真的掉了才落到 landing(60 秒守門防迴圈)。
     if (!userInitiatedSignOut && everEnteredApp && navigator.onLine && !recentlyTriedAuthRecovery()) {
+      logAuthEvent("auth_drop", { recovered: true });   // 掉線但即將自救重整
       try { localStorage.setItem("lastAuthDrop", JSON.stringify({ at: Date.now(), online: navigator.onLine, ua: navigator.userAgent.slice(0, 160) })); } catch (_) {}
       try { sessionStorage.setItem("authRecoverAt", String(Date.now())); } catch (_) {}
       location.reload();
       return;
     }
+    // 走到這裡:主動登出、或自救過仍失敗 → 真的落到 landing
+    if (everEnteredApp && !userInitiatedSignOut) logAuthEvent("auth_drop", { recovered: false });
     userInitiatedSignOut = false;
     everEnteredApp = false;
     closeVerifyGate();
@@ -91,6 +122,11 @@ auth.onAuthStateChanged(user => {
     booksLoaded = false;
   }
 });
+
+// 回到分頁 / 視窗取得焦點 / 網路恢復 → 主動保活 token(見 pokeToken 說明)
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pokeToken("visible"); });
+window.addEventListener("focus",  () => pokeToken("focus"));
+window.addEventListener("online",  () => pokeToken("online"));
 
 // ── Landing(未登入首頁)──
 function showLanding() { document.getElementById("landingView").style.display = ""; }
