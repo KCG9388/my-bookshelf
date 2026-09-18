@@ -1,0 +1,14 @@
+# Concento 書目代理(Cloudflare Worker)
+# 部署:cd worker && npx wrangler deploy        金鑰:echo -n <key> | npx wrangler secret put GBOOKS_KEY
+# 說明見 src/index.js 開頭與 bookshelf/PROJECT_CONTEXT.md「書目代理」段
+name = "concento-api"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "c6959d08dd9047db84dc9af48c23193d"
+
+[observability]
+enabled = true

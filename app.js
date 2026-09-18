@@ -1265,10 +1265,17 @@ async function fetchBookInfo() {
 
   const isISBN    = /^[\d\-X]{10,17}$/.test(query.replace(/\s/g, ""));
   const cleanISBN = query.replace(/[\s\-]/g, "");
-  const results   = [];
+  let results     = [];
+
+  // 先走書目代理(GB+OL 合併去重、有快取、中文介面 CJK 書名優先);代理失敗或沒結果才退回下面的直打路徑
+  try {
+    const r = await apiJSON("/v1/search", { q: query, lang: currentLang || "" });
+    results = (r.items || []).map(b => ({ isbn13: b.isbn13 || "", title: b.title || "", author: b.author || "", genre: b.genre || "",
+      totalPages: b.pages || "", cover: b.cover || "", year: b.year || "", description: b.description || "" }));
+  } catch {}
 
   // 主來源 Google Books(封面/metadata 最齊)。抓多筆,讓使用者自己挑,不再盲填第一筆(=之前跳成別本書的根因)
-  try {
+  if (!results.length) try {
     const apiQuery = isISBN ? `isbn:${cleanISBN}` : encodeURIComponent(query);
     const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${apiQuery}&maxResults=12&key=${GBOOKS_KEY}`);
     const data = await res.json();
@@ -1721,7 +1728,12 @@ async function loadDescription(key, title, author, preset, presetUrl) {
     }
   } catch {}
   if (!desc && title) {
-    try {
+    try {   // 先問書目代理(有快取):只採用書名對得上的那筆的簡介
+      const r = await apiJSON("/v1/search", { q: `${title} ${author ? author.split(",")[0].trim() : ""}`.trim(), lang: currentLang || "" });
+      const m = (r.items || []).find(b => b.description && sameTitle(title, b.title));
+      if (m) desc = m.description;
+    } catch {}
+    if (!desc) try {
       const q   = encodeURIComponent(`intitle:"${title}"` + (author ? ` inauthor:"${author.split(",")[0].trim()}"` : ""));
       const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
       const data = await res.json();
@@ -2734,7 +2746,8 @@ function extractISBNs(text) {
   return [...out];
 }
 async function fetchPageForISBNs(url) {
-  const proxies = [   // 純前端抓跨站頁面必經代理;一個掛了換下一個
+  const proxies = [   // 純前端抓跨站頁面必經代理;一個掛了換下一個。自家 Worker 優先(第三方代理隨時會死)
+    ...(API_BASE ? [u => API_BASE + "/v1/fetch?url=" + encodeURIComponent(u)] : []),
     u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
     u => "https://r.jina.ai/" + u,
   ];
@@ -2750,29 +2763,43 @@ async function runWebImport(rawText) {
   const status = document.getElementById("webImportStatus");
   const isbns  = extractISBNs(rawText).slice(0, 120);   // 安全上限
   if (!isbns.length) { status.textContent = t("No valid ISBNs found on that page."); return; }
-  const books = [];
-  for (let i = 0; i < isbns.length; i++) {
-    status.textContent = t("Looking up {i} / {n}...", { i: i + 1, n: isbns.length });
-    try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbns[i]}&maxResults=1&key=${GBOOKS_KEY}`);
-      const v = (await res.json()).items?.[0]?.volumeInfo;
-      if (v && v.title) books.push({
-        isbn13: normIsbn13((v.industryIdentifiers || []).find(x => x.type === "ISBN_13")?.identifier) || isbns[i],
-        title: v.title,
-        author: (v.authors || []).join(", "),
-        genre:  v.categories?.[0] || "",
-        status: "Want to Read", currentPage: 0,
-        totalPages: v.pageCount || 0,
-        finishDate: "", startDate: "",
-        startYear: new Date().getFullYear(),
-        cover: tidyCover(v.imageLinks?.thumbnail || ""),
-        notes: "",
-        userId:    currentUser?.uid || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-    } catch {}
-    await new Promise(r => setTimeout(r, 150));
+  // ISBN → 書目:先走書目代理批次(一次 10 本、有快取、不吃前端金鑰配額);代理不可用才逐本直打 Google Books
+  const found = {};   // isbn13 → { title, author, genre, pages, cover, isbn13 }
+  let viaProxy = true;
+  try {
+    for (let i = 0; i < isbns.length; i += 10) {
+      status.textContent = t("Looking up {i} / {n}...", { i: Math.min(i + 10, isbns.length), n: isbns.length });
+      const r = await apiJSON("/v1/batch", null, { method: "POST", body: { isbns: isbns.slice(i, i + 10) }, timeout: 20000 });
+      for (const [k, v] of Object.entries(r.results || {})) if (v?.book?.title) found[k] = v.book;
+    }
+  } catch { viaProxy = false; }
+  if (!viaProxy) {
+    for (let i = 0; i < isbns.length; i++) {
+      status.textContent = t("Looking up {i} / {n}...", { i: i + 1, n: isbns.length });
+      try {
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbns[i]}&maxResults=1&key=${GBOOKS_KEY}`);
+        const v = (await res.json()).items?.[0]?.volumeInfo;
+        if (v && v.title) found[isbns[i]] = { title: v.title, author: (v.authors || []).join(", "), genre: v.categories?.[0] || "",
+          pages: v.pageCount || 0, cover: v.imageLinks?.thumbnail || "",
+          isbn13: (v.industryIdentifiers || []).find(x => x.type === "ISBN_13")?.identifier || "" };
+      } catch {}
+      await new Promise(r => setTimeout(r, 150));
+    }
   }
+  const books = isbns.filter(k => found[k]).map(k => { const b = found[k]; return {
+    isbn13: normIsbn13(b.isbn13) || k,
+    title:  b.title,
+    author: b.author || "",
+    genre:  (b.genre || "").split(",")[0].trim(),
+    status: "Want to Read", currentPage: 0,
+    totalPages: b.pages || 0,
+    finishDate: "", startDate: "",
+    startYear: new Date().getFullYear(),
+    cover: tidyCover(b.cover || ""),
+    notes: "",
+    userId:    currentUser?.uid || null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }; });
   status.textContent = t("Found {n} ISBNs → resolved {m} books. Review below.", { n: isbns.length, m: books.length });
   if (!books.length) return;
   parsedBooks = books;
@@ -2821,6 +2848,23 @@ function showPreview(filename) {
 // ══════════════════════════════════════════
 
 const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
+
+// ── 書目代理(Cloudflare Worker,原始碼在 worker/):集中查 Google Books/Open Library + 快取 + 藏金鑰。
+//    前端一律「先打代理、失敗退回直打」→ 代理掛了網站照常運作。API_BASE 留空字串 = 停用代理。
+const API_BASE = "https://concento-api.st031031.workers.dev";
+async function apiJSON(path, params, opts = {}) {
+  if (!API_BASE) throw new Error("api disabled");
+  const url = API_BASE + path + (params ? "?" + new URLSearchParams(params) : "");
+  const ac  = new AbortController();
+  const t   = setTimeout(() => ac.abort(), opts.timeout || 9000);
+  try {
+    const r = await fetch(url, { method: opts.method || "GET", signal: ac.signal,
+      headers: opts.body ? { "Content-Type": "application/json" } : {},
+      body: opts.body ? JSON.stringify(opts.body) : undefined });
+    if (!r.ok) throw new Error("api " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
 let coverFetchQueue   = [];
 let coverFetchRunning = false;
 
@@ -2895,6 +2939,10 @@ function distinctiveTitle(title) {   // 去掉冠詞/介系詞後 ≥2 個實詞
   return toks.length >= 2;
 }
 async function fetchPopularity(title, author) {
+  try {   // 先走書目代理(30 天快取;繁中書查無的 -1 也會快取,不必每次再問 OL)
+    const r = await apiJSON("/v1/popularity", { title, author: author || "" });
+    if (typeof r.popularity === "number" && !r.error) return r.popularity;
+  } catch {}
   try {
     let { rl, ed, n } = await olSignals(`${title} ${author}`.trim());
     // 純書名救援只給「獨特多字書名」(如三體):它的純書名查詢都指向同一本,安全;
@@ -2913,6 +2961,15 @@ async function fetchPopularity(title, author) {
 // 封面照舊拿第一筆;isbn13 只在「書名對得上」(sameTitle)時才給——錯的 ISBN 會讓 catalog 把兩本不同的書黏成一本,寧缺勿錯。
 async function lookupBook(title, author) {
   const out = { cover: "", isbn13: "" };
+  try {   // 先走書目代理(快取、GB+OL 已合併);代理有回應就以它為準,只有代理不可用才退回下面直打
+    const r     = await apiJSON("/v1/search", { q: `${title} ${author}`.trim(), lang: currentLang || "" });
+    const items = r.items || [];
+    const same  = items.find(b => sameTitle(title, b.title));
+    const best  = same || items[0];
+    if (best?.cover)   out.cover  = best.cover;
+    if (same?.isbn13)  out.isbn13 = same.isbn13;
+    return out;
+  } catch {}
   try {
     const q    = encodeURIComponent(`${title} ${author}`.trim());
     const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);

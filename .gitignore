@@ -25,3 +25,7 @@ key/
 .secrets/
 *credentials*.json
 .testuser.json
+
+# Cloudflare Worker 本機產物
+worker/.wrangler/
+worker/node_modules/
