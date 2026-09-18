@@ -342,6 +342,27 @@ function catalogKeyFor(title, author) {
   return k || "unknown";
 }
 
+// ISBN 正規化:剝掉 Goodreads 的 ="978…" 包裝與連字號,ISBN-10 轉 13,檢查碼不對就回空字串。
+// ISBN 是「同一本書」唯一可靠的鑰匙(書名/作者字串會因譯名、拼音、副標而分裂成好幾份 catalog)。
+function normIsbn13(raw) {
+  const s = String(raw || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  if (s.length === 13) return validISBN13(s) ? s : "";
+  if (s.length === 10) return validISBN10(s) ? isbn10to13(s) : "";
+  return "";
+}
+// 匯入去重用的書名鑰匙(只看書名;跟 catalogKeyFor 同一套正規化,標點/空白/大小寫不敏感)
+function normTitleKey(title) { return catalogKeyFor(title, "").replace(/_$/, ""); }
+// 兩個書名是否指同一本:正規化後相等,或只差「副標」(長的以短的開頭、緊接冒號/括號/破折號)。
+// 單純空格接下一個字不算(Dune ≠ Dune Messiah),否則會把系列作的 ISBN 誤塞給第一集。
+function sameTitle(a, b) {
+  const x = normTitleKey(a), y = normTitleKey(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const ra = String(a || "").trim().toLowerCase(), rb = String(b || "").trim().toLowerCase();
+  const [s, l] = ra.length <= rb.length ? [ra, rb] : [rb, ra];
+  return l.startsWith(s) && /^\s*[:：(（\-–—|]/.test(l.slice(s.length));
+}
+
 // 洗掉 Google Books 簡介裡夾帶的 HTML 標籤,只留純文字;
 // 太短的多半是「Originally published: ...」之類的出版 metadata,不是真簡介 → 不採用
 function cleanDesc(d) {
@@ -353,11 +374,20 @@ function cleanDesc(d) {
   return txt.length >= 60 ? txt : "";
 }
 
-// 把一本書 upsert 進共享 catalog（匿名，不含任何使用者資訊）
+// 把一本書 upsert 進共享 catalog（匿名，不含任何使用者資訊）。
+// 有 ISBN 時先用 ISBN 找既有書目:同一本書的另一個譯名/作者拼音版本會被指回同一份 catalog
+//(相容度才算得到「共讀」);沒命中才用書名+作者鑰匙。既有書目缺 isbn13 就順手補上,之後別人再匯入就對得起來。
 async function upsertCatalog(book, desc) {
-  const key = catalogKeyFor(book.title, book.author);
+  let key = catalogKeyFor(book.title, book.author);
+  const isbn13 = normIsbn13(book.isbn13);
+  const d = cleanDesc(desc);
+  if (isbn13) {
+    try {
+      const hit = await db.collection("catalog").where("isbn13", "==", isbn13).limit(1).get();
+      if (!hit.empty) key = hit.docs[0].id;
+    } catch (e) { console.warn("catalog isbn lookup failed:", e); }
+  }
   const ref = db.collection("catalog").doc(key);
-  const d   = cleanDesc(desc);
   try {
     const snap = await ref.get();
     if (!snap.exists) {
@@ -368,16 +398,19 @@ async function upsertCatalog(book, desc) {
         totalPages: book.totalPages || 0,
         cover:      book.cover  || "",
         description: d,
+        isbn13,
         ratingCount: 0,
         ratingSum:   0,
         createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt:  firebase.firestore.FieldValue.serverTimestamp(),
       });
     } else {
-      // 已存在：只補「原本沒有的封面/簡介」，絕不覆蓋評分聚合
+      // 已存在：只補「原本沒有的封面/簡介/ISBN」，絕不覆蓋評分聚合
+      const cur   = snap.data();
       const patch = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-      if (!snap.data().cover && book.cover) patch.cover = book.cover;
-      if (!snap.data().description && d)    patch.description = d;
+      if (!cur.cover && book.cover) patch.cover = book.cover;
+      if (!cur.description && d)    patch.description = d;
+      if (!cur.isbn13 && isbn13)    patch.isbn13 = isbn13;
       await ref.set(patch, { merge: true });
     }
   } catch (e) { console.warn("catalog upsert failed:", e); }
@@ -1241,7 +1274,9 @@ async function fetchBookInfo() {
     const data = await res.json();
     (data.items || []).forEach(it => {
       const info = it.volumeInfo || {};
+      const ids  = info.industryIdentifiers || [];
       results.push({
+        isbn13: normIsbn13((ids.find(x => x.type === "ISBN_13") || ids.find(x => x.type === "ISBN_10") || {}).identifier),
         title: info.title || "",
         author: (info.authors || []).join(", "),
         genre: (info.categories || []).join(", "),
@@ -1263,6 +1298,7 @@ async function fetchBookInfo() {
       const data = await res.json();
       (data.docs || []).forEach(doc => {
         results.push({
+          isbn13: (doc.isbn || []).map(normIsbn13).find(Boolean) || "",
           title: doc.title || "",
           author: (doc.author_name || []).slice(0, 2).join(", "),
           genre: (doc.subject || []).slice(0, 2).join(", "),
@@ -1293,7 +1329,7 @@ function renderSearchResults(list) {
     </div>`).join("");
   grid.querySelectorAll(".bsr-item").forEach(item => item.addEventListener("click", () => {
     const r = list[parseInt(item.dataset.i)];
-    fillForm({ title: r.title, author: r.author, genre: r.genre, totalPages: r.totalPages, cover: r.cover });
+    fillForm({ title: r.title, author: r.author, genre: r.genre, totalPages: r.totalPages, cover: r.cover, isbn13: r.isbn13 });
     pendingBookDesc = r.description || "";   // 暫存簡介,儲存時跟著進共享書庫(不進私人書 doc,避免每本書都拖一大段文字)
     closeSearchResults();
     fetchStatus.textContent = t("Selected") + `: "${r.title}"`;
@@ -1313,7 +1349,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && document.getElementById("bsrOverlay").classList.contains("open")) closeSearchResults();
 });
 
-function fillForm({ title="", author="", genre="", totalPages="", cover="" } = {}) {
+function fillForm({ title="", author="", genre="", totalPages="", cover="", isbn13="" } = {}) {
+  document.getElementById("bookIsbn").value = normIsbn13(isbn13);   // 每次填表都重設:換挑別本書時不能殘留上一本的 ISBN
   if (title)      document.getElementById("bookTitle").value      = title;
   if (author)     document.getElementById("bookAuthor").value     = author;
   if (genre)      document.getElementById("bookGenre").value      = genre;
@@ -1535,7 +1572,7 @@ document.getElementById("screenshotRetry").addEventListener("click", () => {
 });
 
 function resetAddForm() {
-  ["bookSearchInput","bookTitle","bookAuthor","bookGenre","bookCurrentPage","bookStartDate","bookFinishDate","bookNotes"]
+  ["bookSearchInput","bookTitle","bookAuthor","bookGenre","bookCurrentPage","bookStartDate","bookFinishDate","bookNotes","bookIsbn"]
     .forEach(id => document.getElementById(id).value = "");
   document.getElementById("bookTotalPages").value = "";
   document.getElementById("bookStatus").value = "Want to Read";
@@ -1566,6 +1603,7 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     status:      document.getElementById("bookStatus").value,
     format:      document.getElementById("bookFormat").value || "",
     cover:       document.getElementById("coverUrl").value.trim(),
+    isbn13:      normIsbn13(document.getElementById("bookIsbn").value) || (existing?.isbn13 || ""),
     startDate,
     finishDate:  document.getElementById("bookFinishDate").value,
     notes:       document.getElementById("bookNotes").value.trim(),
@@ -2314,7 +2352,7 @@ document.getElementById("editBookBtn").addEventListener("click", () => {
   if (!b) return;
   detailModal.classList.remove("open");
   addModal.dataset.mode = "edit";
-  openAddModal({ title: b.title, author: b.author, genre: b.genre, totalPages: b.totalPages, cover: b.cover });
+  openAddModal({ title: b.title, author: b.author, genre: b.genre, totalPages: b.totalPages, cover: b.cover, isbn13: b.isbn13 });
   document.getElementById("bookCurrentPage").value = b.currentPage || 0;
   document.getElementById("bookStatus").value       = b.status || "Want to Read";
   document.getElementById("bookFormat").value       = b.format || "";
@@ -2480,7 +2518,7 @@ function parseGoodreadsCSV(text, filename) {
   const I = { title: idx("title"), author: idx("author"), addl: idx("additional authors"),
               rating: idx("my rating"), publisher: idx("publisher"), pages: idx("number of pages"),
               read: idx("date read"), added: idx("date added"), shelf: idx("exclusive shelf"),
-              review: idx("my review") };
+              review: idx("my review"), isbn13: idx("isbn13"), isbn: idx("isbn") };
   if (I.title === -1 || I.shelf === -1) { alert("Could not recognize this Goodreads CSV."); return; }
 
   const statusMap = { "to-read": "Want to Read", "currently-reading": "Now Reading", "read": "Finished" };
@@ -2517,6 +2555,7 @@ function parseGoodreadsCSV(text, filename) {
 
     parsedBooks.push({
       title, author, genre: "",
+      isbn13: normIsbn13(get(I.isbn13)) || normIsbn13(get(I.isbn)),   // Goodreads 給的是 ="978…" 包裝,normIsbn13 會剝
       status,
       currentPage: status === "Finished" ? totalPages : 0,   // 已讀完=進度滿;閱讀中頁數 GR 沒給,進來再更新
       totalPages,
@@ -2551,6 +2590,8 @@ function parseFlexibleCSV(text, filename) {
       startdate:   ["date started", "start date", "startdate", "date_started", "開始日期"],
       rating:      ["rate", "rating", "my rating", "評分"],
       review:      ["my review", "review", "notes", "筆記", "心得"],
+      isbn13:      ["isbn13", "isbn-13", "isbn 13"],
+      isbn:        ["isbn", "isbn10", "isbn-10"],
     };
     for (const a of (aliases[name] || [name])) { const i = headers.indexOf(a); if (i !== -1) return i; }
     return -1;
@@ -2579,6 +2620,7 @@ function parseFlexibleCSV(text, filename) {
 
     parsedBooks.push({
       title,
+      isbn13: normIsbn13(get("isbn13")) || normIsbn13(get("isbn")),
       author: cleanNotionCell(get("author")),
       genre:  cleanNotionCell(get("genre")),
       status, currentPage, totalPages,
@@ -2715,6 +2757,7 @@ async function runWebImport(rawText) {
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbns[i]}&maxResults=1&key=${GBOOKS_KEY}`);
       const v = (await res.json()).items?.[0]?.volumeInfo;
       if (v && v.title) books.push({
+        isbn13: normIsbn13((v.industryIdentifiers || []).find(x => x.type === "ISBN_13")?.identifier) || isbns[i],
         title: v.title,
         author: (v.authors || []).join(", "),
         genre:  v.categories?.[0] || "",
@@ -2809,8 +2852,9 @@ async function runCoverFetch() {
     const live = allBooks.find(b => b.id === item.id);
     const updates = {};
     if (item.needCover && !live?.cover) {
-      const cover = await fetchCoverUrl(item.title, item.author);
-      if (cover) updates.cover = cover;
+      const found = await lookupBook(item.title, item.author);
+      if (found.cover) updates.cover = found.cover;
+      if (found.isbn13 && !live?.isbn13) updates.isbn13 = found.isbn13;   // 順手回填 ISBN(只在書名對得上時才信)
     }
     if (item.needPop && (live ? live.popularity == null : true)) {
       updates.popularity = await fetchPopularity(item.title, item.author);   // 失敗回 -1(未知),仍寫入避免重抓
@@ -2839,7 +2883,8 @@ async function olSignals(query) {                                   // 取前5�
   const url = "https://openlibrary.org/search.json?" +
     new URLSearchParams({ q: query, limit: "5", fields: "readinglog_count,edition_count" });
   const docs = (await fetch(url).then(r => r.json())).docs || [];
-  return { rl: Math.max(0, ...docs.map(x => x.readinglog_count || 0), 0),
+  return { n:  docs.length,
+           rl: Math.max(0, ...docs.map(x => x.readinglog_count || 0), 0),
            ed: Math.max(0, ...docs.map(x => x.edition_count   || 0), 0) };
 }
 const _TITLE_STOP = new Set(["the","a","an","of","and","or","to","in","on","for"]);
@@ -2851,36 +2896,47 @@ function distinctiveTitle(title) {   // 去掉冠詞/介系詞後 ≥2 個實詞
 }
 async function fetchPopularity(title, author) {
   try {
-    let { rl, ed } = await olSignals(`${title} ${author}`.trim());
+    let { rl, ed, n } = await olSignals(`${title} ${author}`.trim());
     // 純書名救援只給「獨特多字書名」(如三體):它的純書名查詢都指向同一本,安全;
     // 單字/常見書名(如 Pond)的純書名查詢會誤匹配同名熱門書 → 不救援,只信含作者查詢。
     if (ed <= 2 && rl < 50 && distinctiveTitle(title)) {
       const alt = await olSignals(title);
-      rl = Math.max(rl, alt.rl); ed = Math.max(ed, alt.ed);
+      rl = Math.max(rl, alt.rl); ed = Math.max(ed, alt.ed); n += alt.n;
     }
+    if (n === 0) return -1;   // OL 根本沒這本(繁中書幾乎都是)→ 是「未知」不是「冷門」,別給最高稀有權重
     const floor = ed >= 40 ? 9000 : ed >= 20 ? 3000 : ed >= 12 ? 1000 : 0;   // 版本數知名度地板,只墊高
     return Math.max(rl, floor);
   } catch { return -1; }
 }
 
-async function fetchCoverUrl(title, author) {
+// 書名+作者 → Google Books 第一筆 → 回 { cover, isbn13 }。
+// 封面照舊拿第一筆;isbn13 只在「書名對得上」(sameTitle)時才給——錯的 ISBN 會讓 catalog 把兩本不同的書黏成一本,寧缺勿錯。
+async function lookupBook(title, author) {
+  const out = { cover: "", isbn13: "" };
   try {
     const q    = encodeURIComponent(`${title} ${author}`.trim());
     const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${GBOOKS_KEY}`);
-    const data = await res.json();
-    if (data.items?.[0]?.volumeInfo?.imageLinks) {
-      const imgs = data.items[0].volumeInfo.imageLinks;
-      return tidyCover(imgs.extraLarge || imgs.large || imgs.thumbnail || "");
+    const info = (await res.json()).items?.[0]?.volumeInfo;
+    if (info) {
+      const imgs = info.imageLinks;
+      if (imgs) out.cover = tidyCover(imgs.extraLarge || imgs.large || imgs.thumbnail || "");
+      if (sameTitle(title, info.title)) {
+        const ids = info.industryIdentifiers || [];
+        out.isbn13 = normIsbn13((ids.find(x => x.type === "ISBN_13") || ids.find(x => x.type === "ISBN_10") || {}).identifier);
+      }
     }
   } catch {}
-  try {
-    const res  = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&limit=1`);
-    const data = await res.json();
-    const coverId = data.docs?.[0]?.cover_i;
-    if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
-  } catch {}
-  return "";
+  if (!out.cover) {
+    try {
+      const res  = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&limit=1`);
+      const data = await res.json();
+      const coverId = data.docs?.[0]?.cover_i;
+      if (coverId) out.cover = `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
+    } catch {}
+  }
+  return out;
 }
+async function fetchCoverUrl(title, author) { return (await lookupBook(title, author)).cover; }
 
 startImportBtn.addEventListener("click", async () => {
   if (importPhase !== "idle") return;   // 防重入：寫入中/待Done/抓封面中不再觸發匯入
@@ -2896,7 +2952,10 @@ startImportBtn.addEventListener("click", async () => {
   const logEl      = document.getElementById("importLog");
   progressEl.style.display = "";
 
-  const existingTitles = new Set(allBooks.map(b => b.title.trim().toLowerCase()));
+  // 去重兩層:ISBN 相同 = 同一本(最可靠);沒 ISBN 才退回「書名正規化後相同」(標點/空白/大小寫不敏感)
+  const existingIsbns  = new Set(allBooks.map(b => b.isbn13).filter(Boolean));
+  const existingTitles = new Set(allBooks.map(b => normTitleKey(b.title)));
+  const isDup = b => (b.isbn13 && existingIsbns.has(b.isbn13)) || existingTitles.has(normTitleKey(b.title));
   let success = 0, skipped = 0, failed = 0;
 
   for (let i = 0; i < parsedBooks.length; i++) {
@@ -2906,7 +2965,7 @@ startImportBtn.addEventListener("click", async () => {
     labelEl.textContent = t("Importing {i} / {total}...", { i: i + 1, total: parsedBooks.length });
     const book = parsedBooks[i];
 
-    if (existingTitles.has(book.title.trim().toLowerCase())) {
+    if (isDup(book)) {
       skipped++;
       const line = document.createElement("div");
       line.style.color  = "#8A8270";
@@ -2920,7 +2979,7 @@ startImportBtn.addEventListener("click", async () => {
       book.catalogKey = await upsertCatalog(book);   // 匯入的書也進共享書庫
       const ref = await booksCol.add(book);
       importedIds.push(ref.id);                       // 記下來，跳出時可回滾
-      existingTitles.add(book.title.trim().toLowerCase());
+      existingTitles.add(normTitleKey(book.title)); if (book.isbn13) existingIsbns.add(book.isbn13);
       success++;
       const line = document.createElement("div");
       line.style.color = "#53704D";
@@ -3212,7 +3271,7 @@ document.getElementById("addToShelfBtn").addEventListener("click", async () => {
       status: "Want to Read", cover: c.cover || document.getElementById("detailCover").src || "",
       startDate: "", finishDate: "", notes: "",
       startYear: new Date().getFullYear(),
-      userId: currentUser.uid, catalogKey: c.key,
+      userId: currentUser.uid, catalogKey: c.key, isbn13: c.isbn13 || "",
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     btn.textContent = t("✓ Added to shelf");
@@ -3582,7 +3641,8 @@ function closePublicProfile() { document.getElementById("publicProfileModal").cl
 // 流行度(Open Library 閱讀記錄人數,存在 book.popularity;-1/未知=當中段)→ 稀有度權重(6級)。
 // 冷門書權重高、國民書幾乎不算 → 共鳴在冷門書上才是真品味。
 function rarityWeight(pop) {
-  if (pop == null || pop < 0) return 1.2;   // 未知 → 中段,不爆掉
+  if (pop == null || pop <= 0) return 1.2;  // 未知 → 中段,不爆掉。0 也算未知:OL 對繁中書幾乎沒資料,舊資料的 0 全是「查無」不是「沒人讀」
+                                            //(2026-09-18 前查無回 0 → 台灣讀者整個書架被當冷門、權重全拉平;現在查無回 -1)
   if (pop > 20000) return 0.1;              // 國民書(原子習慣/哈利波特級)
   if (pop > 8000)  return 0.3;              // 很熱門(1984 級)
   if (pop > 3000)  return 0.6;              // 熱門(沙丘/大亨小傳級)
