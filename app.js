@@ -297,6 +297,7 @@ function updateUserUI(user) {
 function startBooksListener() {
   if (booksUnsub) booksUnsub();
   booksLoaded = false;   // 重新訂閱 → 回到「載入中」,等第一筆 snapshot
+  backfillChecked = false;
   booksUnsub = booksCol.orderBy("createdAt", "desc").onSnapshot(snapshot => {
     allBooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     booksLoaded = true;   // 首筆(及之後)snapshot 已到 → 之後若空才是「真的沒書」
@@ -304,7 +305,23 @@ function startBooksListener() {
     rebuildFormatFilter();
     refreshLayout();
     maybeShowFirstBookPrivacyNotice();
+    maybeMonthlyBackfill();
   });
+}
+
+// 每月一次的書架回填:缺封面 / 缺流行度 / 缺 ISBN 的書走書目代理補齊(代理有快取,配額壓力小)。
+// 上次跑的日期記在 localStorage(每台裝置各自算;最壞就是多跑幾次,每一步都是冪等的:有值就不覆蓋)。
+// 一批最多 150 本保護 Google Books 配額;寫入會觸發 onSnapshot,靠 backfillChecked 擋住重入。
+let backfillChecked = false;
+function maybeMonthlyBackfill() {
+  if (backfillChecked || !currentUser || !allBooks.length || coverFetchRunning || importPhase !== "idle") return;
+  backfillChecked = true;
+  const key = "coverBackfill:" + currentUser.uid;
+  let last = 0;
+  try { last = parseInt(localStorage.getItem(key) || "0", 10) || 0; } catch {}
+  if (Date.now() - last < 30 * 86400 * 1000) return;
+  try { localStorage.setItem(key, String(Date.now())); } catch {}
+  queueCoverFetch(allBooks, true, { limit: 150 });
 }
 
 // 書架出現第一本書時，提醒「公開」狀態的使用者：你的書庫目前公開、可改私密。
@@ -1636,7 +1653,7 @@ document.getElementById("saveBook").addEventListener("click", async () => {
     } else {
       const ref = await booksCol.add(book);
       // 新增書:背景補 popularity(+缺封面也補)→ 相容度算得準。失敗回 -1 不擋流程
-      queueCoverFetch([{ id: ref.id, title: book.title, author: book.author, cover: book.cover, popularity: null }], true);
+      queueCoverFetch([{ id: ref.id, title: book.title, author: book.author, cover: book.cover, isbn13: book.isbn13, popularity: null }], true);
     }
     // 動態事件(依隱私旗標)
     if (statusChanged) {
@@ -2873,12 +2890,13 @@ const toastFill  = document.getElementById("toastFill");
 const toastLabel = document.getElementById("toastLabel");
 document.getElementById("toastClose").addEventListener("click", () => toast.classList.remove("visible"));
 
-// withPop=true 時,除了缺封面,也把「缺 popularity」的書排進來(只在新增/匯入呼叫,load 不帶以免每次狂抓)
-function queueCoverFetch(books, withPop = false) {
-  const items = books
-    .filter(b => b.title && (!b.cover || (withPop && b.popularity == null)))
+// withPop=true 時,除了缺封面,也把「缺 popularity / 缺 ISBN」的書排進來(新增/匯入後與每月回填呼叫;一般 load 不帶以免每次狂抓)
+function queueCoverFetch(books, withPop = false, opts = {}) {
+  let items = books
+    .filter(b => b.title && (!b.cover || (withPop && (b.popularity == null || !b.isbn13))))
     .map(b => ({ id: b.id, title: b.title, author: b.author || "",
-                 needCover: !b.cover, needPop: withPop && b.popularity == null }));
+                 needCover: !b.cover, needPop: withPop && b.popularity == null, needIsbn: withPop && !b.isbn13 }));
+  if (opts.limit) items = items.slice(0, opts.limit);
   if (!items.length) return;
   coverFetchQueue.push(...items);
   if (!coverFetchRunning) runCoverFetch();
@@ -2895,10 +2913,10 @@ async function runCoverFetch() {
     const item = coverFetchQueue.shift();
     const live = allBooks.find(b => b.id === item.id);
     const updates = {};
-    if (item.needCover && !live?.cover) {
+    if ((item.needCover && !live?.cover) || (item.needIsbn && !live?.isbn13)) {
       const found = await lookupBook(item.title, item.author);
-      if (found.cover) updates.cover = found.cover;
-      if (found.isbn13 && !live?.isbn13) updates.isbn13 = found.isbn13;   // 順手回填 ISBN(只在書名對得上時才信)
+      if (item.needCover && found.cover && !live?.cover) updates.cover = found.cover;
+      if (found.isbn13 && !live?.isbn13) updates.isbn13 = found.isbn13;   // 回填 ISBN(只在書名對得上時才信;有值不覆蓋)
     }
     if (item.needPop && (live ? live.popularity == null : true)) {
       updates.popularity = await fetchPopularity(item.title, item.author);   // 失敗回 -1(未知),仍寫入避免重抓
