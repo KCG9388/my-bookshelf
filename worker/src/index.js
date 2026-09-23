@@ -8,8 +8,12 @@
 //    GET  /v1/search?q=&lang=          Google Books 12 筆 + Open Library 8 筆 → 合併去重 → 統一欄位(含 isbn13)
 //    GET  /v1/isbn/{isbn}              單本:GB isbn: 查 → OL isbn 查;查無也快取 1 天
 //    POST /v1/batch  {isbns:[…]}       一次最多 10 本(免費層每請求 50 個子請求上限),前端自己分批
-//    GET  /v1/fetch?url=               取代 allorigins / r.jina.ai 的 CORS 代理:只 GET、2MB 上限、10 秒、回純文字
+//    GET  /v1/fetch?url=               「網頁匯入」用的 CORS 代理:只准 FETCH_HOSTS 書籍網站、轉址逐跳檢查、2MB、10 秒、回純文字
 //    GET  /v1/popularity?title=&author= OL readinglog/edition 流行度,查無回 -1(繁中書幾乎都是)
+//
+//  門禁:/v1/* 一律要帶 ALLOWED_ORIGINS 裡的 Origin(瀏覽器跨站呼叫一定會帶),沒帶(curl、腳本、掃描器)或不對 → 403,
+//  在碰 KV / 上游之前就擋掉。Origin 腳本偽造得了,所以這只是擋掉隨手濫用的第一道,不是身分驗證;
+//  /v1/fetch 另有網站白名單,就算偽造 Origin 也只能抓書店/書目頁,不再是任何網址都能轉的開放代理。
 //
 //  免費層限制怎麼扛:KV 每天 1,000 次寫入 → 速率計數放記憶體(每個 isolate 自己算),KV 只當查詢快取,
 //  寫入失敗吞掉不影響回應;每請求 50 個子請求 → batch 上限 10、並行 4。
@@ -27,6 +31,7 @@ const UA  = "Concento/1.0 (+https://concento.io)";
 const TTL = { search: 7 * 86400, isbn: 30 * 86400, isbnMiss: 86400, pop: 30 * 86400 };
 const RATE = { limit: 120, windowMs: 60_000 };
 const MAX_BATCH = 10, BATCH_CONCURRENCY = 4;
+const MAX_BATCH_BODY = 4096;   // 10 個 ISBN 的 JSON 約 200 bytes;擋超大 body 白燒 CPU
 const rate = new Map();   // ip → { start, n }
 
 export default {
@@ -34,14 +39,21 @@ export default {
     const url    = new URL(req.url);
     const origin = req.headers.get("Origin") || "";
     const cors   = corsHeaders(origin);
-    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    const p      = url.pathname.replace(/\/+$/, "") || "/";
+    if (req.method === "OPTIONS") return new Response(null, { status: ALLOWED_ORIGINS.has(origin) ? 204 : 403, headers: cors });
     if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: "origin_not_allowed" }, 403, cors);
+    if (!origin && p.startsWith("/v1/")) return json({ error: "origin_required" }, 403, cors);   // 見檔頭「門禁」
     if (!allowRate(req.headers.get("CF-Connecting-IP") || "?")) return json({ error: "rate_limited" }, 429, cors);
+    // 還沒設 Google Books 金鑰(secret GBOOKS_KEY)時,查書三個端點直接回 503 → 前端照「代理失敗」退回自己直打 Google Books,
+    // 結果不打折(只靠 Open Library 的話繁中書幾乎查不到);金鑰一設好就自動恢復。流行度、網頁抓取用不到金鑰,照常服務。
+    if (!env.GBOOKS_KEY && (p === "/v1/search" || p.startsWith("/v1/isbn/") || p === "/v1/batch")) return json({ error: "gb_key_missing" }, 503, cors);
     try {
-      const p = url.pathname.replace(/\/+$/, "") || "/";
       if (req.method === "GET"  && p === "/v1/search")        return json(await search(env, url.searchParams), 200, cors, TTL.search);
       if (req.method === "GET"  && p.startsWith("/v1/isbn/")) return json(await isbnLookup(env, decodeURIComponent(p.slice(9))), 200, cors, TTL.isbn);
-      if (req.method === "POST" && p === "/v1/batch")         return json(await batch(env, req), 200, cors);
+      if (req.method === "POST" && p === "/v1/batch") {
+        if (+(req.headers.get("Content-Length") || 0) > MAX_BATCH_BODY) return json({ error: "body_too_large" }, 413, cors);
+        return json(await batch(env, req), 200, cors);
+      }
       if (req.method === "GET"  && p === "/v1/fetch")         return proxyFetch(url.searchParams.get("url") || "", cors);
       if (req.method === "GET"  && p === "/v1/popularity")    return json(await popularity(env, url.searchParams), 200, cors, TTL.pop);
       if (p === "/" || p === "/v1") return json({ ok: true, service: "concento-api",
@@ -99,8 +111,8 @@ function normIsbn13(raw) {
   if (s.length === 10) return validISBN10(s) ? isbn10to13(s) : "";
   return "";
 }
-const norm = s => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, "");
-const CJK  = /[぀-ヿ㐀-䶿一-鿿]/;
+const norm = s => String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, "");
+const CJK  = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
 function cleanDesc(d) {
   const txt = String(d || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
@@ -169,7 +181,7 @@ async function search(env, sp) {
   const q = (sp.get("q") || "").trim().slice(0, 200);
   if (!q) return { q, items: [], error: "missing_q" };
   const lang = (sp.get("lang") || "").slice(0, 5);
-  const key  = `s:${lang}:${q.toLowerCase()}`;
+  const key  = `s2:${lang}:${q.toLowerCase()}`;   // s2:2026-09-24 搬帳號測試時存過沒有 Google Books 的結果,換前綴讓它們自然過期
   const hit  = await cacheGet(env, key);
   if (hit) return { ...hit, cached: true };
   const isbn = normIsbn13(q);
@@ -181,7 +193,7 @@ async function search(env, sp) {
   const gbItems = gb.status === "fulfilled" ? (gb.value.items || []).map(fromGB) : [];
   const olItems = ol.status === "fulfilled" ? (ol.value.docs  || []).map(fromOL) : [];
   const out = { q, items: merge(gbItems, olItems, lang), sources: { gb: gb.status, ol: ol.status } };
-  if (gb.status === "fulfilled" || ol.status === "fulfilled") await cachePut(env, key, out, TTL.search);   // 兩邊都掛時不快取空結果
+  if (gb.status === "fulfilled") await cachePut(env, key, out, TTL.search);   // Google Books 沒回應(配額用完/故障)時只回 OL 結果、不快取,免得打折的結果被記 7 天
   return out;
 }
 
@@ -189,27 +201,31 @@ async function search(env, sp) {
 async function isbnLookup(env, raw) {
   const isbn13 = normIsbn13(raw);
   if (!isbn13) return { isbn13: "", found: false, error: "invalid_isbn" };
-  const key = `i:${isbn13}`;
+  const key = `i2:${isbn13}`;   // i2:同 s2 的理由
   const hit = await cacheGet(env, key);
   if (hit) return { ...hit, cached: true };
-  let book = null, upstreamOk = false;
+  let book = null, gbOk = false;
   if (env.GBOOKS_KEY) {
-    try { const d = await getJSON(`${GB}?q=isbn:${isbn13}&maxResults=1&key=${env.GBOOKS_KEY}`); upstreamOk = true; if (d.items?.[0]) book = fromGB(d.items[0]); } catch {}
+    try { const d = await getJSON(`${GB}?q=isbn:${isbn13}&maxResults=1&key=${env.GBOOKS_KEY}`); gbOk = true; if (d.items?.[0]) book = fromGB(d.items[0]); } catch {}
   }
   if (!book) {
-    try { const d = await getJSON(`${OL}?isbn=${isbn13}&limit=1&fields=${OL_FIELDS}`); upstreamOk = true; if (d.docs?.[0]) book = fromOL(d.docs[0]); } catch {}
+    try { const d = await getJSON(`${OL}?isbn=${isbn13}&limit=1&fields=${OL_FIELDS}`); if (d.docs?.[0]) book = fromOL(d.docs[0]); } catch {}
   }
   if (book && !book.isbn13) book.isbn13 = isbn13;
   const out = { isbn13, found: !!book, book };
-  if (book) await cachePut(env, key, out, TTL.isbn);
-  else if (upstreamOk) await cachePut(env, key, out, TTL.isbnMiss);   // 真的查無才記(上游掛掉時不要把「沒有」記下來)
+  // 只在 Google Books 有正常回應時才快取(不論找到沒):它掛掉時的結果(OL 代打或「沒有」)不記,下次再問它
+  if (gbOk) await cachePut(env, key, out, book ? TTL.isbn : TTL.isbnMiss);
   return out;
 }
 
 // ── POST /v1/batch ──
 async function batch(env, req) {
   let body;
-  try { body = await req.json(); } catch { return { error: "bad_json", results: {} }; }
+  try {
+    const { buf, truncated } = await readUpTo(req.body, MAX_BATCH_BODY);   // 分塊上傳(沒帶 Content-Length)也不會整包讀進來
+    if (truncated) return { error: "body_too_large", results: {} };
+    body = JSON.parse(new TextDecoder().decode(buf));
+  } catch { return { error: "bad_json", results: {} }; }
   const list = [...new Set((Array.isArray(body?.isbns) ? body.isbns : []).map(normIsbn13).filter(Boolean))].slice(0, MAX_BATCH);
   const results = {};
   let i = 0;
@@ -218,37 +234,76 @@ async function batch(env, req) {
   return { count: list.length, max: MAX_BATCH, results };
 }
 
-// ── /v1/fetch?url=(CORS 代理,給「貼網址抽 ISBN」用)──
-const MAX_BODY = 2_000_000;
+// ── /v1/fetch?url=(CORS 代理,給「網頁匯入」貼網址抽 ISBN 用)──
+// 只准書籍相關網站(含其子網域)。其他網址回 403 → 前端 fetchPageForISBNs 自動改走 allorigins / r.jina.ai,功能照常;
+// 這樣就算有人偽造 Origin,也沒辦法拿這裡當任意網址的開放代理(吃我們的額度、替別人轉流量、招來濫用檢舉)。
+// 內網位址、IP、非預設埠、帳密網址本來就不在白名單裡,一併擋掉。
+const FETCH_HOSTS = [
+  // 台灣 / 中文書店與書目
+  "books.com.tw", "readmoo.com", "taaze.tw", "kingstone.com.tw", "eslite.com", "sanmin.com.tw",
+  "cite.com.tw", "pubu.com.tw", "bookwalker.com.tw", "hyread.com.tw", "isbn.ncl.edu.tw", "book.douban.com",
+  // 國際書店與書單
+  "goodreads.com", "openlibrary.org", "books.google.com", "books.google.com.tw", "kobo.com",
+  "thestorygraph.com", "hardcover.app", "librarything.com", "bookshop.org", "barnesandnoble.com",
+  "amazon.com", "amazon.co.jp", "amazon.co.uk", "amazon.de", "amazon.ca", "amazon.com.au",
+  "a.co", "amzn.to", "amzn.asia", "amzn.eu",   // Amazon 分享短網址(轉到哪裡照樣逐跳檢查)
+];
+const MAX_BODY = 2_000_000, MAX_REDIRECTS = 4;
+const REDIRECT = new Set([301, 302, 303, 307, 308]);
+function fetchTargetOk(u) {
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.port) return false;
+  const h = u.hostname.toLowerCase();
+  return FETCH_HOSTS.some(d => h === d || h.endsWith("." + d));
+}
 async function proxyFetch(target, cors) {
   let u;
   try { u = new URL(target); } catch { return json({ error: "bad_url" }, 400, cors); }
-  if (!/^https?:$/.test(u.protocol)) return json({ error: "bad_scheme" }, 400, cors);
-  const h = u.hostname;
-  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[)/i.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /\.(local|internal)$/i.test(h))
-    return json({ error: "blocked_host" }, 400, cors);
+  if (!fetchTargetOk(u)) return json({ error: "host_not_allowed" }, 403, cors);
   const ac = new AbortController();
   const t  = setTimeout(() => ac.abort(), 10000);
   try {
-    const r = await fetch(u.toString(), { redirect: "follow", signal: ac.signal, headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8" } });
-    const reader = r.body.getReader();
-    const chunks = []; let total = 0;
-    while (total < MAX_BODY) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); total += value.length;
+    let r;
+    // 轉址自己一跳一跳跟:每一跳都要在白名單內(不然白名單網站的一個轉址就能把我們導去任意網址)
+    for (let hop = 0; ; hop++) {
+      r = await fetch(u.toString(), { redirect: "manual", signal: ac.signal, headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8" } });
+      if (!REDIRECT.has(r.status)) break;
+      try { await r.body?.cancel(); } catch {}
+      let next = null;
+      try { next = new URL(r.headers.get("Location") || "", u); } catch {}
+      if (!next || hop >= MAX_REDIRECTS) return json({ error: "bad_redirect" }, 502, cors);
+      if (!fetchTargetOk(next)) return json({ error: "redirect_not_allowed" }, 502, cors);
+      u = next;
     }
-    try { await reader.cancel(); } catch {}
-    const buf = new Uint8Array(Math.min(total, MAX_BODY)); let off = 0;
-    for (const c of chunks) { const n = Math.min(c.length, buf.length - off); if (n <= 0) break; buf.set(c.subarray(0, n), off); off += n; }
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
-    return new Response(text, { status: r.ok ? 200 : 502, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store", "X-Upstream-Status": String(r.status), "X-Truncated": total >= MAX_BODY ? "1" : "0" } });
+    // 只有 200 算成功:讀墨這類「202 機器人挑戰頁」當失敗回 502,前端才會換下一個代理
+    if (r.status !== 200) {
+      try { await r.body?.cancel(); } catch {}
+      return json({ error: "upstream_status", status: r.status }, 502, { ...cors, "X-Upstream-Status": String(r.status) });
+    }
+    // 原始位元組直接轉交(前端 r.text() 會自己用 UTF-8 解碼,結果和先解碼再編碼一樣),省下 2MB 來回轉碼的 CPU(免費方案每請求只有 10ms)
+    const { buf, truncated } = await readUpTo(r.body, MAX_BODY);
+    return new Response(buf, { status: 200, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store", "X-Upstream-Status": "200", "X-Truncated": truncated ? "1" : "0" } });
   } catch (e) {
     return json({ error: "fetch_failed", message: String((e && e.message) || e) }, 502, cors);
   } finally { clearTimeout(t); }
+}
+
+// 讀 stream 最多 max bytes 就停(不把整包讀進記憶體);truncated=讀到上限
+async function readUpTo(stream, max) {
+  if (!stream) return { buf: new Uint8Array(0), truncated: false };
+  const reader = stream.getReader();
+  const chunks = []; let total = 0;
+  while (total < max) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); total += value.length;
+  }
+  try { await reader.cancel(); } catch {}
+  const buf = new Uint8Array(Math.min(total, max)); let off = 0;
+  for (const c of chunks) { const n = Math.min(c.length, buf.length - off); if (n <= 0) break; buf.set(c.subarray(0, n), off); off += n; }
+  return { buf, truncated: total >= max };
 }
 
 // ── /v1/popularity(與前端 fetchPopularity 同一套規則,搬到伺服器端只是為了快取)──

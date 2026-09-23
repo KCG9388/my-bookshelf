@@ -2868,7 +2868,7 @@ const GBOOKS_KEY = "AIzaSyBBMm9HLyzazJ3HzWIA7hCc3ehNYV_qxUQ";
 
 // ── 書目代理(Cloudflare Worker,原始碼在 worker/):集中查 Google Books/Open Library + 快取 + 藏金鑰。
 //    前端一律「先打代理、失敗退回直打」→ 代理掛了網站照常運作。API_BASE 留空字串 = 停用代理。
-const API_BASE = "https://concento-api.st031031.workers.dev";
+const API_BASE = "https://concento-api.concento.workers.dev";   // 2026-09-24 搬到獨立免費帳號(超量只回錯誤、不扣錢)
 async function apiJSON(path, params, opts = {}) {
   if (!API_BASE) throw new Error("api disabled");
   const url = API_BASE + path + (params ? "?" + new URLSearchParams(params) : "");

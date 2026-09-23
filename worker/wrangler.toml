@@ -1,14 +1,22 @@
 # Concento 書目代理(Cloudflare Worker)
-# 部署:cd worker && npx wrangler deploy        金鑰:echo -n <key> | npx wrangler secret put GBOOKS_KEY
+# 2026-09-24 起放在 **獨立的免費帳號**(st1012tku 的 Cloudflare,Workers Free:每天 10 萬請求、超過只會回錯誤、不會扣錢;
+# 前端代理失敗會自動退回直打,網站照常)。網址 https://concento-api.concento.workers.dev
+# ⚠️ 本機 wrangler 登入的是 st031031(HS/放置修仙的付費帳號),沒有這個帳號的權限 → `wrangler deploy` 會失敗(這是刻意的,
+#    避免把 Worker 部署回付費帳號)。目前改程式 = 用專案 Edge「xiuxian-art」開 Cloudflare 後台 → concento-api → Edit code 貼上;
+#    若 KC 之後把 st031031 加成這個帳號的成員,這份設定就能直接 `npx wrangler deploy`。
+# 金鑰:secret GBOOKS_KEY(在後台 Settings → Variables and Secrets 設,不在 repo)
 # 說明見 src/index.js 開頭與 bookshelf/PROJECT_CONTEXT.md「書目代理」段
 name = "concento-api"
 main = "src/index.js"
-compatibility_date = "2026-08-01"
+account_id = "299718d066ac55c5cefb5deaf273cef8"
+compatibility_date = "2026-09-23"
 workers_dev = true
+# 版本預覽網址(<版本>-concento-api.<子網域>.workers.dev)關掉:否則每個舊版本(含修補前的開放代理版)都還能從它自己的網址打到
+preview_urls = false
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "c6959d08dd9047db84dc9af48c23193d"
+id = "505fb65bc6c542f993d339661b4453c6"
 
 [observability]
 enabled = true
