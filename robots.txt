@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /auth-action.html
+
+Sitemap: https://concento.io/sitemap.xml
